@@ -9,7 +9,7 @@
     "lint": "tsc -p tsconfig.app.json --noEmit"
   },
   "dependencies": {
-    "@angular/common": "22.1.0",
+    "@angular/common": "22.1.2",
     "@angular/compiler": "22.1.0",
     "@angular/core": "22.1.0",
     "@angular/forms": "22.1.0",
