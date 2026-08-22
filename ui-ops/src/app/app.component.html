@@ -1,0 +1,45 @@
+<main class="shell" data-demo="ops-journey" *ngIf="!error; else errorTpl">
+  <ng-container *ngIf="journey; else loadingTpl">
+    <header class="topbar">
+      <div class="brand">
+        <span class="tier">OPS</span>
+        <div>
+          <h1>{{ journey.label }}</h1>
+          <p>{{ journey.blurb }}</p>
+        </div>
+      </div>
+      <div class="identity">
+        <label class="persona" *ngIf="personas.length && me">
+          Demo identity
+          <select data-demo="persona-selector" [value]="me.persona" (change)="onPersona($any($event.target).value)">
+            <option *ngFor="let p of personas" [value]="p.id">{{ p.id }} · {{ p.subject }}</option>
+          </select>
+        </label>
+        <span data-demo="verified-identity" class="who" *ngIf="me" [title]="me.principals.join(', ')">
+          {{ me.subject }} &#64; {{ me.tenant }}
+        </span>
+      </div>
+    </header>
+
+    <nav class="tabs">
+      <button
+        *ngFor="let a of journey.apps"
+        [attr.data-demo]="'app-tab-' + a.id"
+        class="tab"
+        [class.active]="active?.id === a.id"
+        (click)="select(a)"
+      >
+        {{ a.label }}
+      </button>
+    </nav>
+
+    <section class="stage">
+      <iframe data-demo="embedded-app" *ngIf="frameUrl" [src]="frameUrl" [title]="active?.label || ''" class="frame"></iframe>
+    </section>
+  </ng-container>
+</main>
+
+<ng-template #loadingTpl><p class="loading">Loading journey…</p></ng-template>
+<ng-template #errorTpl>
+  <p class="error">Portal error: {{ error }}. Is the BFF running on :8110?</p>
+</ng-template>

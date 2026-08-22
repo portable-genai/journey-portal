@@ -1,0 +1,18 @@
+{
+  "//": "Same-origin mode-1 embedding: the Angular dev server reverse-proxies the portal BFF, so the browser only ever sees the shell's origin (localhost:4200) and every embedded iframe is first-party. In production a reverse proxy / CDN plays the same role.",
+  "//timeout": "A shell hop must never be the shortest timeout in the chain: under the live profiles an Ops artifact reaches real sources (SEC EDGAR, the regulatory corpus) and a local model, so 15 minutes sits comfortably above the BFF's own PORTAL_UPSTREAM_TIMEOUT.",
+  "/apps": {
+    "target": "http://127.0.0.1:8110",
+    "secure": false,
+    "changeOrigin": false,
+    "timeout": 900000,
+    "proxyTimeout": 900000
+  },
+  "/v1": {
+    "target": "http://127.0.0.1:8110",
+    "secure": false,
+    "changeOrigin": false,
+    "timeout": 900000,
+    "proxyTimeout": 900000
+  }
+}

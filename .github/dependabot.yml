@@ -1,0 +1,30 @@
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule: { interval: daily }
+  - package-ecosystem: npm
+    directory: /ui-rm
+    schedule: { interval: daily }
+  - package-ecosystem: npm
+    directory: /ui-ops
+    schedule: { interval: daily }
+    ignore:
+      # @angular-devkit/build-angular pins its TypeScript peer to a single minor
+      # (22.1.3 wants >=6.0 <6.1), so a TypeScript major fails `npm ci` with ERESOLVE
+      # before it ever reaches the build. It needs an Angular release that supports the
+      # new major. Minor and patch updates on 6.x still come through.
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+  - package-ecosystem: docker
+    directory: /
+    schedule: { interval: weekly }
+  - package-ecosystem: docker
+    directory: /ui-rm
+    schedule: { interval: weekly }
+  - package-ecosystem: docker
+    directory: /ui-ops
+    schedule: { interval: weekly }
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }

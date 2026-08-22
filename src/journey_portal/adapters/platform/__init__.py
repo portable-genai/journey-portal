@@ -1,0 +1,1 @@
+"""Platform-delegate adapters."""

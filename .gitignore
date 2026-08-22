@@ -1,0 +1,62 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+.Python
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# Node shells (ui-rm/, ui-ops/)
+ui-rm/node_modules/
+ui-rm/.next/
+ui-rm/out/
+ui-ops/node_modules/
+ui-ops/dist/
+ui-ops/.angular/
+ui-ops/out-tsc/
+
+# Demo output
+scripts/out/
+.local/
+
+# Terraform
+infra/terraform/.terraform/
+infra/terraform/*.tfstate
+infra/terraform/*.tfstate.*
+infra/terraform/*.tfplan
+infra/terraform/*.tfplan.integrity.json
+infra/terraform/*.auto.tfvars
+infra/terraform/.generated.tfvars.json
+
+# Secrets / local env - never commit
+*.env
+.env
+.env.*
+!.env.example
+!.env.secrets.example
+*-key.json
+*.pem
+service-account*.json
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Completed deployment dossiers: real institution values, never tracked
+*.local.md
