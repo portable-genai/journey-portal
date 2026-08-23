@@ -74,11 +74,20 @@ and the runtime keeps its own `config.py` `ALLOWED_REGIONS` preflight; both defa
 region and the allowlist together. Co-locating the two systems is therefore a deployment input and
 a reviewed allowlist change, not a repo edit.
 
-What remains open is the residency CHOICE itself, which is the operator's and not something this
-repo can make: move one of the two, accept the cross-region call with a data-flow record, or split
-the installation. Whichever is chosen must be recorded and approved before a production apply, and
-a co-location choice still needs the target region confirmed for every service each side depends
-on. Owner: security owner. Status: `PENDING`.
+**The residency choice is now recorded**, in the catalog's
+[deployment region alignment](https://github.com/portable-genai/org-metadata/blob/main/docs/deployment-region-alignment.md)
+decision record (2026-08-23): the launch set CO-LOCATES, the region is `asia-southeast1`, which
+is what this repo already pins, and deploying any service outside it is an exception needing the
+service named, the reason it cannot run in-region, a data-flow record and approval. The three
+options this section used to leave open are therefore ranked rather than equal: co-location is the
+default and the cross-region call is the exception.
+
+Two things that record deliberately does NOT settle, because nothing offline can evidence them.
+It does not assert that every managed service Doc1 binds is available in `asia-southeast1`, which
+is the original reason the defaults diverged; instead the operator confirms availability per
+regional service before the apply, and anything that fails becomes an exception under the rule
+above. And sign-off stays where it was. Owner: security owner. Status: `PENDING` sign-off against
+a recorded position, no longer an unmade choice.
 
 ## 3. BFF service identity and key custody
 
@@ -182,7 +191,7 @@ The evidence pack for a Mode 5 sign-off must contain, in addition to the standar
 - adversarial grant evidence: cross-site origin, missing CSRF token, a CSRF token from another
   session, and a navigation-destination request, each refused with NO outbound call to Doc1;
 - key rotation and emergency revocation rehearsal, including the overlap window;
-- the recorded decision on the cross-region residency question in section 2;
+- the security owner's sign-off on the recorded residency decision in section 2, plus the per-service availability check that record names;
 - named approvals from the deployment, security, operations and evidence owners.
 
 ## 8. Completion decision
@@ -193,7 +202,7 @@ The evidence pack for a Mode 5 sign-off must contain, in addition to the standar
 | Cross-repo agreement with Doc1 | Ready | `tests/test_cross_repo_doc1_private_key_jwt.py` verifies a portal-minted assertion against Doc1's ACTUAL `PrivateKeyJwtVerifier`, imported from the sibling checkout and run in its own virtualenv, with the replay, tamper, expiry, wrong-audience and unregistered-client negatives all refused |
 | Named institution inputs | BLOCKED | Section 1 incident channel and evidence location, section 2 project, IAP client and state backend, section 3 key custody and rotation |
 | Subject-token source | BLOCKED | Section 6: the dedicated Google OAuth client id and a portal-side OIDC session. Both are also the last Mode 5 blocker on Doc1's own row |
-| Residency decision | BLOCKED | Section 2: the region is a deploy-time input validated against `allowed_regions` on both sides, so this is a deployment input and a reviewed allowlist change rather than a code constraint. The choice itself (Hrz9 defaults to `asia-southeast1`, Doc1 to `us-central1`) is still unrecorded |
+| Residency decision | RECORDED, sign-off PENDING | Section 2: the region is a deploy-time input validated against `allowed_regions` on both sides, so this is a deployment input and a reviewed allowlist change rather than a code constraint. The choice itself is now recorded in the catalog's deployment region alignment decision (2026-08-23): co-locate in `asia-southeast1`, deviation by named exception. What remains is the security owner's sign-off and the per-service availability check that record names |
 | Controlled pre-production apply | BLOCKED | Every `PENDING` above stops `make deployment-check` before a command can run |
 
 The remaining work on this side is inputs, not code. Every `PENDING` row names exactly what is
