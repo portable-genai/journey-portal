@@ -4,6 +4,10 @@
     <meta charset="utf-8" />
     <title>Ops Journey</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Relative hrefs, not root-absolute: the shell is served at "/" today but the same build is
+         reverse-proxied under a path prefix, where "/favicon.ico" would resolve past the shell. -->
+    <link rel="icon" href="favicon.ico" sizes="any" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
   </head>
   <body>
     <app-root></app-root>
