@@ -134,8 +134,14 @@ def test_checks_both_hosts_through_iap(live_module: ModuleType) -> None:
 
 def test_standalone_help_needs_only_the_system_python_stdlib() -> None:
     repo = Path(__file__).resolve().parents[1]
+    # The interpreter UNDERNEATH the virtualenv, not `sys.executable`. Running the venv's own
+    # python would import the venv's site-packages and the test would pass without proving
+    # anything. `sys.base_prefix` is the base installation a venv was built from, so this is
+    # the stdlib-only interpreter the test means, and it resolves wherever python is installed
+    # rather than only at the path one distribution happens to use.
+    system_python = Path(sys.base_prefix) / "bin" / "python3"
     result = subprocess.run(  # noqa: S603 - fixed system interpreter and repo-owned script
-        ["/usr/bin/python3", "scripts/live_profile_check.py", "--help"],
+        [str(system_python), "scripts/live_profile_check.py", "--help"],
         cwd=repo,
         capture_output=True,
         text=True,
