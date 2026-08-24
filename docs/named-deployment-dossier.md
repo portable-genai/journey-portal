@@ -34,20 +34,21 @@ evidence.
 |---|---|---|
 | Institution | `PLACEHOLDER` | Executive sponsor |
 | Installation name | `hrz9-<institution>-production` | Deployment owner |
-| Deployment owner | PENDING | Named person or team |
-| Security owner | PENDING | Named person or team |
-| DNS and IAP owner | PENDING | Named person or team |
-| Operations owner | PENDING | Named person or team |
-| Evidence approver | PENDING | Independent reviewer |
+| Deployment owner | Ashish Awasthi | Named person or team |
+| Security owner | Ashish Awasthi | Named person or team |
+| DNS and IAP owner | Ashish Awasthi | Named person or team |
+| Operations owner | Ashish Awasthi | Named person or team |
+| Evidence approver | Ashish Awasthi | Independent reviewer — **NOT independent; see the recorded deviation in the Doc1 dossier** |
 | Incident channel | `PENDING` | Tested escalation route |
 | Evidence-retention location | `PENDING` | Access-controlled record location |
 
-**Recorded deviation: single-person ownership.** Every owner role resolves to one person, which
-is the current staffing. Two consequences must be accepted explicitly before any production
-apply, and re-checked when a second person joins: the evidence approver is not independent, so
-self-approval does not satisfy the review rule for that row; and there is no second custodian, so
-the incident channel and the emergency key-revocation path both terminate at the same person.
-The identical deviation is recorded in Doc1's dossier.
+**Recorded deviation: single-person ownership. DECIDED 2026-08-24.** Every owner role resolves
+to one person, by explicit decision rather than by default staffing: the question was asked
+directly and answered "all four are me for now." Two consequences are therefore accepted, not
+merely disclosed, and stay accepted until a second person joins one of these roles: the evidence
+approver is not independent, so self-approval does not satisfy the review rule for that row; and
+there is no second custodian, so the incident channel and the emergency key-revocation path both
+terminate at the same person. The identical decision is recorded in Doc1's dossier.
 
 ## 2. Cloud, residency and edge
 
