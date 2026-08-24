@@ -40,7 +40,22 @@ _PLACEHOLDER_MARKERS = (
     ">",
     ".example.test",
 )
-_REQUIRED_JOURNEY_APPS = frozenset({"doc1", "doc2", "doc3", "doc4", "doc5", "rsk1", "hrz7"})
+# Every journey app id this portal knows how to mount. It is a VOCABULARY, not a shipping
+# list: a deployment names the subset it actually serves, and an id outside this set is a
+# typo rather than a new product.
+#
+# This was previously "exactly these seven", enforced on every deployment. That coupled seven
+# independently-released repositories into one atomic deployment: the portal could not be
+# stood up until all seven verticals were simultaneously deployable, and any one of them
+# lagging blocked the other six. It also made a single-journey installation — a bank
+# licensing one vertical — inexpressible, which is the opposite of the incremental adoption
+# this architecture argues for everywhere else.
+#
+# The safety properties that rule was carrying are kept, and they are the ones that matter:
+# the set may not be empty, every id must be known, every app must be complete and pinned to
+# an immutable digest, and the rollback map must cover exactly what is being deployed. What
+# is dropped is only the requirement that the portfolio be deployed all at once.
+_KNOWN_JOURNEY_APPS = frozenset({"doc1", "doc2", "doc3", "doc4", "doc5", "rsk1", "hrz7"})
 _EMBEDDED_APP_KEYS = frozenset(
     {
         "ui_image",
@@ -273,12 +288,12 @@ def _validate_images(images: dict[str, Any], name: str) -> None:
 def _validate_embedded_apps(apps: dict[str, Any]) -> None:
     if not apps:
         raise DeploymentConfigError("DEPLOY_EMBEDDED_APPS_JSON must not be empty")
-    missing_apps = sorted(_REQUIRED_JOURNEY_APPS - apps.keys())
-    unexpected_apps = sorted(apps.keys() - _REQUIRED_JOURNEY_APPS)
-    if missing_apps or unexpected_apps:
+    unexpected_apps = sorted(apps.keys() - _KNOWN_JOURNEY_APPS)
+    if unexpected_apps:
         raise DeploymentConfigError(
-            "DEPLOY_EMBEDDED_APPS_JSON must contain exactly the seven journey apps; "
-            f"missing={missing_apps}, unexpected={unexpected_apps}"
+            "DEPLOY_EMBEDDED_APPS_JSON names apps this portal cannot mount: "
+            f"{', '.join(unexpected_apps)}; known apps are "
+            f"{', '.join(sorted(_KNOWN_JOURNEY_APPS))}"
         )
     for app_id, app in apps.items():
         if not isinstance(app_id, str) or not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,20}", app_id):
@@ -458,10 +473,19 @@ def load_deployment_config(env_file: Path, secrets_file: Path) -> DeploymentConf
         raise DeploymentConfigError("GCP_ALLOWED_REGIONS_JSON must contain at least one region")
     if values["GCP_REGION"] not in allowed_regions:
         raise DeploymentConfigError("GCP_REGION must be in GCP_ALLOWED_REGIONS_JSON")
-    if values["GCP_REGION"] != "asia-southeast1" or allowed_regions != ["asia-southeast1"]:
-        raise DeploymentConfigError(
-            "Hrz9 and all embedded apps currently require exactly asia-southeast1"
-        )
+    # The region is a DEPLOY-TIME input validated against the allowlist above, which is the
+    # same contract every other repository in this catalog uses. It previously required
+    # literally asia-southeast1 and nothing else, which made this the one component that could
+    # not follow a portfolio region decision without a code change — and it did not even match
+    # the region the rest of the launch set settled on.
+    #
+    # What still has to hold is CO-LOCATION: the portal and every app it mounts deploy into
+    # one region, because a cross-region hop between the portal and an embedded app crosses a
+    # residency boundary and not merely a latency one. That is enforced by there being a
+    # single GCP_REGION for the whole stack, and by each embedded app being deployed by this
+    # same Terraform rather than pointed at somewhere else.
+    if len(allowed_regions) != len(set(allowed_regions)):
+        raise DeploymentConfigError("GCP_ALLOWED_REGIONS_JSON must not repeat a region")
 
     current_images = {
         "bff": values["DEPLOY_BFF_IMAGE"],
@@ -471,8 +495,14 @@ def load_deployment_config(env_file: Path, secrets_file: Path) -> DeploymentConf
     _validate_images(current_images, "current_images")
     rollback_images = _json_value(values, "DEPLOY_ROLLBACK_IMAGES_JSON", dict)
     _validate_images(rollback_images, "DEPLOY_ROLLBACK_IMAGES_JSON")
+    # Rollback must cover exactly what is BEING DEPLOYED, which is the property that actually
+    # protects a release: a component with no recorded previous digest cannot be rolled back.
+    # Deriving it from the deployed set rather than from a constant keeps that guarantee exact
+    # for a partial deployment, instead of demanding rollback digests for apps this
+    # installation does not run.
+    deployed_apps = _json_value(values, "DEPLOY_EMBEDDED_APPS_JSON", dict)
     expected_rollback = set(current_images)
-    for app_id in _REQUIRED_JOURNEY_APPS:
+    for app_id in deployed_apps:
         expected_rollback.update({f"{app_id}-ui", f"{app_id}-api"})
     if set(rollback_images) != expected_rollback:
         missing_rollback = sorted(expected_rollback - rollback_images.keys())
@@ -481,7 +511,7 @@ def load_deployment_config(env_file: Path, secrets_file: Path) -> DeploymentConf
             "DEPLOY_ROLLBACK_IMAGES_JSON must exactly cover every component; "
             f"missing={missing_rollback}, unexpected={unexpected_rollback}"
         )
-    embedded_apps = _json_value(values, "DEPLOY_EMBEDDED_APPS_JSON", dict)
+    embedded_apps = deployed_apps
     _validate_embedded_apps(embedded_apps)
 
     rm_domain = values["DEPLOY_RM_DOMAIN"]
@@ -603,10 +633,23 @@ def load_deployment_config(env_file: Path, secrets_file: Path) -> DeploymentConf
             "DEPLOY_NOTIFICATION_CHANNELS_JSON channels must belong to GCP_PROJECT_ID"
         )
 
+    # `none` means the perimeter is owned by ANOTHER stack in this project.
+    #
+    # A GCP project may belong to exactly one regular service perimeter, and this catalog
+    # deliberately co-locates several systems in one project ("one project holds the
+    # portfolio"). Two stacks each creating their own perimeter over the same project is
+    # therefore not a merge conflict, it is an API refusal: "A resource can be included in
+    # exactly one regular service perimeter." Observed on the first real apply, 2026-08-24,
+    # where the Doc1 stack already had the project inside its perimeter.
+    #
+    # So a shared-project deployment names which stack owns the perimeter, rather than every
+    # stack asserting one. The safety property is unchanged, because the perimeter still
+    # covers the project either way; what changes is that only one stack manages it.
     access_policy_id = values["DEPLOY_VPC_SC_ACCESS_POLICY_ID"]
-    if not access_policy_id.isdigit():
+    if access_policy_id != "none" and not access_policy_id.isdigit():
         raise DeploymentConfigError(
-            "DEPLOY_VPC_SC_ACCESS_POLICY_ID must be a numeric access-policy id"
+            "DEPLOY_VPC_SC_ACCESS_POLICY_ID must be a numeric access-policy id, or 'none' "
+            "when another stack in this project owns the perimeter"
         )
     if _boolean(values, "DEPLOY_VPC_SC_ENFORCED"):
         raise DeploymentConfigError(
@@ -657,7 +700,12 @@ def load_deployment_config(env_file: Path, secrets_file: Path) -> DeploymentConf
         "rollback_images": rollback_images,
         "rm_domain": rm_domain,
         "ops_domain": ops_domain,
-        "dns_managed_zone": values["DEPLOY_DNS_MANAGED_ZONE"],
+        # `none` is the explicit "resolved outside this deployment" statement — an
+        # institution's existing zone, or a public wildcard resolver. Terraform already
+        # supports that case: an empty dns_managed_zone emits the address without records.
+        "dns_managed_zone": (
+            "" if values["DEPLOY_DNS_MANAGED_ZONE"] == "none" else values["DEPLOY_DNS_MANAGED_ZONE"]
+        ),
         "iap_oauth2_client_id": values["DEPLOY_IAP_OAUTH_CLIENT_ID"],
         "portal_audit_hmac_secret": audit_hmac_secret,
         "portal_audit_hmac_secret_version": audit_hmac_secret_version,
@@ -677,7 +725,7 @@ def load_deployment_config(env_file: Path, secrets_file: Path) -> DeploymentConf
         "observability_audience": hrz5_audience,
         "notification_channels": channels,
         "apply_org_policies": _boolean(values, "DEPLOY_APPLY_ORG_POLICIES"),
-        "vpc_sc_access_policy_id": access_policy_id,
+        "vpc_sc_access_policy_id": ("" if access_policy_id == "none" else access_policy_id),
         "vpc_sc_enforced": _boolean(values, "DEPLOY_VPC_SC_ENFORCED"),
         "cmek_rotation_period": values["DEPLOY_CMEK_ROTATION_PERIOD"],
         "audit_retention_days": retention_days,

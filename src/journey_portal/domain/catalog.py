@@ -70,8 +70,22 @@ class JourneyCatalog:
     journeys: Mapping[str, Journey]
 
     @classmethod
-    def from_mapping(cls, raw: Mapping[str, Any]) -> JourneyCatalog:
-        """Validate a raw config mapping into a catalog, or raise :class:`JourneyConfigError`."""
+    def from_mapping(
+        cls, raw: Mapping[str, Any], *, only_apps: frozenset[str] | None = None
+    ) -> JourneyCatalog:
+        """Validate a raw config mapping into a catalog, or raise :class:`JourneyConfigError`.
+
+        ``only_apps`` narrows the catalog to the apps a deployment actually mounts. The config
+        file is the CATALOGUE of everything the portal knows how to serve; a given installation
+        may license or deploy a subset of it.
+
+        Without this, every app in the file is loaded, and the ones that were not deployed keep
+        their ``${VAR:-http://127.0.0.1:...}`` local defaults — so a managed deployment fails at
+        startup on a loopback upstream that belongs to a journey it never intended to serve.
+        Silently DROPPING such apps would be worse than failing, because a genuinely
+        misconfigured upstream would disappear instead of being reported, so the deployment
+        states which apps it has and anything named here must exist in the file.
+        """
         if not isinstance(raw, Mapping):
             raise JourneyConfigError("journeys config must be a mapping")
         raw_apps = raw.get("apps")
@@ -80,6 +94,16 @@ class JourneyCatalog:
             raise JourneyConfigError("config needs a non-empty 'apps' mapping")
         if not isinstance(raw_journeys, Mapping) or not raw_journeys:
             raise JourneyConfigError("config needs a non-empty 'journeys' mapping")
+
+        if only_apps is not None:
+            if not only_apps:
+                raise JourneyConfigError("the deployed-app list must name at least one app")
+            unknown = sorted(only_apps - set(raw_apps))
+            if unknown:
+                raise JourneyConfigError(
+                    f"deployed apps not present in the journeys config: {', '.join(unknown)}"
+                )
+            raw_apps = {app_id: spec for app_id, spec in raw_apps.items() if app_id in only_apps}
 
         apps: dict[str, AppMount] = {}
         for app_id, spec in raw_apps.items():
@@ -120,15 +144,29 @@ class JourneyCatalog:
             app_ids: list[str] = []
             for app_id in raw_ids:
                 if app_id not in apps:
+                    # A journey may legitimately reference an app this installation does not
+                    # deploy; it is then shown with the apps that ARE present. An id that is
+                    # in no journey and in no deployment is still an error, caught above.
+                    if only_apps is not None and app_id in raw.get("apps", {}):
+                        continue
                     raise JourneyConfigError(f"journey {key!r} references unknown app {app_id!r}")
                 if app_id in app_ids:
                     raise JourneyConfigError(f"journey {key!r} lists app {app_id!r} twice")
                 app_ids.append(app_id)
+            if not app_ids:
+                # Every app in this journey belongs to another installation. Dropping the
+                # journey is right: an empty journey in the nav is a dead end for the user.
+                continue
             journeys[key] = Journey(
                 key=key,
                 label=_require_str(spec.get("label"), f"journey {key!r} label"),
                 blurb=_require_str(spec.get("blurb"), f"journey {key!r} blurb"),
                 app_ids=tuple(app_ids),
+            )
+
+        if not journeys:
+            raise JourneyConfigError(
+                "no journey has any deployed app; check the deployed-app list against the config"
             )
 
         return cls(apps=apps, journeys=journeys)

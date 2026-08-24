@@ -16,7 +16,10 @@ locals {
     "run.googleapis.com",
     "secretmanager.googleapis.com",
   ])
-  iap_service_agent = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-iap.iam.gserviceaccount.com"
+  # Asked for, not spelled out: the agent does not exist until IAP is provisioned for the
+  # project, and the apply fails with "Service account ... does not exist" rather than
+  # creating it. See google_project_service_identity.iap below.
+  iap_service_agent = "serviceAccount:${google_project_service_identity.iap.email}"
   expected_rollback_components = concat(
     ["bff", "rm", "ops"],
     [for id in keys(var.embedded_apps) : "${id}-ui"],
@@ -128,4 +131,12 @@ resource "google_service_account" "embedded_api" {
   project      = var.project_id
   account_id   = "${substr(var.name_prefix, 0, 14)}-a-${substr(each.key, 0, 6)}-${substr(sha256(each.key), 0, 6)}"
   display_name = "Hrz9 ${each.key} embedded API runtime"
+}
+
+resource "google_project_service_identity" "iap" {
+  provider = google-beta
+  project  = var.project_id
+  service  = "iap.googleapis.com"
+
+  depends_on = [google_project_service.services]
 }

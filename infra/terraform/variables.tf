@@ -118,6 +118,19 @@ variable "observability_audience" {
   }
 }
 
+variable "cloud_run_deletion_protection" {
+  type        = bool
+  description = <<-EOT
+    Cloud Run deletion protection. True (the default) for anything that matters.
+
+    Was hardcoded true on all five services, so the first image change failed mid-apply with
+    "cannot destroy service without setting deletion_protection=false" — a half-applied stack
+    blocked by a value nobody could set. A reference or evaluation stack that must stay
+    replaceable sets this false deliberately.
+  EOT
+  default     = true
+}
+
 variable "embedded_apps" {
   type = map(object({
     ui_image           = string
@@ -131,32 +144,40 @@ variable "embedded_apps" {
     api_secret_env     = optional(map(string), {})
   }))
   description = "Reviewed embedded UI/API images and surface-specific runtime inputs keyed by app id."
+  # A deployment names the SUBSET of journeys it actually serves. Requiring all seven on every
+  # apply coupled seven independently-released repositories into one atomic deployment and made
+  # a single-journey installation inexpressible — the opposite of the incremental adoption this
+  # architecture argues for. The safety properties are unchanged: non-empty, known ids only,
+  # digest-pinned images, correct mount path, valid ports.
   validation {
-    condition = length(var.embedded_apps) == 7 && alltrue([
-      for required_id in ["doc1", "doc2", "doc3", "doc4", "doc5", "rsk1", "hrz7"] :
-      contains(keys(var.embedded_apps), required_id)
-      ]) && alltrue([
+    condition = length(var.embedded_apps) > 0 && alltrue([
       for id, app in var.embedded_apps :
-      can(regex("^[a-z0-9][a-z0-9-]{0,20}$", id)) &&
+      contains(["doc1", "doc2", "doc3", "doc4", "doc5", "rsk1", "hrz7"], id) &&
       can(regex("@sha256:[0-9a-f]{64}$", app.ui_image)) &&
       can(regex("@sha256:[0-9a-f]{64}$", app.api_image)) &&
       app.ui_build_base_path == (id == "doc1" ? "/agent" : "/apps/${id}") &&
       app.ui_port >= 1 && app.ui_port <= 65535 &&
       app.api_port >= 1 && app.api_port <= 65535
     ])
-    error_message = "embedded_apps must contain exactly doc1, doc2, doc3, doc4, doc5, rsk1, and hrz7 with safe ids, valid ports, and digest-pinned UI/API images."
+    error_message = "embedded_apps must be a non-empty subset of doc1, doc2, doc3, doc4, doc5, rsk1, hrz7, each with a digest-pinned UI/API image, its canonical mount path, and valid ports."
   }
+  # Each journey API reads its profile from its OWN env var, so the check is per-app and
+  # applies only to the apps being deployed. Previously it dereferenced all seven directly,
+  # which meant a partial deployment failed here even once the set check allowed it.
   validation {
-    condition = (
-      contains(["gcp", "platform"], try(var.embedded_apps["doc1"].api_env["CDD_PROFILE"], "")) &&
-      contains(["gcp", "platform"], try(var.embedded_apps["doc2"].api_env["CREDIT_MEMO_PROFILE"], "")) &&
-      contains(["gcp", "platform"], try(var.embedded_apps["doc3"].api_env["CIO_PROFILE"], "")) &&
-      contains(["gcp", "platform"], try(var.embedded_apps["doc4"].api_env["TRADE_FINANCE_PROFILE"], "")) &&
-      contains(["gcp", "platform"], try(var.embedded_apps["doc5"].api_env["LOAN_DOC_PROFILE"], "")) &&
-      contains(["gcp", "platform"], try(var.embedded_apps["rsk1"].api_env["COMPLIANCE_PROFILE"], "")) &&
-      contains(["gcp", "platform"], try(var.embedded_apps["hrz7"].api_env["REVIEW_PROFILE"], ""))
-    )
-    error_message = "Every journey API must explicitly use the gcp or platform managed profile."
+    condition = alltrue([
+      for id, app in var.embedded_apps :
+      contains(["gcp", "platform"], try(app.api_env[{
+        doc1 = "CDD_PROFILE"
+        doc2 = "CREDIT_MEMO_PROFILE"
+        doc3 = "CIO_PROFILE"
+        doc4 = "TRADE_FINANCE_PROFILE"
+        doc5 = "LOAN_DOC_PROFILE"
+        rsk1 = "COMPLIANCE_PROFILE"
+        hrz7 = "REVIEW_PROFILE"
+      }[id]], ""))
+    ])
+    error_message = "Every DEPLOYED journey API must explicitly use the gcp or platform managed profile."
   }
   validation {
     condition = alltrue([

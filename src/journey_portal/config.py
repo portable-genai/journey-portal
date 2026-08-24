@@ -69,7 +69,14 @@ _DOC1_SCOPES_ENV = "PORTAL_DOC1_REQUESTED_SCOPES"
 _PUBLIC_ORIGIN_ENV = "PORTAL_PUBLIC_ORIGIN"
 _SESSION_SIGNING_KEY_ENV = "PORTAL_SESSION_SIGNING_KEY"
 REGION = "asia-southeast1"
-ALLOWED_REGIONS = frozenset(
+_ALLOWED_REGIONS_ENV = "PORTAL_ALLOWED_REGIONS"
+_DEPLOYED_APPS_ENV = "PORTAL_APPS"
+#: The DEFAULT residency allowlist: the APAC regions this portal was first built for. It is a
+#: default, never a ceiling. Residency is a deploy-time decision in every other repository in
+#: this catalog — Doc1 takes DOC1_ALLOWED_REGIONS — and hardcoding a fixed set here made the
+#: portal the one component that could not follow a portfolio region decision without a code
+#: change, which is precisely the coupling the portability thesis argues against.
+DEFAULT_ALLOWED_REGIONS = frozenset(
     {
         "asia-southeast1",
         "australia-southeast1",
@@ -78,6 +85,32 @@ ALLOWED_REGIONS = frozenset(
         "asia-northeast1",
     }
 )
+#: Kept as a module-level name because callers and tests import it. It is the DEFAULT set;
+#: resolve_allowed_regions() is what a deployment actually gets.
+ALLOWED_REGIONS = DEFAULT_ALLOWED_REGIONS
+
+
+def resolve_allowed_regions() -> frozenset[str]:
+    """The residency allowlist for this deployment.
+
+    PORTAL_ALLOWED_REGIONS overrides the default as a comma-separated list. Set-but-empty is
+    an ERROR rather than "allow everything": an empty allowlist would turn the residency
+    control off silently, and a control that can be disabled by a typo is not a control.
+    """
+    setting = read_env_setting(_ALLOWED_REGIONS_ENV)
+    if setting.is_configured_empty:
+        raise ValueError(
+            f"{_ALLOWED_REGIONS_ENV} is set but empty; unset it to use the default allowlist, "
+            "or list the approved regions"
+        )
+    if not setting.value:
+        return DEFAULT_ALLOWED_REGIONS
+    regions = frozenset(part.strip() for part in setting.value.split(",") if part.strip())
+    if not regions:
+        raise ValueError(f"{_ALLOWED_REGIONS_ENV} must list at least one approved region")
+    return regions
+
+
 PROFILES = frozenset({"local", "gcp", "platform", "onprem"})
 
 #: The profile string handed to every INTERNET-FACING posture decision when ``PORTAL_PROFILE``
@@ -445,6 +478,10 @@ class Settings:
 
     profile: str = "local"
     region: str = REGION
+    #: The apps this installation actually mounts, or None for "everything in the config".
+    #: See JourneyCatalog.from_mapping for why a deployment states this rather than the
+    #: portal inferring it from which upstreams happen to look configured.
+    deployed_apps: frozenset[str] | None = None
     journeys_path: str = _DEFAULT_JOURNEYS
     # Configurable because an upstream's work is not always fast: an embedded app running a real
     # (rather than offline-deterministic) profile can take minutes to answer one request, and the
@@ -509,10 +546,24 @@ class Settings:
                 f"{_REGION_ENV} is set but empty; unset it to use {REGION}, or provide an "
                 "approved region"
             )
-        region = region_setting.value or REGION
-        if region not in ALLOWED_REGIONS:
+        deployed_apps_setting = read_env_setting(_DEPLOYED_APPS_ENV)
+        if deployed_apps_setting.is_configured_empty:
             raise ValueError(
-                f"{_REGION_ENV} must be one of {sorted(ALLOWED_REGIONS)}, got {region!r}"
+                f"{_DEPLOYED_APPS_ENV} is set but empty; unset it to serve every app in the "
+                "journeys config, or list the apps this deployment mounts"
+            )
+        deployed_apps = (
+            frozenset(
+                part.strip() for part in deployed_apps_setting.value.split(",") if part.strip()
+            )
+            if deployed_apps_setting.value
+            else None
+        )
+        allowed_regions = resolve_allowed_regions()
+        region = region_setting.value or REGION
+        if region not in allowed_regions:
+            raise ValueError(
+                f"{_REGION_ENV} must be one of {sorted(allowed_regions)}, got {region!r}"
             )
         observability_url = _optional_setting(_OBSERVABILITY_URL_ENV)
         observability_audience = _optional_setting(_OBSERVABILITY_AUDIENCE_ENV)
@@ -523,6 +574,7 @@ class Settings:
         return cls(
             profile=profile,
             region=region,
+            deployed_apps=deployed_apps,
             journeys_path=_defaulted_setting(_JOURNEYS_ENV, _DEFAULT_JOURNEYS),
             upstream_timeout_seconds=_upstream_timeout_seconds(),
             iap_audience=_optional_setting(_IAP_AUDIENCE_ENV),
@@ -621,7 +673,10 @@ class Container:
 
     @cached_property
     def catalog(self) -> JourneyCatalog:
-        catalog = JourneyCatalog.from_mapping(load_journeys_mapping(self.settings.journeys_path))
+        catalog = JourneyCatalog.from_mapping(
+            load_journeys_mapping(self.settings.journeys_path),
+            only_apps=self.settings.deployed_apps,
+        )
         catalog.validate_for_profile(self.settings.profile)
         return catalog
 
