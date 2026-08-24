@@ -110,7 +110,10 @@ def test_terraform_requires_all_apps_managed_profiles_and_alert_delivery() -> No
     variables = _source("variables.tf")
     main = _source("main.tf")
 
-    assert "length(var.embedded_apps) == 7" in variables
+    # A deployment names the SUBSET of journeys it serves; requiring all seven on every apply
+    # coupled seven independently-released repositories into one atomic deployment. What must
+    # still hold is that the set is non-empty and that every id in it is one the portal knows.
+    assert "length(var.embedded_apps) > 0" in variables
     for app_id in ("doc1", "doc2", "doc3", "doc4", "doc5", "rsk1", "hrz7"):
         assert f'"{app_id}"' in variables
     for profile_env in (

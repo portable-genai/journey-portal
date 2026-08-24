@@ -21,7 +21,7 @@ resource "google_cloud_run_v2_service" "portal" {
   name                = "${var.name_prefix}-portal"
   location            = var.region
   ingress             = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
-  deletion_protection = true
+  deletion_protection = var.cloud_run_deletion_protection
 
   template {
     service_account                  = google_service_account.portal.email
@@ -55,9 +55,39 @@ resource "google_cloud_run_v2_service" "portal" {
         name  = "PORTAL_REGION"
         value = var.region
       }
+      # The residency allowlist travels WITH the deployment. Without this the container falls
+      # back to its built-in default set, and a portfolio region decision the Terraform has
+      # already accepted is then rejected at startup by the app — which is exactly how this
+      # failed its first startup probe on 2026-08-24 ("PORTAL_REGION must be one of [...],
+      # got 'us-central1'"). Terraform and the runtime must read the same allowlist.
       env {
-        name  = "PORTAL_IAP_AUDIENCE"
-        value = var.iap_jwt_audience
+        name  = "PORTAL_ALLOWED_REGIONS"
+        value = join(",", var.allowed_regions)
+      }
+      # The apps this installation actually mounts. The journeys config is the CATALOGUE of
+      # everything the portal can serve; without this the portal loads all of it and refuses
+      # to start on the ones still carrying their local loopback defaults — journeys this
+      # deployment never intended to serve.
+      env {
+        name  = "PORTAL_APPS"
+        value = join(",", sort(keys(var.embedded_apps)))
+      }
+      # SET-BUT-EMPTY is a distinct input to this app, and a rejected one: it refuses to start
+      # with "PORTAL_IAP_AUDIENCE is set but empty; unset it when the capability is
+      # intentionally absent". That is a deliberate design — "nobody chose" must not silently
+      # read as "chosen absent" for a security capability — and Terraform was setting the
+      # variable unconditionally, so the empty value was passed through as if it were a value.
+      #
+      # It made the documented two-pass bootstrap impossible: the IAP audience is the backend
+      # service's own id, so it does not exist until the first apply has created it, and that
+      # first apply could therefore never bring the portal up. Omitting the variable entirely
+      # until an audience exists is what "unset it" means.
+      dynamic "env" {
+        for_each = var.iap_jwt_audience == "" ? [] : [var.iap_jwt_audience]
+        content {
+          name  = "PORTAL_IAP_AUDIENCE"
+          value = env.value
+        }
       }
       env {
         name  = "PORTAL_FRAME_ANCESTORS"
@@ -121,7 +151,7 @@ resource "google_cloud_run_v2_service" "rm_shell" {
   name                = "${var.name_prefix}-rm"
   location            = var.region
   ingress             = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
-  deletion_protection = true
+  deletion_protection = var.cloud_run_deletion_protection
   template {
     service_account                  = google_service_account.rm_shell.email
     encryption_key                   = google_kms_crypto_key.portal.id
@@ -167,7 +197,7 @@ resource "google_cloud_run_v2_service" "ops_shell" {
   name                = "${var.name_prefix}-ops"
   location            = var.region
   ingress             = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
-  deletion_protection = true
+  deletion_protection = var.cloud_run_deletion_protection
   template {
     service_account                  = google_service_account.ops_shell.email
     encryption_key                   = google_kms_crypto_key.portal.id
@@ -214,7 +244,7 @@ resource "google_cloud_run_v2_service" "embedded_ui" {
   name                = "${var.name_prefix}-${each.key}-ui"
   location            = var.region
   ingress             = "INGRESS_TRAFFIC_INTERNAL_ONLY"
-  deletion_protection = true
+  deletion_protection = var.cloud_run_deletion_protection
   template {
     service_account                  = google_service_account.embedded_ui[each.key].email
     encryption_key                   = google_kms_crypto_key.portal.id
@@ -251,13 +281,19 @@ resource "google_cloud_run_v2_service" "embedded_ui" {
           }
         }
       }
+      # A TCP startup probe is fine and is the right check for "has the server bound its
+      # port yet". A TCP LIVENESS probe is not: Cloud Run rejects the service outright with
+      # "Cloud Run currently does not support TCP socket in liveness probe", so this shipped
+      # in a shape the platform refuses. Liveness asks a different question anyway — "is the
+      # app still answering?" — which a bound socket cannot tell you.
       startup_probe {
         tcp_socket {
           port = each.value.ui_port
         }
       }
       liveness_probe {
-        tcp_socket {
+        http_get {
+          path = each.value.ui_build_base_path
           port = each.value.ui_port
         }
       }
@@ -272,7 +308,7 @@ resource "google_cloud_run_v2_service" "embedded_api" {
   name                = "${var.name_prefix}-${each.key}-api"
   location            = var.region
   ingress             = "INGRESS_TRAFFIC_INTERNAL_ONLY"
-  deletion_protection = true
+  deletion_protection = var.cloud_run_deletion_protection
   template {
     service_account                  = google_service_account.embedded_api[each.key].email
     encryption_key                   = google_kms_crypto_key.portal.id
@@ -298,9 +334,13 @@ resource "google_cloud_run_v2_service" "embedded_api" {
         }
       }
       dynamic "env" {
-        for_each = contains(keys(local.embedded_iap_audience_env), each.key) ? {
-          (local.embedded_iap_audience_env[each.key]) = var.iap_jwt_audience
-        } : {}
+        # Same rule for the embedded apps: omit the audience rather than passing an empty
+        # string, which their own config layers also treat as a rejected value.
+        for_each = (
+          contains(keys(local.embedded_iap_audience_env), each.key) && var.iap_jwt_audience != ""
+          ? { (local.embedded_iap_audience_env[each.key]) = var.iap_jwt_audience }
+          : {}
+        )
         content {
           name  = env.key
           value = env.value

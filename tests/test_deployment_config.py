@@ -182,17 +182,88 @@ def test_rejects_unknown_top_level_key(tmp_path: Path) -> None:
         _load(tmp_path, values)
 
 
-@pytest.mark.parametrize("mutation", ["extra_app", "unknown_app_key"])
-def test_rejects_non_exact_embedded_app_contract(tmp_path: Path, mutation: str) -> None:
+def test_rejects_an_app_id_the_portal_cannot_mount(tmp_path: Path) -> None:
+    """An id outside the known vocabulary is a typo, not a new product.
+
+    The rollback map is completed for the bogus app too, so this test fails on the id itself
+    rather than on the rollback contract firing first. Without that, the assertion passes for
+    the wrong reason and stops testing what its name says.
+    """
     values = _valid_values()
     apps = json.loads(values["DEPLOY_EMBEDDED_APPS_JSON"])
-    if mutation == "extra_app":
-        apps["other"] = apps["doc1"]
-    else:
-        apps["doc1"]["unsupported"] = "value"
+    apps["other"] = json.loads(json.dumps(apps["doc1"]))
+    values["DEPLOY_EMBEDDED_APPS_JSON"] = json.dumps(apps)
+    rollback = json.loads(values["DEPLOY_ROLLBACK_IMAGES_JSON"])
+    rollback["other-ui"] = rollback["doc1-ui"]
+    rollback["other-api"] = rollback["doc1-api"]
+    values["DEPLOY_ROLLBACK_IMAGES_JSON"] = json.dumps(rollback)
+
+    with pytest.raises(DeploymentConfigError, match="cannot mount"):
+        _load(tmp_path, values)
+
+
+def test_rejects_unknown_embedded_app_key(tmp_path: Path) -> None:
+    values = _valid_values()
+    apps = json.loads(values["DEPLOY_EMBEDDED_APPS_JSON"])
+    apps["doc1"]["unsupported"] = "value"
     values["DEPLOY_EMBEDDED_APPS_JSON"] = json.dumps(apps)
 
-    with pytest.raises(DeploymentConfigError, match="exactly|unknown keys"):
+    with pytest.raises(DeploymentConfigError, match="unknown keys"):
+        _load(tmp_path, values)
+
+
+def test_a_partial_journey_portfolio_is_deployable(tmp_path: Path) -> None:
+    """One journey app is a valid installation, not a broken one.
+
+    The portal previously demanded all seven on every deployment, which coupled seven
+    independently-released repositories into one atomic release and made a single-journey
+    installation inexpressible. Five of those seven repositories ship no UI Dockerfile at all
+    (verified 2026-08-24), so the rule also could not be satisfied by anyone.
+    """
+    values = _valid_values()
+    apps = json.loads(values["DEPLOY_EMBEDDED_APPS_JSON"])
+    single = {"doc1": apps["doc1"]}
+    values["DEPLOY_EMBEDDED_APPS_JSON"] = json.dumps(single)
+    rollback = json.loads(values["DEPLOY_ROLLBACK_IMAGES_JSON"])
+    values["DEPLOY_ROLLBACK_IMAGES_JSON"] = json.dumps(
+        {
+            "bff": rollback["bff"],
+            "rm": rollback["rm"],
+            "ops": rollback["ops"],
+            "doc1-ui": rollback["doc1-ui"],
+            "doc1-api": rollback["doc1-api"],
+        }
+    )
+    config = _load(tmp_path, values)
+    assert set(config.terraform_inputs["embedded_apps"]) == {"doc1"}
+
+
+def test_rollback_must_cover_every_deployed_app(tmp_path: Path) -> None:
+    """The guarantee kept from the old rule: nothing deploys without a way back."""
+    values = _valid_values()
+    apps = json.loads(values["DEPLOY_EMBEDDED_APPS_JSON"])
+    values["DEPLOY_EMBEDDED_APPS_JSON"] = json.dumps({"doc1": apps["doc1"]})
+    rollback = json.loads(values["DEPLOY_ROLLBACK_IMAGES_JSON"])
+    values["DEPLOY_ROLLBACK_IMAGES_JSON"] = json.dumps(
+        {"bff": rollback["bff"], "rm": rollback["rm"], "ops": rollback["ops"]}
+    )
+
+    with pytest.raises(DeploymentConfigError, match="must exactly cover"):
+        _load(tmp_path, values)
+
+
+def test_an_empty_app_set_is_still_refused(tmp_path: Path) -> None:
+    values = _valid_values()
+    values["DEPLOY_EMBEDDED_APPS_JSON"] = json.dumps({})
+    values["DEPLOY_ROLLBACK_IMAGES_JSON"] = json.dumps(
+        {
+            k: v
+            for k, v in json.loads(values["DEPLOY_ROLLBACK_IMAGES_JSON"]).items()
+            if k in {"bff", "rm", "ops"}
+        }
+    )
+
+    with pytest.raises(DeploymentConfigError, match="must not be empty"):
         _load(tmp_path, values)
 
 
@@ -206,12 +277,35 @@ def test_rejects_wrong_ui_build_base_path(tmp_path: Path) -> None:
         _load(tmp_path, values)
 
 
-def test_rejects_region_allowlist_beyond_singapore(tmp_path: Path) -> None:
+def test_region_is_a_deploy_time_input_within_its_allowlist(tmp_path: Path) -> None:
+    """Residency is chosen at deploy time, as it is in every other repository here.
+
+    This previously required literally asia-southeast1 and nothing else, which made the portal
+    the one component that could not follow a portfolio region decision without a code change
+    — and it did not match the region the launch set actually settled on (us-central1).
+    """
     values = _valid_values()
     values["GCP_REGION"] = "australia-southeast1"
     values["GCP_ALLOWED_REGIONS_JSON"] = '["asia-southeast1","australia-southeast1"]'
+    config = _load(tmp_path, values)
+    assert config.terraform_inputs["region"] == "australia-southeast1"
 
-    with pytest.raises(DeploymentConfigError, match="exactly asia-southeast1"):
+
+def test_rejects_a_region_outside_its_own_allowlist(tmp_path: Path) -> None:
+    """The allowlist is the control; the region must be inside it."""
+    values = _valid_values()
+    values["GCP_REGION"] = "europe-west2"
+    values["GCP_ALLOWED_REGIONS_JSON"] = '["asia-southeast1"]'
+
+    with pytest.raises(DeploymentConfigError, match="GCP_REGION must be in"):
+        _load(tmp_path, values)
+
+
+def test_rejects_a_repeated_region_in_the_allowlist(tmp_path: Path) -> None:
+    values = _valid_values()
+    values["GCP_ALLOWED_REGIONS_JSON"] = '["asia-southeast1","asia-southeast1"]'
+
+    with pytest.raises(DeploymentConfigError, match="must not repeat"):
         _load(tmp_path, values)
 
 
@@ -459,3 +553,109 @@ def test_an_unsafe_mode5_value_is_refused(
     values = {**_valid_values(), **_MODE5_VALUES, key: value}
     with pytest.raises(DeploymentConfigError, match=message):
         _load_with_mode5(tmp_path, values)
+
+
+def test_runtime_allowlist_is_configurable(monkeypatch) -> None:
+    """The RUNTIME residency allowlist follows the deployment, not a hardcoded constant."""
+    from journey_portal import config as portal_config
+
+    monkeypatch.delenv("PORTAL_ALLOWED_REGIONS", raising=False)
+    assert portal_config.resolve_allowed_regions() == portal_config.DEFAULT_ALLOWED_REGIONS
+
+    monkeypatch.setenv("PORTAL_ALLOWED_REGIONS", "us-central1, europe-west2")
+    assert portal_config.resolve_allowed_regions() == frozenset({"us-central1", "europe-west2"})
+
+
+def test_an_empty_runtime_allowlist_is_an_error_not_permission(monkeypatch) -> None:
+    """An empty allowlist would disable residency silently; a control a typo can switch off
+    is not a control."""
+    from journey_portal import config as portal_config
+
+    monkeypatch.setenv("PORTAL_ALLOWED_REGIONS", "")
+    with pytest.raises(ValueError, match="set but empty"):
+        portal_config.resolve_allowed_regions()
+
+
+def test_catalog_serves_only_the_deployed_apps() -> None:
+    """A journeys config is a CATALOGUE; an installation may deploy a subset of it.
+
+    Added after the 2026-08-24 reference deployment, where the portal loaded all seven apps
+    and refused to start on the six that still carried their local ${VAR:-http://127.0.0.1:...}
+    defaults — a managed deployment failing on loopback upstreams belonging to journeys it
+    never intended to serve.
+    """
+    from journey_portal.domain.catalog import JourneyCatalog
+
+    raw = {
+        "apps": {
+            "doc1": {
+                "label": "One",
+                "ui_upstream": "https://doc1-ui.example.com",
+                "api_upstream": "https://doc1-api.example.com",
+                "canonical_mount_path": "/agent",
+            },
+            "doc2": {
+                "label": "Two",
+                "ui_upstream": "http://127.0.0.1:3102",
+                "api_upstream": "http://127.0.0.1:8093",
+            },
+        },
+        "journeys": {
+            "rm": {"label": "RM", "blurb": "b", "apps": ["doc1", "doc2"]},
+            "ops": {"label": "Ops", "blurb": "b", "apps": ["doc2"]},
+        },
+    }
+
+    catalog = JourneyCatalog.from_mapping(raw, only_apps=frozenset({"doc1"}))
+    assert set(catalog.apps) == {"doc1"}
+    # The rm journey keeps its deployed app...
+    assert catalog.journeys["rm"].app_ids == ("doc1",)
+    # ...and the ops journey, whose every app belongs to another installation, is dropped
+    # rather than shown as an empty dead end.
+    assert "ops" not in catalog.journeys
+
+
+def test_an_app_named_by_the_deployment_but_absent_from_config_is_an_error() -> None:
+    """Silently dropping it would hide a typo AND a genuinely misconfigured upstream."""
+    from journey_portal.domain.catalog import JourneyCatalog
+    from journey_portal.domain.errors import JourneyConfigError
+
+    raw = {
+        "apps": {
+            "doc1": {
+                "label": "One",
+                "ui_upstream": "https://doc1-ui.example.com",
+                "api_upstream": "https://doc1-api.example.com",
+                "canonical_mount_path": "/agent",
+            }
+        },
+        "journeys": {"rm": {"label": "RM", "blurb": "b", "apps": ["doc1"]}},
+    }
+
+    with pytest.raises(JourneyConfigError, match="not present in the journeys config"):
+        JourneyCatalog.from_mapping(raw, only_apps=frozenset({"doc1", "doc9"}))
+
+
+def test_a_deployment_with_no_serviceable_journey_is_an_error() -> None:
+    from journey_portal.domain.catalog import JourneyCatalog
+    from journey_portal.domain.errors import JourneyConfigError
+
+    raw = {
+        "apps": {
+            "doc1": {
+                "label": "One",
+                "ui_upstream": "https://doc1-ui.example.com",
+                "api_upstream": "https://doc1-api.example.com",
+                "canonical_mount_path": "/agent",
+            },
+            "doc2": {
+                "label": "Two",
+                "ui_upstream": "https://doc2-ui.example.com",
+                "api_upstream": "https://doc2-api.example.com",
+            },
+        },
+        "journeys": {"ops": {"label": "Ops", "blurb": "b", "apps": ["doc2"]}},
+    }
+
+    with pytest.raises(JourneyConfigError, match="no journey has any deployed app"):
+        JourneyCatalog.from_mapping(raw, only_apps=frozenset({"doc1"}))

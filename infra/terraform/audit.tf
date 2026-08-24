@@ -22,11 +22,18 @@ resource "google_logging_project_sink" "audit" {
   filter                 = "resource.type=(\"http_load_balancer\" OR \"cloud_run_revision\") OR protoPayload.serviceName=\"iap.googleapis.com\""
 }
 
-resource "google_project_iam_member" "audit_writer" {
-  project = var.project_id
-  role    = "roles/logging.bucketWriter"
-  member  = google_logging_project_sink.audit.writer_identity
-}
+# NO bucketWriter grant, deliberately.
+#
+# A sink routing to a log bucket in its OWN project is given no writer identity — the field
+# comes back empty even with unique_writer_identity = true — so this granted
+# roles/logging.bucketWriter to the empty string and the apply failed with
+# "invalid value \"\" for member" (2026-08-24). It cannot be made conditional either: `count`
+# may not depend on a value that is unknown until apply.
+#
+# Nothing is lost by removing it. The confinement it was meant to provide holds by
+# construction: same-project routing needs no cross-project grant. A writer identity — and
+# this grant — would be required if the destination ever moved to another project, and that
+# is the change that should reintroduce it.
 
 resource "google_monitoring_alert_policy" "iap_denials" {
   project               = var.project_id
