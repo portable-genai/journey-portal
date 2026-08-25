@@ -456,3 +456,51 @@ variable "vpc_sc_restricted_services" {
     error_message = "vpc_sc_restricted_services must not be empty."
   }
 }
+
+variable "tenant_by_identity_domain" {
+  type        = map(string)
+  default     = {}
+  description = <<-EOT
+    Verified identity domain -> reviewed tenant id, for the managed identity adapter.
+
+    The tenant used to be read straight off the assertion's hosted-domain claim, which assumed
+    the institution's Workspace domain and the tenant id in tenant_embed_policies are the same
+    string. On a real deployment they are not, so the host/tenant check compared a domain against
+    a label, never matched, and denied every request. Every VALUE here must therefore name a
+    tenant that tenant_embed_policies actually declares, which the validation below enforces:
+    a mapping onto a tenant with no reviewed embed policy would resolve requests onto a tenant
+    boundary nobody wrote down.
+
+    Empty keeps the old behaviour (the tenant IS the domain). Non-empty makes the map exhaustive:
+    a domain absent from it resolves to no tenant at all, rather than to itself.
+  EOT
+  validation {
+    condition = alltrue([
+      for domain, tenant in var.tenant_by_identity_domain :
+      can(regex("^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$", domain)) &&
+      can(regex("^[a-z0-9][a-z0-9._-]{0,127}$", tenant)) &&
+      contains([for policy in values(var.tenant_embed_policies) : policy.tenant], tenant)
+    ])
+    error_message = "each tenant_by_identity_domain entry must map a DNS domain onto a tenant that tenant_embed_policies declares."
+  }
+}
+
+variable "upstream_timeout_seconds" {
+  type        = number
+  default     = 240
+  description = <<-EOT
+    How long the BFF waits on an embedded app before giving up.
+
+    The application default is tuned for an API call. An embedded app doing real work is not one:
+    a CDD dossier reads documents, retrieves grounded passages and makes several model calls, and
+    a 30-second proxy showed the browser a 500 for a request the app went on to answer 200.
+
+    Must stay BELOW the Cloud Run request timeout, which is enforced below: a proxy timeout
+    longer than the platform's own is a timeout that never fires, and the caller sees the
+    platform's opaque termination instead of the proxy's own error.
+  EOT
+  validation {
+    condition     = var.upstream_timeout_seconds > 0 && var.upstream_timeout_seconds < tonumber(trimsuffix(var.runtime.timeout, "s"))
+    error_message = "upstream_timeout_seconds must be positive and strictly below runtime.timeout."
+  }
+}

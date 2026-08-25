@@ -24,7 +24,7 @@ import json
 import re
 import secrets
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
 from typing import Any
@@ -48,6 +48,7 @@ _JOURNEYS_ENV = "PORTAL_JOURNEYS"
 _UPSTREAM_TIMEOUT_ENV = "PORTAL_UPSTREAM_TIMEOUT"
 _REGION_ENV = "PORTAL_REGION"
 _IAP_AUDIENCE_ENV = "PORTAL_IAP_AUDIENCE"
+_TENANT_DOMAINS_ENV = "PORTAL_TENANT_DOMAINS_JSON"
 _AUDIT_HMAC_KEY_ENV = "PORTAL_AUDIT_HMAC_KEY"
 _LOCAL_AUDIT_DB_ENV = "PORTAL_LOCAL_AUDIT_DB"
 _LOCAL_AUDIT_KEY_FILE_ENV = "PORTAL_LOCAL_AUDIT_KEY_FILE"
@@ -377,6 +378,34 @@ def _tenant_embed_policies(exposure_profile: str) -> tuple[TenantEmbedPolicy, ..
     ).policies
 
 
+def _tenant_by_domain() -> Mapping[str, str]:
+    """Parse the reviewed identity-domain -> tenant map, refusing anything half-configured."""
+
+    raw = _optional_setting(_TENANT_DOMAINS_ENV)
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{_TENANT_DOMAINS_ENV} must be a JSON object") from exc
+    if not isinstance(parsed, dict) or not parsed:
+        raise ValueError(f"{_TENANT_DOMAINS_ENV} must be a non-empty JSON object")
+    mapping: dict[str, str] = {}
+    for domain, tenant in parsed.items():
+        if not isinstance(domain, str) or not isinstance(tenant, str):
+            raise ValueError(f"{_TENANT_DOMAINS_ENV} must map domain strings to tenant strings")
+        domain_key = domain.strip().lower()
+        tenant_value = tenant.strip()
+        if not domain_key or not tenant_value:
+            raise ValueError(
+                f"{_TENANT_DOMAINS_ENV} contains an empty domain or tenant. A blank key would "
+                "map the identities that present NO domain onto a real tenant, which is the one "
+                "entry that must be written deliberately rather than by accident."
+            )
+        mapping[domain_key] = tenant_value
+    return mapping
+
+
 def _optional_setting(name: str) -> str:
     """Return an optional value while rejecting an explicitly empty configuration entry."""
     setting = read_env_setting(name)
@@ -494,6 +523,14 @@ class Settings:
     local_audit_key_file: str = ""
     local_audit_checkpoint: str = ""
     tenant_embed_policies: tuple[TenantEmbedPolicy, ...] = ()
+    #: Verified identity domain -> reviewed tenant id. The managed identity adapter derives the
+    #: tenant from the assertion's hosted domain, while the tenant embed registry is keyed by the
+    #: deployment's own tenant LABEL, and the two are not the same string: a deployment for
+    #: "reference-bank" is signed into by people whose Workspace domain is something else
+    #: entirely. With no mapping the host check compared a Workspace domain against a tenant
+    #: label, never matched, and denied every request on a correctly configured deployment.
+    #: Empty means "the tenant IS the domain", which is the old behaviour and stays valid.
+    tenant_by_domain: Mapping[str, str] = field(default_factory=dict)
     observability_url: str = ""
     observability_audience: str = ""
     # --- Doc1 Mode 5 BFF service identity and brokered-grant registration ---------------
@@ -578,6 +615,7 @@ class Settings:
             journeys_path=_defaulted_setting(_JOURNEYS_ENV, _DEFAULT_JOURNEYS),
             upstream_timeout_seconds=_upstream_timeout_seconds(),
             iap_audience=_optional_setting(_IAP_AUDIENCE_ENV),
+            tenant_by_domain=_tenant_by_domain(),
             audit_hmac_key=_optional_setting(_AUDIT_HMAC_KEY_ENV),
             local_audit_db=_defaulted_setting(_LOCAL_AUDIT_DB_ENV, _DEFAULT_LOCAL_AUDIT_DB),
             local_audit_key_file=_optional_setting(_LOCAL_AUDIT_KEY_FILE_ENV),

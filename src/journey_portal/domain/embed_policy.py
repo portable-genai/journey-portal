@@ -187,7 +187,19 @@ class TenantEmbedPolicyService:
                 )
             except ValueError:
                 canonical_origin = origin
-            cors_allowed = canonical_origin in policy.cors_origins
+            # SAME-ORIGIN IS NOT CROSS-ORIGIN, and the CORS allowlist governs only the latter.
+            #
+            # Browsers send `Origin` on plenty of same-origin requests -- a `crossorigin` script
+            # fetch, any POST, any `fetch(mode: "cors")` -- so treating "an Origin header is
+            # present" as "this is a cross-origin caller" denies a page its own assets. That is
+            # exactly what happened to the embedded console: some of its own Next.js chunks came
+            # back 403 with a JSON body, the browser refused to execute a script served as
+            # application/json, React never finished hydrating, and the console sat on
+            # "Connecting..." while every other request on the same origin succeeded. An empty
+            # `cors_origins` (the correct posture for a tenant that federates with nobody) made it
+            # certain rather than intermittent.
+            same_origin = canonical_origin == f"https://{host}" if host else False
+            cors_allowed = same_origin or canonical_origin in policy.cors_origins
             if not cors_allowed:
                 findings.append(
                     EmbedPolicyFinding(

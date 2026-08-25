@@ -89,6 +89,30 @@ resource "google_cloud_run_v2_service" "portal" {
           value = env.value
         }
       }
+      # Same shape as the audience above: OMITTED when no map is reviewed, never rendered blank.
+      # The app reads this variable in three states and refuses a set-but-empty value, so an
+      # empty string here would be a boot failure rather than "no mapping configured".
+      dynamic "env" {
+        for_each = length(var.tenant_by_identity_domain) == 0 ? [] : [1]
+        content {
+          name  = "PORTAL_TENANT_DOMAINS_JSON"
+          value = jsonencode(var.tenant_by_identity_domain)
+        }
+      }
+      # How long the reverse proxy waits on an embedded app.
+      #
+      # The default is tuned for an API call, and an embedded app doing real work is not one: a
+      # CDD dossier reads documents, retrieves grounded passages and makes several model calls,
+      # and took 76 seconds here. The proxy gave up first, so the browser was shown a 500 for a
+      # request the app went on to answer 200 -- the worst shape of failure, because both halves
+      # look correct from their own logs.
+      #
+      # Capped below the Cloud Run request timeout by the validation on this variable: an
+      # upstream timeout longer than the platform's own is a timeout that never fires.
+      env {
+        name  = "PORTAL_UPSTREAM_TIMEOUT"
+        value = tostring(var.upstream_timeout_seconds)
+      }
       env {
         name  = "PORTAL_FRAME_ANCESTORS"
         value = join(" ", sort(tolist(var.frame_ancestors)))
@@ -325,6 +349,20 @@ resource "google_cloud_run_v2_service" "embedded_api" {
       }
       ports {
         container_port = each.value.api_port
+      }
+      # Every embedded app runs IN this project, so it should never have to be told which one
+      # by hand. Left unset, an app that defaults its project id to a documented placeholder
+      # carries that placeholder all the way into a live API call: the deployed Doc1 answered
+      # 500 with "projects/your-gcp-project does not exist" on the first dossier build, which
+      # reads as a broken app rather than a missing environment variable. Declared BEFORE
+      # api_env, so a deployment that needs a different project can still say so.
+      env {
+        name  = "GOOGLE_CLOUD_PROJECT"
+        value = var.project_id
+      }
+      env {
+        name  = "GCP_REGION"
+        value = var.region
       }
       dynamic "env" {
         for_each = each.value.api_env

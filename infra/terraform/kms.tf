@@ -40,5 +40,5 @@ resource "google_kms_crypto_key_iam_member" "logging" {
   role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
   # The data source returns a bare EMAIL; an IAM member needs its principal type. Without the
   # prefix the apply fails with "invalid value ... for member".
-  member        = "serviceAccount:${data.google_logging_project_cmek_settings.portal.service_account_id}"
+  member = "serviceAccount:${data.google_logging_project_cmek_settings.portal.service_account_id}"
 }

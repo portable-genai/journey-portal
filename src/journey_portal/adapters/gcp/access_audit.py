@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 
 from ...config import Settings
 from ...domain.audit import audit_key_id, audit_reference
 from ...domain.models import PortalAccessEvent, PortalAccessRecord, PortalAuditView
 from ...ports.access_audit import AuditUnavailable
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class GcpAccessAuditAdapter:
@@ -51,7 +54,16 @@ class GcpAccessAuditAdapter:
         try:
             self._write(payload)
         except Exception as exc:
-            raise AuditUnavailable("managed access audit delivery failed") from exc
+            # NAME the cause. Failing closed is right; failing closed silently is not, and this
+            # path had no diagnostic at all: every managed request answered 503 "portal access
+            # audit is unavailable" while the reason stayed inside a caught exception that
+            # nothing logged, so the deployed portal was unusable and the logs said only that a
+            # request returned 503. The payload is already content-free (keyed references and
+            # bounded route metadata, no bodies, queries or identity assertions), so nothing
+            # sensitive travels with the reason.
+            reason = f"{type(exc).__name__}: {exc}"
+            _LOGGER.error("managed access audit delivery failed: %s", reason)
+            raise AuditUnavailable(f"managed access audit delivery failed ({reason})") from exc
 
     def records(self) -> tuple[PortalAccessRecord, ...]:
         raise AuditUnavailable(

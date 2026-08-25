@@ -1,4 +1,4 @@
-.PHONY: help install lint format typecheck test eval check run-api run-rm run-ops journeys demo demo-selftest demo-browser-selftest portability deployment-check deployment-render docker-build docker-build-all tf-validate clean lock
+.PHONY: help install lint format typecheck test eval check run-api run-rm run-ops journeys demo demo-selftest demo-browser-selftest e2e-local e2e-gcp portability deployment-check deployment-render docker-build docker-build-all tf-validate clean lock
 
 PY ?= python3
 PY := $(if $(wildcard .venv/bin/python),.venv/bin/python,$(PY))
@@ -54,6 +54,16 @@ demo-selftest: ## Assert the live BFF route and identity evidence offline.
 
 demo-browser-selftest: ## Assert both production-built shells in headless Chromium.
 	$(PY) scripts/demo_browser_selftest.py
+
+e2e-local: ## Drive the RM journey in a real browser on this machine (needs `make journeys`).
+	PORTAL_E2E_TARGET=local $(PY) e2e/rm_journey.py
+
+e2e-gcp: ## Drive the SAME journey against the deployment (needs gcloud + the .env inputs).
+	PORTAL_E2E_TARGET=gcp \
+	PORTAL_E2E_BASE_URL=$${PORTAL_E2E_BASE_URL:?name the deployed RM origin} \
+	PORTAL_E2E_IAP_AUDIENCE=$${PORTAL_E2E_IAP_AUDIENCE:?name the IAP OAuth client id} \
+	PORTAL_E2E_SERVICE_ACCOUNT=$${PORTAL_E2E_SERVICE_ACCOUNT:?name the e2e service account} \
+	$(PY) e2e/rm_journey.py
 
 portability: ## Execute bounded channel and runtime portability evidence.
 	$(PY) scripts/portability_demo.py

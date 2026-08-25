@@ -163,3 +163,59 @@ def test_every_wildcard_spelling_is_refused_in_both_origin_lists(spelling: str) 
     for field in ("frame_ancestors", "cors_origins"):
         with pytest.raises(ValueError, match="origin"):
             TenantEmbedPolicyService((_policy(**{field: (spelling,)}),))
+
+
+def test_a_same_origin_caller_is_allowed_even_with_an_empty_cors_allowlist() -> None:
+    """The request a page makes to its OWN origin is not a cross-origin request.
+
+    Browsers attach ``Origin`` to same-origin requests in several ordinary cases -- a
+    ``crossorigin`` script fetch, any POST, any ``fetch(mode: "cors")``. Reading "an Origin header
+    is present" as "this is a cross-origin caller" denied the embedded console its own Next.js
+    chunks: they came back 403 with a JSON body, the browser refused to execute a script served
+    as ``application/json``, and the console never finished hydrating. An empty ``cors_origins``,
+    which is the right posture for a tenant that federates with nobody, made it certain.
+    """
+
+    registry = TenantEmbedPolicyService(
+        (
+            TenantEmbedPolicy(
+                policy_id="bank-primary",
+                tenant="bank",
+                hosts=("rm.bank.example",),
+                frame_ancestors=("'self'",),
+                cors_origins=(),
+            ),
+        )
+    )
+
+    assessment = registry.assess(
+        request_host="rm.bank.example",
+        tenant="bank",
+        request_origin="https://rm.bank.example",
+    )
+    assert assessment.decision == "allowed", [f.summary for f in assessment.findings]
+    assert assessment.cors_allowed is True
+
+
+def test_a_genuinely_cross_origin_caller_is_still_denied() -> None:
+    """The fix must not become a hole: another origin is still refused by the allowlist."""
+
+    registry = TenantEmbedPolicyService(
+        (
+            TenantEmbedPolicy(
+                policy_id="bank-primary",
+                tenant="bank",
+                hosts=("rm.bank.example",),
+                frame_ancestors=("'self'",),
+                cors_origins=(),
+            ),
+        )
+    )
+
+    assessment = registry.assess(
+        request_host="rm.bank.example",
+        tenant="bank",
+        request_origin="https://attacker.example",
+    )
+    assert assessment.decision == "denied"
+    assert assessment.cors_allowed is False

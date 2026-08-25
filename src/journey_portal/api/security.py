@@ -9,12 +9,15 @@ The request-body/query actor is never read: identity flows only from here.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 
 from fastapi import HTTPException, Request, status
 from hex_service_kit.identity import IdentityError, IdentityPort, Principal, RequestContext
 
 from ..domain.identity_injection import PERSONA_HEADER
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def make_get_principal(
@@ -44,6 +47,13 @@ def make_get_principal(
             request.state.principal = principal
             return principal
         except IdentityError as exc:
+            # The RESPONSE stays "authentication required": a caller learns nothing about why a
+            # credential was refused, which is the whole point of a uniform 401. The operator,
+            # who has a different problem, gets the reason in the log. Without this a managed
+            # deployment whose assertion verification is misconfigured is indistinguishable from
+            # one that is simply being probed, and the only way to tell them apart was to
+            # redeploy with a print statement.
+            _LOGGER.warning("portal identity refused: %s: %s", type(exc).__name__, exc)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="authentication required",
