@@ -201,3 +201,118 @@ def test_present_versus_absent_is_itself_compared() -> None:
     report = compare(left, right, "local", "gcp")
     assert not report.agreed
     assert any(d.field == "ownership.present" for d in report.divergences)
+
+
+# --------------------------------------------------------------------------------------- #
+# What a citation comparison is actually asserting.
+#
+# The first live pair reported "count 3 vs 8" and stopped there, which reads as a policy
+# divergence and was two different things wearing one number: a store that returned one
+# document as eight extractive segments, and eight titles that had each decayed into their
+# own document id. Neither is a count of sources. These tests hold the comparison to the
+# thing the invariant names -- WHICH documents ground a claim -- so re-chunking cannot make
+# the pair red and a lost source name cannot leave it green.
+# --------------------------------------------------------------------------------------- #
+def _with_citations(dossier: dict[str, Any], citations: list[dict[str, Any]]) -> dict[str, Any]:
+    dossier["sow"]["citations"] = citations
+    return dossier
+
+
+def test_the_same_document_split_differently_is_not_a_divergence() -> None:
+    """Parser fidelity. One document, three segments on one side and one on the other."""
+
+    left = _with_citations(
+        _dossier(),
+        [
+            {"source_id": "doc-1", "source_type": "document", "title": "SoW", "page": 1},
+            {"source_id": "doc-1", "source_type": "document", "title": "SoW", "page": 2},
+            {"source_id": "doc-1", "source_type": "document", "title": "SoW", "page": 3},
+        ],
+    )
+    right = _with_citations(
+        _dossier(),
+        [{"source_id": "doc-1", "source_type": "document", "title": "SoW", "page": 9}],
+    )
+
+    report = compare(left, right, "local", "gcp")
+
+    assert report.agreed, [d.field for d in report.divergences]
+
+
+def test_a_claim_grounded_in_a_different_document_is_a_divergence() -> None:
+    """The property re-chunking tolerance must not cost: WHICH documents still matters."""
+
+    left = _with_citations(
+        _dossier(),
+        [{"source_id": "doc-1", "source_type": "document", "title": "SoW", "page": 1}],
+    )
+    right = _with_citations(
+        _dossier(),
+        [{"source_id": "doc-2", "source_type": "document", "title": "Something else", "page": 1}],
+    )
+
+    report = compare(left, right, "local", "gcp")
+
+    assert not report.agreed
+    assert "sow.citations" in [d.field for d in report.divergences]
+
+
+def test_a_second_distinct_document_is_a_divergence_not_a_chunk() -> None:
+    """Grouping by source_id must not let a genuinely extra source hide as a segment."""
+
+    left = _with_citations(
+        _dossier(),
+        [{"source_id": "doc-1", "source_type": "document", "title": "SoW", "page": 1}],
+    )
+    right = _with_citations(
+        _dossier(),
+        [
+            {"source_id": "doc-1", "source_type": "document", "title": "SoW", "page": 1},
+            {"source_id": "doc-2", "source_type": "document", "title": "SoW", "page": 1},
+        ],
+    )
+
+    report = compare(left, right, "local", "gcp")
+
+    assert not report.agreed
+    assert "sow.citations" in [d.field for d in report.divergences]
+
+
+def test_a_title_that_decayed_into_its_own_id_is_caught() -> None:
+    """The managed defect itself: same document, same count, name lost."""
+
+    left = _with_citations(
+        _dossier(),
+        [{"source_id": "doc-1", "source_type": "document", "title": "Bank statement"}],
+    )
+    right = _with_citations(
+        _dossier(),
+        [{"source_id": "doc-1", "source_type": "document", "title": "doc-1"}],
+    )
+
+    report = compare(left, right, "local", "gcp")
+
+    assert not report.agreed
+    diverged = {d.field for d in report.divergences}
+    assert "sow.citations" in diverged
+
+
+def test_two_distinct_documents_sharing_a_title_are_not_collapsed() -> None:
+    """Titles are compared as a multiset. Two bank statements are two sources."""
+
+    left = _with_citations(
+        _dossier(),
+        [
+            {"source_id": "doc-1", "source_type": "document", "title": "bank_statement"},
+            {"source_id": "doc-2", "source_type": "document", "title": "bank_statement"},
+        ],
+    )
+    right = _with_citations(
+        _dossier(),
+        [{"source_id": "doc-1", "source_type": "document", "title": "bank_statement"}],
+    )
+
+    report = compare(left, right, "local", "gcp")
+
+    assert not report.agreed
+    assert "sow.citations" in [d.field for d in report.divergences]
