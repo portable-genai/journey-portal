@@ -29,6 +29,7 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from pairing import comparable  # noqa: E402
 from targets import Target, TargetError, resolve  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent
@@ -71,6 +72,25 @@ def _shot(page: Page, out_dir: Path, name: str) -> None:
     page.screenshot(path=str(out_dir / f"{name}.png"), full_page=True)
 
 
+def _capture_dossier(response: Any, sink: list[dict[str, Any]]) -> None:
+    """Keep the body of the console's own ``POST /v1/cdd``, which IS the dossier.
+
+    Deliberately tolerant: a response body can be gone by the time this runs, and a capture
+    failure must never fail the journey. The absence is caught later, where it can be reported
+    as "no dossier was captured" rather than as a mystery exception mid-run.
+    """
+    try:
+        if response.request.method != "POST" or not response.url.rstrip("/").endswith("/v1/cdd"):
+            return
+        if response.status != 200:
+            return
+        body = response.json()
+    except Exception:  # noqa: BLE001 - diagnostics must never mask the journey's own result
+        return
+    if isinstance(body, dict) and not body.get("blocked"):
+        sink.append(body)
+
+
 def _embedded_frame(page: Page) -> Frame:
     """The Doc1 frame, resolved through the iframe ELEMENT rather than by URL matching.
 
@@ -90,6 +110,10 @@ def run(target: Target, out_dir: Path) -> Evidence:
     out_dir.mkdir(parents=True, exist_ok=True)
     evidence = Evidence(target=target.name, base_url=target.base_url)
     console_errors: list[str] = []
+    #: The dossier as it came off the wire. Captured from the console's OWN request rather than
+    #: re-fetched afterwards: a second request is a second answer, and the artifact under test
+    #: has to be the one the surface actually rendered.
+    dossiers: list[dict[str, Any]] = []
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
@@ -103,6 +127,7 @@ def run(target: Target, out_dir: Path) -> Evidence:
             "console",
             lambda m: console_errors.append(m.text) if m.type == "error" else None,
         )
+        page.on("response", lambda r: _capture_dossier(r, dossiers))
         try:
             # 1. The shell, and the journey it renders from the BFF's catalog.
             page.goto(target.base_url + "/", wait_until="domcontentloaded")
@@ -205,10 +230,35 @@ def run(target: Target, out_dir: Path) -> Evidence:
             sow = frame.locator('[data-demo="panel-source-of-wealth"]').inner_text().strip()
             assert len(sow) > 40, f"the source-of-wealth panel rendered almost nothing: {sow!r}"
             _shot(page, out_dir, "05-dossier")
+            # Character counts stay: they are a fine QUALITY observation, and the invariant
+            # explicitly permits them to differ between a frontier model and a local one. They
+            # are simply no longer the only thing recorded, which is what made two runs look
+            # like a pair.
             evidence.record(
                 "dossier returned",
                 risk_rating_chars=len(risk),
                 source_of_wealth_chars=len(sow),
+            )
+
+            # The deterministic half, off the wire. Without this the run proves the journey
+            # completed and nothing about whether the two profiles agree (F4).
+            assert dossiers, (
+                "the dossier rendered but no POST /v1/cdd response was captured, so there is "
+                "nothing to pair. The journey passed; the paired claim cannot be made from it."
+            )
+            artifact = dossiers[-1]
+            (out_dir / "dossier.json").write_text(
+                json.dumps(artifact, indent=2) + "\n", encoding="utf-8"
+            )
+            summary = comparable(artifact)
+            evidence.record(
+                "deterministic artifact captured",
+                band=summary.get("rating.band"),
+                score=summary.get("rating.score"),
+                requires_human_review=summary.get("requires_human_review"),
+                citations=len(summary.get("rating.citations", []))
+                + len(summary.get("sow.citations", [])),
+                comparable_fields=len(summary),
             )
         except BaseException:
             # Make the failure self-describing. A timeout on a selector says which selector and

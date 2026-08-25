@@ -69,16 +69,23 @@ _DOC1_INSTALLATION_ENV = "PORTAL_DOC1_INSTALLATION_ID"
 _DOC1_SCOPES_ENV = "PORTAL_DOC1_REQUESTED_SCOPES"
 _PUBLIC_ORIGIN_ENV = "PORTAL_PUBLIC_ORIGIN"
 _SESSION_SIGNING_KEY_ENV = "PORTAL_SESSION_SIGNING_KEY"
-REGION = "asia-southeast1"
+#: The DEFAULT region when PORTAL_REGION is unset. It follows the portfolio region decision
+#: (org-metadata docs/deployment-region-alignment.md, recorded 2026-08-23 and REVISED
+#: 2026-08-24: the launch set co-locates, and that region is us-central1). Terraform passes
+#: its own region and allowlist to the runtime so the two cannot disagree; this default is
+#: what an unset deploy gets, and it is not a residency recommendation.
+REGION = "us-central1"
 _ALLOWED_REGIONS_ENV = "PORTAL_ALLOWED_REGIONS"
 _DEPLOYED_APPS_ENV = "PORTAL_APPS"
-#: The DEFAULT residency allowlist: the APAC regions this portal was first built for. It is a
-#: default, never a ceiling. Residency is a deploy-time decision in every other repository in
+#: The DEFAULT residency allowlist: the APAC regions this portal was first built for, plus the
+#: region the portfolio decision co-locates the reference deployment in. It is a default, never
+#: a ceiling. Residency is a deploy-time decision in every other repository in
 #: this catalog — Doc1 takes DOC1_ALLOWED_REGIONS — and hardcoding a fixed set here made the
 #: portal the one component that could not follow a portfolio region decision without a code
 #: change, which is precisely the coupling the portability thesis argues against.
 DEFAULT_ALLOWED_REGIONS = frozenset(
     {
+        "us-central1",
         "asia-southeast1",
         "australia-southeast1",
         "australia-southeast2",

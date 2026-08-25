@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from journey_portal import config
 from journey_portal.config import Settings
 from journey_portal.domain.doc1_broker import BrokerPolicyError
 
@@ -87,7 +88,11 @@ def test_unknown_profile_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_unapproved_region_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("PORTAL_REGION", "us-central1")
+    # europe-west1, not us-central1: the latter joined the default allowlist when the portfolio
+    # region decision was revised (2026-08-24), so it no longer demonstrates a refusal. The guard
+    # is unchanged; only the example of an unapproved region had to move.
+    assert "europe-west1" not in config.DEFAULT_ALLOWED_REGIONS
+    monkeypatch.setenv("PORTAL_REGION", "europe-west1")
     with pytest.raises(ValueError, match="PORTAL_REGION"):
         Settings.load()
 

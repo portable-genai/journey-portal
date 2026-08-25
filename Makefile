@@ -65,6 +65,9 @@ e2e-gcp: ## Drive the SAME journey against the deployment (needs gcloud + the .e
 	PORTAL_E2E_SERVICE_ACCOUNT=$${PORTAL_E2E_SERVICE_ACCOUNT:?name the e2e service account} \
 	$(PY) e2e/rm_journey.py
 
+e2e-pair: ## F4: assert the laptop and the deployment AGREE (needs both runs to have happened).
+	$(PY) e2e/pair_report.py
+
 portability: ## Execute bounded channel and runtime portability evidence.
 	$(PY) scripts/portability_demo.py
 
