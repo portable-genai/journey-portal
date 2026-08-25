@@ -484,3 +484,23 @@ variable "tenant_by_identity_domain" {
     error_message = "each tenant_by_identity_domain entry must map a DNS domain onto a tenant that tenant_embed_policies declares."
   }
 }
+
+variable "upstream_timeout_seconds" {
+  type        = number
+  default     = 240
+  description = <<-EOT
+    How long the BFF waits on an embedded app before giving up.
+
+    The application default is tuned for an API call. An embedded app doing real work is not one:
+    a CDD dossier reads documents, retrieves grounded passages and makes several model calls, and
+    a 30-second proxy showed the browser a 500 for a request the app went on to answer 200.
+
+    Must stay BELOW the Cloud Run request timeout, which is enforced below: a proxy timeout
+    longer than the platform's own is a timeout that never fires, and the caller sees the
+    platform's opaque termination instead of the proxy's own error.
+  EOT
+  validation {
+    condition     = var.upstream_timeout_seconds > 0 && var.upstream_timeout_seconds < tonumber(trimsuffix(var.runtime.timeout, "s"))
+    error_message = "upstream_timeout_seconds must be positive and strictly below runtime.timeout."
+  }
+}

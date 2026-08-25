@@ -99,6 +99,20 @@ resource "google_cloud_run_v2_service" "portal" {
           value = jsonencode(var.tenant_by_identity_domain)
         }
       }
+      # How long the reverse proxy waits on an embedded app.
+      #
+      # The default is tuned for an API call, and an embedded app doing real work is not one: a
+      # CDD dossier reads documents, retrieves grounded passages and makes several model calls,
+      # and took 76 seconds here. The proxy gave up first, so the browser was shown a 500 for a
+      # request the app went on to answer 200 -- the worst shape of failure, because both halves
+      # look correct from their own logs.
+      #
+      # Capped below the Cloud Run request timeout by the validation on this variable: an
+      # upstream timeout longer than the platform's own is a timeout that never fires.
+      env {
+        name  = "PORTAL_UPSTREAM_TIMEOUT"
+        value = tostring(var.upstream_timeout_seconds)
+      }
       env {
         name  = "PORTAL_FRAME_ANCESTORS"
         value = join(" ", sort(tolist(var.frame_ancestors)))
