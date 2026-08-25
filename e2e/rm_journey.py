@@ -151,17 +151,39 @@ def run(target: Target, out_dir: Path) -> Evidence:
             frame.locator('[data-demo="subject-name"]').fill(SUBJECT_NAME)
             build = frame.locator('[data-demo="build-dossier"]')
 
-            # ALWAYS upload, in both targets. The console refuses "an assessment with nothing to
-            # read", and the laptop profile's bundled corpus makes uploading optional rather than
-            # wrong -- so uploading in both keeps the two runs the same journey rather than two
-            # journeys that happen to share a script. Reading the button's disabled state to
-            # decide was worse than useless: the console enables it only after its own bootstrap,
-            # so the check raced the page and skipped the upload on a console that did need one.
+            # The assertion is that the case HAS its evidence, not that this run uploaded it.
+            #
+            # The console refuses "an assessment with nothing to read", so the evidence has to be
+            # there; but the case is deliberately stable across runs (an analyst returns to a
+            # case, and on the managed target the retrieval index only holds what has already
+            # been ingested). Uploading unconditionally therefore piled up a fresh copy every
+            # run. Uploading only when absent keeps both properties: the case always has its
+            # evidence, and the demo can be run twice without growing.
             document = out_dir / "synthetic-evidence.txt"
             document.write_text(EVIDENCE_DOCUMENT, encoding="utf-8")
-            frame.locator('[data-demo="document-upload"]').set_input_files(str(document))
+            # Wait for the case file to have RENDERED before counting what is in it: the
+            # console loads the existing documents after its own bootstrap, so counting too
+            # early reads an empty list and uploads a duplicate every run.
+            frame.locator('[data-demo="panel-case-documents"]').wait_for(timeout=STEP_TIMEOUT_MS)
+            frame.wait_for_function(
+                """() => {
+                  const panel = document.querySelector('[data-demo="panel-case-documents"]');
+                  if (!panel) return false;
+                  return Boolean(panel.querySelector('[data-demo="document-list"]'))
+                    || panel.textContent.includes('No documents yet');
+                }""",
+                timeout=STEP_TIMEOUT_MS,
+            )
+            already = frame.get_by_text(document.name).count()
+            if already == 0:
+                frame.locator('[data-demo="document-upload"]').set_input_files(str(document))
+                frame.locator('[data-demo="document-list"]').wait_for(timeout=STEP_TIMEOUT_MS)
             frame.locator('[data-demo="document-list"]').wait_for(timeout=STEP_TIMEOUT_MS)
-            evidence.record("synthetic evidence uploaded", document=document.name)
+            evidence.record(
+                "case holds its grounding evidence",
+                document=document.name,
+                uploaded_now=already == 0,
+            )
 
             build.wait_for(timeout=STEP_TIMEOUT_MS)
             page.wait_for_function(
