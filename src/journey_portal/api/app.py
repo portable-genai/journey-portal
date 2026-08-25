@@ -353,6 +353,21 @@ def healthz() -> HealthResponse:
     return HealthResponse(status="ok", profile=settings.profile, region=settings.region)
 
 
+@app.get("/v1/healthz", response_model=HealthResponse, tags=["ops"])
+def versioned_healthz() -> HealthResponse:
+    """The readiness path a PROXIED probe may honestly use.
+
+    ``/healthz`` is answered by the serverless frontend and never reaches this container, so a
+    probe against it reports healthy whether or not the application is running. That is the
+    worst combination available: a check that cannot fail for the reason it exists. ``/v1`` is
+    not a path the platform reserves, so this one is answered here, by the application, and its
+    body is produced from the loaded settings rather than from a literal.
+    """
+
+    settings = _container().settings
+    return HealthResponse(status="ok", profile=settings.profile, region=settings.region)
+
+
 @app.get(BFF_JWKS_PATH, response_model=JwkSetResponse, tags=["ops"])
 def bff_jwks(response: Response) -> JwkSetResponse:
     """Publish the BFF's public signing keys so Doc1 can pin the ``private_key_jwt`` client.

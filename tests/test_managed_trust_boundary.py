@@ -95,10 +95,30 @@ def token() -> str:
     return _mint_iap_token(account, audience)
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Report the redirect instead of following it.
+
+    IAP refuses by answering ``302`` towards Google sign-in. ``urlopen`` follows redirects by
+    default, so the refusal was fetched, the sign-in page answered ``200``, and every edge
+    assertion here read that as the app having served an unauthenticated caller. Both edge tests
+    failed against a deployment that was behaving correctly, and the forged-header one failed
+    saying the frontend was not stripping the reserved namespace, which would have read as a
+    live authentication bypass. A guard that cannot pass against a working system is worse than
+    an absent one: this is what it was reporting while ``curl -I`` showed ``302`` for the same
+    request.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[no-untyped-def]  # noqa: ARG002
+        return None
+
+
+_OPENER = urllib.request.build_opener(_NoRedirect)
+
+
 def _get(path: str, headers: dict[str, str]) -> tuple[int, dict[str, str], bytes]:
     request = urllib.request.Request(f"{_BASE}{path}", headers=headers)  # noqa: S310
     try:
-        with urllib.request.urlopen(request, timeout=60) as response:  # noqa: S310
+        with _OPENER.open(request, timeout=60) as response:
             return response.status, dict(response.headers), response.read()
     except urllib.error.HTTPError as error:
         return error.code, dict(error.headers or {}), error.read()

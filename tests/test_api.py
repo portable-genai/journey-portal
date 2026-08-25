@@ -22,6 +22,37 @@ def test_healthz(client: TestClient) -> None:
     assert body["region"] == "us-central1"
 
 
+def test_the_versioned_readiness_path_is_answered_by_the_application(client: TestClient) -> None:
+    """The path a PROXIED probe may honestly use.
+
+    On the deployment the serverless frontend answers ``/healthz`` itself, so that path never
+    reaches this container and a probe against it reports healthy whether or not the application
+    is running. ``/v1`` is not reserved by the platform, so this one is answered here. Found by
+    running the managed trust-boundary suite against the named deployment on 2026-08-26, which
+    reported the versioned path as a 404.
+    """
+
+    response = client.get("/v1/healthz")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["profile"] == "local"
+    assert body["region"] == "us-central1"
+    assert body == client.get("/healthz").json(), (
+        "the versioned readiness path must report exactly what /healthz reports, or the two "
+        "probes disagree about the same container"
+    )
+
+
+def test_the_versioned_readiness_path_needs_no_tenant_session(client: TestClient) -> None:
+    """It carries no tenant data, exactly like /healthz, and a probe holds no session."""
+
+    from journey_portal.api.tenant_security import UNAUTHENTICATED_PATHS
+
+    assert "/v1/healthz" in UNAUTHENTICATED_PATHS
+
+
 def test_journeys_feed(client: TestClient) -> None:
     journeys = {j["key"]: j for j in client.get("/v1/journeys").json()["journeys"]}
     assert set(journeys) == {"rm", "ops"}
