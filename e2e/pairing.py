@@ -69,6 +69,12 @@ EXEMPT: dict[str, str] = {
         "page attribution depends on the parser's own pagination of the same document, which is "
         "layout fidelity and a declared reduction."
     ),
+    "citations[] passage count": (
+        "how many SEGMENTS a store split one document into. Document AI and a local parser "
+        "chunk the same page differently, which is the same layout fidelity exempted above. "
+        "The count that is compared is of distinct DOCUMENTS, which no re-chunking moves, and "
+        "their titles are compared beside it."
+    ),
     "generated_at / screened_at / searched_at": (
         "wall-clock timestamps. Two runs are never simultaneous, and the ORDER they imply is "
         "not policy."
@@ -95,15 +101,32 @@ def _citations(node: Any) -> dict[str, Any]:
     title is compared and the id is not.
     """
     cits = list(node or [])
+    # Group by source_id FIRST. A store that returns one document as eight extractive
+    # segments and a store that returns it as three yields eight citations against three,
+    # and comparing those raw counts measures the CHUNKER -- parser fidelity, which is
+    # already a declared reduction two entries down. What must agree is which documents
+    # ground the claim, and that is one entry per document however it was split.
+    by_source: dict[str, list[dict[str, Any]]] = {}
+    for c in cits:
+        by_source.setdefault(str(c.get("source_id") or ""), []).append(c)
     return {
-        "count": len(cits),
+        # Distinct documents, not passages. This is the "how many sources ground this
+        # claim" the docstring promises, and it is stable under re-chunking.
+        "count": len(by_source),
         "types": sorted({str(c.get("source_type")) for c in cits}),
+        # WHICH documents, by the only identity that crosses profiles. Compared as a sorted
+        # multiset so two distinct bank statements do not collapse into one. Titles were not
+        # compared at all before, which is how eight citations that had all decayed into
+        # their own ids still reported a difference only in the count.
+        "titles": sorted(str(group[0].get("title") or "") for group in by_source.values()),
         # A citation whose title is merely its own id is not a usable evidence link. Counting
         # them is deliberate: it is the difference between "grounded in the bank statement" and
         # "grounded in doc-c9dba9861a1f", and a profile that loses the human-readable source
         # name has degraded the evidence relationship even though the link still resolves.
         "opaque_titles": sum(
-            1 for c in cits if str(c.get("title") or "") == str(c.get("source_id") or "")
+            1
+            for group in by_source.values()
+            if str(group[0].get("title") or "") == str(group[0].get("source_id") or "")
         ),
     }
 
