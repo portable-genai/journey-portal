@@ -262,7 +262,8 @@ app = FastAPI(
     version="0.1.0",
     description="Persona-journey host portal: composes the built P1 app UIs into one UI per user "
     "(RM and Ops journeys) via same-origin reverse-proxy embedding, with portal-verified identity "
-    "injected into every embedded app. Region asia-southeast1.",
+    "injected into every embedded app. The region is a deploy-time input; this text cannot "
+    "name it, and a served document asserting a region it does not read is worse than silent.",
     lifespan=_lifespan,
 )
 app.state.profile = _CHOICE.profile

@@ -19,12 +19,20 @@ variable "name_prefix" {
 
 variable "region" {
   type        = string
-  default     = "asia-southeast1"
+  default     = "us-central1"
   description = <<-EOT
-    Region used by every regional service, SELECTED AT DEPLOY TIME. Keeps the Singapore
-    default but is overridable. Validated against var.allowed_regions so an unapproved
-    region fails fast at `terraform plan` rather than deploying data out of jurisdiction
-    (P-03). main.tf carries the same check as a deployment-contract precondition.
+    Region used by every regional service, SELECTED AT DEPLOY TIME. Validated against
+    var.allowed_regions so an unapproved region fails fast at `terraform plan` rather than
+    deploying data out of jurisdiction (P-03). main.tf carries the same check as a
+    deployment-contract precondition.
+
+    The default follows the portfolio region decision (org-metadata
+    docs/deployment-region-alignment.md, recorded 2026-08-23 and REVISED 2026-08-24): the
+    launch set co-locates, and that region is us-central1. It was asia-southeast1 until the
+    revision. This default exists so an unset deploy agrees with the running reference
+    deployment; it is NOT a residency recommendation. us-central1 satisfies no Asia-Pacific
+    residency regime. An institution deploying in-country sets this and allowed_regions
+    together, which is a reviewed input change and not a repository edit.
   EOT
   validation {
     condition     = contains(var.allowed_regions, var.region)
@@ -34,14 +42,18 @@ variable "region" {
 
 variable "allowed_regions" {
   type        = set(string)
-  default     = ["asia-southeast1"]
+  default     = ["us-central1"]
   description = <<-EOT
     Institution-approved residency allowlist: the regions this portal may be deployed to.
     The region is chosen at deploy time (var.region) and validated against this list to FAIL
     FAST (P-03). Extending it is the deliberate residency review point: confirm that every
     embedded app is configured for that region and that your residency obligations are met
-    there first. The default stays the single Singapore region, so an unset deploy cannot
-    leave jurisdiction.
+    there first.
+
+    The default is the single region the portfolio decision names, so an unset deploy cannot
+    silently spread across regions and cannot disagree with var.region. Co-location is the
+    rule: a deviation needs the service named, the reason it cannot run in-region, a
+    data-flow record and the security owner's approval.
   EOT
   validation {
     condition     = length(var.allowed_regions) > 0

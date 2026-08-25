@@ -54,41 +54,45 @@ terminate at the same person. The identical decision is recorded in Doc1's dossi
 
 | Input | Required value | Review rule |
 |---|---|---|
-| GCP organization and project | `PENDING` (whether Hrz9 shares Doc1's project or takes its own is an open decision) | Dedicated or explicitly approved shared project |
-| Approved region | `asia-southeast1` | Must be in `allowed_regions` |
-| Allowed regions | `asia-southeast1` | Security and legal approval attached |
+| GCP organization and project | The reference deployment SHARES Doc1's project, decided by the apply rather than on paper. One consequence is load-bearing: a project belongs to exactly one regular VPC-SC perimeter, and the Doc1 stack owns it, so this stack configures none | Dedicated or explicitly approved shared project |
+| Approved region | `us-central1` | Must be in `allowed_regions` |
+| Allowed regions | `us-central1` | Security and legal approval attached |
 | Parent origin | `PENDING` | Dedicated HTTPS origin, exact, no wildcard |
 | DNS managed zone | `PENDING`, per Doc1's dossier | Change window recorded |
 | Certificate authority | Google-managed certificate (Certificate Manager) | Managed certificate or approved equivalent |
 | IAP OAuth client and JWT audience | `PENDING`; Terraform computes the exact IAP audience during the first apply and operators must not guess it | Edge authentication configured on the service |
 | Terraform state backend | `PENDING` | GCS bucket plus installation-specific prefix; local state is rejected |
 
-**Open decision: the two systems default to different regions.** This repo defaults to
-`asia-southeast1` and Doc1's dossier to `us-central1`, because not every managed service Doc1
-needs is available in `asia-southeast1`. A Mode 5 grant is therefore, on those defaults, a
-cross-region HTTPS call between two services in different jurisdictions.
+**Settled: the two systems co-locate in `us-central1`.** They once defaulted to different
+regions, and this section used to record that as an open choice. It is not one any more.
 
-The region is no longer a code constraint on either side. In this repo the Terraform `region` is a
-deploy-time input validated against `allowed_regions`, the residency allowlist (`variables.tf`),
-and the runtime keeps its own `config.py` `ALLOWED_REGIONS` preflight; both default to
-`asia-southeast1`, so an unset deploy stays in Singapore and any other region requires setting the
-region and the allowlist together. Co-locating the two systems is therefore a deployment input and
-a reviewed allowlist change, not a repo edit.
-
-**The residency choice is now recorded**, in the catalog's
+The residency decision is the catalog's
 [deployment region alignment](https://github.com/portable-genai/org-metadata/blob/main/docs/deployment-region-alignment.md)
-decision record (2026-08-23): the launch set CO-LOCATES, the region is `asia-southeast1`, which
-is what this repo already pins, and deploying any service outside it is an exception needing the
-service named, the reason it cannot run in-region, a data-flow record and approval. The three
-options this section used to leave open are therefore ranked rather than equal: co-location is the
-default and the cross-region call is the exception.
+record, taken 2026-08-23 and **REVISED 2026-08-24**: the launch set CO-LOCATES, and that region is
+`us-central1`, not the `asia-southeast1` the first version named. Deploying any service outside it
+is an exception needing the service named, the reason it cannot run in-region, a data-flow record
+and approval. Read the revision, not only the original date: the two say different things.
 
-Two things that record deliberately does NOT settle, because nothing offline can evidence them.
-It does not assert that every managed service Doc1 binds is available in `asia-southeast1`, which
-is the original reason the defaults diverged; instead the operator confirms availability per
-regional service before the apply, and anything that fails becomes an exception under the rule
-above. And sign-off stays where it was. Owner: security owner. Status: `PENDING` sign-off against
-a recorded position, no longer an unmade choice.
+**The defaults on this side follow that decision**, and had to be changed to do so. Both the
+Terraform `region` and `allowed_regions` (`infra/terraform/variables.tf`) and the runtime
+`config.py` preflight now default to `us-central1`. They previously defaulted to
+`asia-southeast1`, which meant a default `terraform plan` against the live stack failed its own
+residency validation — and failed looking like a working guard rather than a stale default, which
+is the more expensive kind of wrong. The region remains a deploy-time input on both sides, so an
+institution deploying in-country sets the region and the allowlist together and edits no code.
+
+**What the revision retired.** The original record deferred a per-service availability check to
+just before the apply, because it could not evidence that every managed service Doc1 binds is
+available in `asia-southeast1`. Under `us-central1` that check is moot and is NOT carried forward;
+it returns the moment a target region other than `us-central1` is chosen.
+
+**What it costs, stated rather than absorbed.** `us-central1` satisfies no Asia-Pacific residency
+regime. This deployment demonstrates that the residency MECHANISM works — an allowlist enforced at
+`terraform plan` and again at app load, with a drift test — and does not demonstrate an in-country
+APAC deployment. Any pitch citing it says which of the two it is showing.
+
+Sign-off stays where it was. Owner: security owner. Status: `PENDING` sign-off against a recorded
+position, no longer an unmade choice.
 
 ## 3. BFF service identity and key custody
 
@@ -201,10 +205,14 @@ The evidence pack for a Mode 5 sign-off must contain, in addition to the standar
 |---|---|---|
 | Portal Mode 5 code | Ready | `private_key_jwt` minting against a signing-key port with local and KMS adapter families, the JWKS route, CSRF plus exact-origin plus Fetch Metadata enforcement, and a broker client building the proof from the verified principal. The local gate is green |
 | Cross-repo agreement with Doc1 | Ready | `tests/test_cross_repo_doc1_private_key_jwt.py` verifies a portal-minted assertion against Doc1's ACTUAL `PrivateKeyJwtVerifier`, imported from the sibling checkout and run in its own virtualenv, with the replay, tamper, expiry, wrong-audience and unregistered-client negatives all refused |
-| Named institution inputs | BLOCKED | Section 1 incident channel and evidence location, section 2 project, IAP client and state backend, section 3 key custody and rotation |
+| Named institution inputs | PARTIAL | Section 2 is settled by the apply: the project is shared with Doc1, the region is `us-central1`, the IAP client and its audience exist and Terraform computed the audience rather than an operator guessing it, and the state backend is configured. Still outstanding: section 1's incident channel and evidence-retention location, and section 3's key custody and rotation dates |
 | Subject-token source | BLOCKED | Section 6: the dedicated Google OAuth client id and a portal-side OIDC session. Both are also the last Mode 5 blocker on Doc1's own row |
-| Residency decision | RECORDED, sign-off PENDING | Section 2: the region is a deploy-time input validated against `allowed_regions` on both sides, so this is a deployment input and a reviewed allowlist change rather than a code constraint. The choice itself is now recorded in the catalog's deployment region alignment decision (2026-08-23): co-locate in `asia-southeast1`, deviation by named exception. What remains is the security owner's sign-off and the per-service availability check that record names |
-| Controlled pre-production apply | BLOCKED | Every `PENDING` above stops `make deployment-check` before a command can run |
+| Residency decision | RECORDED, sign-off PENDING | Section 2: the region is a deploy-time input validated against `allowed_regions` on both sides. The choice is the catalog's deployment region alignment decision, recorded 2026-08-23 and **revised 2026-08-24**: co-locate in `us-central1`, deviation by named exception. The revision also retired the per-service availability check the first version owed, so that is no longer outstanding. What remains is the security owner's sign-off |
+| Controlled pre-production apply | DONE, and not a production service | Applied and serving. What is live, and how far each claim is proved rather than merely configured, is the catalog's deployment record; this dossier does not keep a second copy. Not evidenced on this stack: VPC-SC (the Doc1 stack owns the project's one perimeter), audit retention applied but unlocked, no HA, no rehearsed rollback |
 
 The remaining work on this side is inputs, not code. Every `PENDING` row names exactly what is
 needed and who owns it, which is the whole point of recording them rather than inventing values.
+
+**This dossier records inputs and decisions. It does not record deployment state**, which has one
+home in the catalog's `docs/deployment-status.md`. The two disagreed once, and the stale one was
+the one a buyer reads.

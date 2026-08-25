@@ -108,7 +108,7 @@ def test_a_non_profile_config_error_is_a_named_503_not_a_bare_500(
     ``ProfileNotConfigured``.
     """
     monkeypatch.setenv("PORTAL_PROFILE", "local")
-    monkeypatch.setenv("PORTAL_REGION", "us-central1")
+    monkeypatch.setenv("PORTAL_REGION", "europe-west1")  # outside the residency allowlist
     app_module._container.cache_clear()
     try:
         with pytest.raises(HTTPException) as excinfo:

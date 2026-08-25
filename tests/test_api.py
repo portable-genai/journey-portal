@@ -19,7 +19,7 @@ def test_healthz(client: TestClient) -> None:
     body = client.get("/healthz").json()
     assert body["status"] == "ok"
     assert body["profile"] == "local"
-    assert body["region"] == "asia-southeast1"
+    assert body["region"] == "us-central1"
 
 
 def test_journeys_feed(client: TestClient) -> None:
