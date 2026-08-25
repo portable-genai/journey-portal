@@ -60,3 +60,4 @@ service-account*.json
 
 # Completed deployment dossiers: real institution values, never tracked
 *.local.md
+e2e/out/

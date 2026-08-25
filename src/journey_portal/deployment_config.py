@@ -132,6 +132,7 @@ REQUIRED_NONSECRET_KEYS = frozenset(
         "DEPLOY_RM_DOMAIN",
         "DEPLOY_OPS_DOMAIN",
         "DEPLOY_TENANT_ID",
+        "DEPLOY_TENANT_IDENTITY_DOMAINS_JSON",
         "DEPLOY_HRZ5_URL",
         "DEPLOY_HRZ5_AUDIENCE",
         "DEPLOY_DNS_MANAGED_ZONE",
@@ -150,6 +151,7 @@ REQUIRED_NONSECRET_KEYS = frozenset(
         "DEPLOY_CMEK_ROTATION_PERIOD",
         "DEPLOY_AUDIT_RETENTION_DAYS",
         "DEPLOY_LOCK_AUDIT_BUCKET",
+        "DEPLOY_CLOUD_RUN_DELETION_PROTECTION",
         "DEPLOY_TERRAFORM_STATE_BUCKET",
         "DEPLOY_TERRAFORM_STATE_PREFIX",
         "DEPLOYMENT_OWNER",
@@ -523,6 +525,27 @@ def load_deployment_config(env_file: Path, secrets_file: Path) -> DeploymentConf
     tenant_id = values["DEPLOY_TENANT_ID"]
     if not re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,127}", tenant_id):
         raise DeploymentConfigError("DEPLOY_TENANT_ID must be a stable lowercase identifier")
+    # Which VERIFIED identity domains belong to that tenant. Required rather than optional: the
+    # tenant id is a label the deployment chooses, the identity layer only ever sees a domain,
+    # and leaving the two unrelated is what made a correctly configured deployment deny every
+    # request. A deployment that really wants the old "tenant IS the domain" behaviour says so
+    # by naming the domain and setting DEPLOY_TENANT_ID to it.
+    identity_domains = _json_value(values, "DEPLOY_TENANT_IDENTITY_DOMAINS_JSON", list)
+    if not identity_domains:
+        raise DeploymentConfigError(
+            "DEPLOY_TENANT_IDENTITY_DOMAINS_JSON must name at least one identity domain; with "
+            "none, no verified identity resolves onto the tenant and every request is denied"
+        )
+    seen_domains: set[str] = set()
+    for domain in identity_domains:
+        if not isinstance(domain, str) or not _DOMAIN_RE.fullmatch(domain.strip().lower()):
+            raise DeploymentConfigError(
+                f"DEPLOY_TENANT_IDENTITY_DOMAINS_JSON must contain DNS domains, got {domain!r}"
+            )
+        if domain.strip().lower() in seen_domains:
+            raise DeploymentConfigError(f"DEPLOY_TENANT_IDENTITY_DOMAINS_JSON repeats {domain!r}")
+        seen_domains.add(domain.strip().lower())
+    identity_domains = sorted(seen_domains)
     hrz5_url = values["DEPLOY_HRZ5_URL"].rstrip("/")
     hrz5_parsed = urlparse(hrz5_url)
     if not (
@@ -713,6 +736,11 @@ def load_deployment_config(env_file: Path, secrets_file: Path) -> DeploymentConf
         "iap_members": iap_members,
         "frame_ancestors": frame_ancestors,
         "cors_origins": cors_origins,
+        # Every reviewed identity domain maps onto THIS deployment's single tenant. The portal
+        # is single-tenant per deployment, so a map is the right shape and one tenant is the
+        # right value: several tenants behind one portal would need several embed policies and
+        # several hosts, which is a different deployment, not a different mapping.
+        "tenant_by_identity_domain": {domain: tenant_id for domain in identity_domains},
         "tenant_embed_policies": {
             f"{tenant_id}-primary": {
                 "tenant": tenant_id,
@@ -730,6 +758,7 @@ def load_deployment_config(env_file: Path, secrets_file: Path) -> DeploymentConf
         "cmek_rotation_period": values["DEPLOY_CMEK_ROTATION_PERIOD"],
         "audit_retention_days": retention_days,
         "lock_audit_bucket": _boolean(values, "DEPLOY_LOCK_AUDIT_BUCKET"),
+        "cloud_run_deletion_protection": _boolean(values, "DEPLOY_CLOUD_RUN_DELETION_PROTECTION"),
     }
     return DeploymentConfig(values=values, secrets=secrets, terraform_inputs=terraform_inputs)
 

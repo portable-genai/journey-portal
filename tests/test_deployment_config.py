@@ -59,6 +59,7 @@ def _valid_values() -> dict[str, str]:
         "DEPLOY_RM_DOMAIN": "rm-journey.bank.internal",
         "DEPLOY_OPS_DOMAIN": "ops-journey.bank.internal",
         "DEPLOY_TENANT_ID": "bank-sg",
+        "DEPLOY_TENANT_IDENTITY_DOMAINS_JSON": '["bank.internal"]',
         "DEPLOY_HRZ5_URL": "https://hrz5.bank.internal",
         "DEPLOY_HRZ5_AUDIENCE": "https://hrz5-audience.bank.internal",
         "DEPLOY_DNS_MANAGED_ZONE": "bank-journeys",
@@ -79,6 +80,7 @@ def _valid_values() -> dict[str, str]:
         "DEPLOY_CMEK_ROTATION_PERIOD": "7776000s",
         "DEPLOY_AUDIT_RETENTION_DAYS": "180",
         "DEPLOY_LOCK_AUDIT_BUCKET": "false",
+        "DEPLOY_CLOUD_RUN_DELETION_PROTECTION": "true",
         "DEPLOY_TERRAFORM_STATE_BUCKET": "bank-hrz9-prod-state",
         "DEPLOY_TERRAFORM_STATE_PREFIX": "hrz9/production",
         "DEPLOYMENT_OWNER": "deployment@bank.internal",
@@ -107,6 +109,7 @@ def test_loads_complete_named_config_and_keeps_secret_out_of_tfvars(tmp_path: Pa
 
     assert config.terraform_inputs["audit_retention_days"] == 180
     assert config.terraform_inputs["lock_audit_bucket"] is False
+    assert config.terraform_inputs["cloud_run_deletion_protection"] is True
     assert config.terraform_inputs["vpc_sc_enforced"] is False
     assert config.terraform_inputs["portal_audit_hmac_secret_version"] == "7"
     assert config.terraform_inputs["tenant_embed_policies"]["bank-sg-primary"]["tenant"] == (
@@ -659,3 +662,62 @@ def test_a_deployment_with_no_serviceable_journey_is_an_error() -> None:
 
     with pytest.raises(JourneyConfigError, match="no journey has any deployed app"):
         JourneyCatalog.from_mapping(raw, only_apps=frozenset({"doc1"}))
+
+
+def test_deletion_protection_is_a_reviewed_input_not_a_generated_file_edit(tmp_path: Path) -> None:
+    """The rendered tfvars must CARRY the setting, in both states.
+
+    It was absent before, so the Terraform default (true) won and the only way to deploy with it
+    off was to hand-edit the ignored generated file that `render` overwrites. That edit survived
+    until the next render and then reverted silently, which is how a live deployment and its
+    reviewed inputs disagreed with nothing to show it.
+    """
+
+    values = _valid_values()
+    values["DEPLOY_CLOUD_RUN_DELETION_PROTECTION"] = "false"
+    assert _load(tmp_path, values).terraform_inputs["cloud_run_deletion_protection"] is False
+
+    values["DEPLOY_CLOUD_RUN_DELETION_PROTECTION"] = "true"
+    assert _load(tmp_path, values).terraform_inputs["cloud_run_deletion_protection"] is True
+
+
+def test_missing_deletion_protection_is_refused(tmp_path: Path) -> None:
+    values = _valid_values()
+    del values["DEPLOY_CLOUD_RUN_DELETION_PROTECTION"]
+    with pytest.raises(DeploymentConfigError):
+        _load(tmp_path, values)
+
+
+def test_identity_domains_map_onto_the_reviewed_tenant(tmp_path: Path) -> None:
+    """The mapping that stops a Workspace domain being compared against a tenant LABEL.
+
+    Without it the managed identity adapter set ``tenant`` to the assertion's hosted domain and
+    the embed registry declared the tenant as ``bank-sg``. Those are different strings on every
+    real deployment, so the host/tenant check denied every request on a deployment whose inputs
+    were otherwise correct, and did so with a message about embedding policy.
+    """
+
+    values = _valid_values()
+    values["DEPLOY_TENANT_IDENTITY_DOMAINS_JSON"] = '["bank.internal", "svc.bank.internal"]'
+    inputs = _load(tmp_path, values).terraform_inputs
+    assert inputs["tenant_by_identity_domain"] == {
+        "bank.internal": "bank-sg",
+        "svc.bank.internal": "bank-sg",
+    }
+    declared = {policy["tenant"] for policy in inputs["tenant_embed_policies"].values()}
+    assert set(inputs["tenant_by_identity_domain"].values()) <= declared, (
+        "every mapped tenant must have a reviewed embed policy, or a request resolves onto a "
+        "tenant boundary nobody wrote down"
+    )
+
+
+@pytest.mark.parametrize(
+    "domains",
+    ["[]", '[""]', '["not a domain"]', '["bank.internal", "BANK.INTERNAL"]', '"bank.internal"'],
+    ids=["empty", "blank-entry", "not-a-domain", "duplicate-after-casefold", "not-a-list"],
+)
+def test_a_half_configured_identity_domain_list_is_refused(tmp_path: Path, domains: str) -> None:
+    values = _valid_values()
+    values["DEPLOY_TENANT_IDENTITY_DOMAINS_JSON"] = domains
+    with pytest.raises(DeploymentConfigError):
+        _load(tmp_path, values)

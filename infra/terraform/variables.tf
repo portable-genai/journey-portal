@@ -456,3 +456,31 @@ variable "vpc_sc_restricted_services" {
     error_message = "vpc_sc_restricted_services must not be empty."
   }
 }
+
+variable "tenant_by_identity_domain" {
+  type        = map(string)
+  default     = {}
+  description = <<-EOT
+    Verified identity domain -> reviewed tenant id, for the managed identity adapter.
+
+    The tenant used to be read straight off the assertion's hosted-domain claim, which assumed
+    the institution's Workspace domain and the tenant id in tenant_embed_policies are the same
+    string. On a real deployment they are not, so the host/tenant check compared a domain against
+    a label, never matched, and denied every request. Every VALUE here must therefore name a
+    tenant that tenant_embed_policies actually declares, which the validation below enforces:
+    a mapping onto a tenant with no reviewed embed policy would resolve requests onto a tenant
+    boundary nobody wrote down.
+
+    Empty keeps the old behaviour (the tenant IS the domain). Non-empty makes the map exhaustive:
+    a domain absent from it resolves to no tenant at all, rather than to itself.
+  EOT
+  validation {
+    condition = alltrue([
+      for domain, tenant in var.tenant_by_identity_domain :
+      can(regex("^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$", domain)) &&
+      can(regex("^[a-z0-9][a-z0-9._-]{0,127}$", tenant)) &&
+      contains([for policy in values(var.tenant_embed_policies) : policy.tenant], tenant)
+    ])
+    error_message = "each tenant_by_identity_domain entry must map a DNS domain onto a tenant that tenant_embed_policies declares."
+  }
+}

@@ -8,6 +8,8 @@ through unchanged, and every app re-verifies it itself: defense in depth).
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from hex_service_kit.assertion import require_claims, require_pinned_algorithm
 from hex_service_kit.identity import IdentityError, Principal, RequestContext
 
@@ -56,7 +58,12 @@ class IapIdentityAdapter:
                 certs_url=_IAP_CERTS_URL,
             )
         except Exception as exc:  # noqa: BLE001 - translate the managed verifier boundary
-            raise IdentityError("IAP assertion verification failed") from exc
+            # Carry the verifier's own words. "verification failed" is true of a wrong audience,
+            # an expired assertion, an unreachable key set and a clock skew alike, and an
+            # operator cannot act on any of them from that string.
+            raise IdentityError(
+                f"IAP assertion verification failed ({type(exc).__name__}: {exc})"
+            ) from exc
         # The issuer and the claim SET are stated here: verify_token checks neither, and a
         # claim that is present but empty counts as missing.
         require_claims(
@@ -68,7 +75,32 @@ class IapIdentityAdapter:
         email = str(claims["email"]).strip()
         return Principal(
             subject=email,
-            tenant=str(claims.get("hd", "")),
+            tenant=self._tenant_for(claims, email),
             assurance="iap",
             source="gcp-iap",
         )
+
+    def _tenant_for(self, claims: Mapping[str, object], email: str) -> str:
+        """Map the VERIFIED identity domain onto the deployment's reviewed tenant id.
+
+        The tenant used to be the ``hd`` claim itself, which silently assumed the institution's
+        Workspace domain and its tenant LABEL are the same string. They are not: a deployment
+        whose reviewed tenant is ``reference-bank`` is signed into by people whose hosted domain
+        is something else, so the tenant/host check in the embed registry compared two values
+        that could never be equal and denied every request. Machine callers make it worse: a
+        service account carries no ``hd`` at all, so its tenant was the empty string.
+
+        With no map configured this returns the domain, exactly as before. With one configured
+        an UNMAPPED domain resolves to the empty string rather than to itself, so an identity
+        this deployment has not reviewed cannot land on a tenant by looking like one.
+        """
+
+        hosted_domain = str(claims.get("hd", "")).strip().lower()
+        # A service account presents no hosted domain; its email domain is the closest thing to
+        # one it has, and naming that domain in the map is how a deployment admits a machine
+        # caller deliberately.
+        domain = hosted_domain or email.rpartition("@")[2].strip().lower()
+        mapping = self._settings.tenant_by_domain
+        if not mapping:
+            return domain
+        return mapping.get(domain, "")

@@ -30,13 +30,41 @@ from .models import InjectionPlan
 
 PERSONA_HEADER = "x-dev-persona"
 IAP_HEADER = "x-goog-iap-jwt-assertion"
+#: The same assertion, under a name the serverless frontend does not reserve.
+#:
+#: ``x-goog-*`` is Google's namespace, and the frontend REMOVES those headers from a request on
+#: its way into a service so that only the platform can set them. That protection is right, and
+#: it also means the portal cannot hand the assertion to an embedded app under the standard name:
+#: the portal injected it, the frontend dropped it, and the app answered "missing IAP assertion
+#: header; request did not pass through IAP" -- an accurate message about a request that HAD
+#: passed through IAP one hop earlier. Nothing about the trust model changes with the rename: the
+#: embedded app still verifies the assertion's signature, issuer and audience against Google's
+#: published IAP keys, and it is reachable only by the portal's own service identity, which Cloud
+#: Run authenticates independently. The header carries the assertion; it never vouches for it.
+PORTAL_IAP_HEADER = "x-portal-iap-assertion"
 
 LOCAL_PROFILE = "local"
 SECURE_PROFILES: tuple[str, ...] = ("gcp", "platform")
 
 # Identity headers a browser must never be able to assert to an upstream app. Always stripped
 # from the inbound request before the portal injects the identity it verified itself.
-CLIENT_SPOOFABLE_IDENTITY: frozenset[str] = frozenset({PERSONA_HEADER, IAP_HEADER, "authorization"})
+CLIENT_SPOOFABLE_IDENTITY: frozenset[str] = frozenset(
+    {
+        PERSONA_HEADER,
+        IAP_HEADER,
+        "authorization",
+        # IAP's DECODED identity headers. An embedded app must learn who the user is from its
+        # own edge, never from something a previous hop copied forward: an app that trusts
+        # these from a proxy trusts whatever the proxy was handed.
+        "x-goog-authenticated-user-email",
+        "x-goog-authenticated-user-id",
+        "x-goog-iap-userinfo",
+        # The portal-scoped assertion header is injected by the portal and by nothing else. A
+        # browser that could set it would be asserting its own identity to the embedded app,
+        # which is the exact attack the standard header's reserved namespace prevents.
+        PORTAL_IAP_HEADER,
+    }
+)
 
 # End-to-end / connection-scoped headers a reverse proxy must not forward. ``accept-encoding`` is
 # dropped outbound so upstreams reply with identity encoding (the proxy forwards bytes verbatim and
@@ -45,6 +73,15 @@ _HOP_BY_HOP_REQUEST: frozenset[str] = frozenset(
     {
         "host",
         "content-length",
+        # THE hop-scoped credential, and the one easiest to miss because nothing the browser
+        # sent contains it. Google's serverless frontend INJECTS `x-serverless-authorization`
+        # on the way in, holding a token minted for THIS service. Forwarded verbatim it
+        # arrives at the next Cloud Run service, whose frontend prefers it over
+        # `authorization` and rejects it, because its audience names the previous hop. The
+        # symptom is a 401 "the access token could not be verified" from a callee whose IAM
+        # binding, ingress and the caller's freshly minted token are all correct -- a
+        # combination that reads as anything except a header the proxy was never meant to copy.
+        "x-serverless-authorization",
         "connection",
         "keep-alive",
         "proxy-authorization",
@@ -98,7 +135,11 @@ def build_injection_plan(
     elif profile in SECURE_PROFILES:
         assertion = inbound.get(IAP_HEADER, "").strip()
         if assertion:
+            # Both names: the standard one for any hop that preserves it (a shared edge, a
+            # sidecar, an on-prem ingress), and the portal-scoped one for the serverless hop
+            # that does not.
             set_headers[IAP_HEADER] = assertion
+            set_headers[PORTAL_IAP_HEADER] = assertion
     return InjectionPlan(
         set_headers=tuple(set_headers.items()),
         strip_headers=CLIENT_SPOOFABLE_IDENTITY,

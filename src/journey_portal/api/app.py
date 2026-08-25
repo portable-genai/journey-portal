@@ -12,6 +12,7 @@ commons (loopback bind for the no-auth local profile; CORS never falls back to `
 
 from __future__ import annotations
 
+import logging
 import os
 import secrets
 from contextlib import asynccontextmanager
@@ -38,7 +39,9 @@ from ..domain.catalog import api_target, ui_target
 from ..domain.errors import UnknownApp
 from ..domain.identity_injection import (
     CLIENT_SPOOFABLE_IDENTITY,
+    IAP_HEADER,
     PERSONA_HEADER,
+    SECURE_PROFILES,
     build_injection_plan,
     sanitize_request_headers,
     sanitize_response_headers,
@@ -67,6 +70,30 @@ from .schemas import (
 )
 from .security import make_get_principal
 from .tenant_security import add_tenant_security
+
+_LOGGER = logging.getLogger(__name__)
+
+
+def _audit_unavailable(exc: AuditUnavailable) -> HTTPException:
+    """Refuse the request, and say WHY somewhere an operator can read it.
+
+    The four call sites below all failed closed with the same fixed ``detail`` and logged
+    nothing, so a deployed portal that could not write its access evidence answered 503 to every
+    request with no way to tell a missing IAM grant from an unreachable sink from a short HMAC
+    key. The reason stays out of the RESPONSE (a caller learns only that the audit is
+    unavailable) and goes to the log, which is where an operator is looking.
+
+    It is deliberately raised from the handler rather than from the adapter: the adapter is built
+    lazily inside the same call, so a construction failure never reached the adapter's own
+    except block at all. That is the case this exists to make visible.
+    """
+
+    _LOGGER.error("portal access audit is unavailable: %s", exc)
+    return HTTPException(
+        status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="portal access audit is unavailable",
+    )
+
 
 # The profile is resolved ONCE, by config.resolve_profile, and an absent PORTAL_PROFILE is NOT
 # consent. This module used to re-derive it with its own os.environ.get(..., "local"), which was
@@ -161,10 +188,7 @@ async def _record_forwarded_access(
     try:
         await run_in_threadpool(append)
     except AuditUnavailable as exc:
-        raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="portal access audit is unavailable",
-        ) from exc
+        raise _audit_unavailable(exc) from exc
 
 
 async def _record_embed_policy_assessment(
@@ -193,10 +217,7 @@ async def _record_embed_policy_assessment(
     try:
         await run_in_threadpool(append)
     except AuditUnavailable as exc:
-        raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="portal access audit is unavailable",
-        ) from exc
+        raise _audit_unavailable(exc) from exc
 
 
 async def _record_grant_decision(
@@ -224,10 +245,7 @@ async def _record_grant_decision(
     try:
         await run_in_threadpool(append)
     except AuditUnavailable as exc:
-        raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="portal access audit is unavailable",
-        ) from exc
+        raise _audit_unavailable(exc) from exc
 
 
 get_principal = make_get_principal(lambda: _container().identity, persona_cookie=_PERSONA_COOKIE)
@@ -422,10 +440,7 @@ def audit_integrity(
     try:
         view = _container().access_audit.integrity()
     except AuditUnavailable as exc:
-        raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="portal access audit is unavailable",
-        ) from exc
+        raise _audit_unavailable(exc) from exc
     return AuditIntegrityResponse.from_domain(view)
 
 
@@ -467,6 +482,16 @@ async def _proxy_api_request(
     inbound = {k.lower(): v for k, v in request.headers.items()}
     plan = build_injection_plan(principal, _EXPOSURE, inbound)
     fwd_headers = sanitize_request_headers(inbound, plan)
+    if _EXPOSURE in SECURE_PROFILES and IAP_HEADER not in fwd_headers:
+        # A secure-profile API hop carrying no injected identity is not a subtle problem: the
+        # embedded app re-verifies the assertion itself and will refuse, so the browser sees the
+        # APP's 401 and the portal looks healthy. Say it here, where the cause is.
+        _LOGGER.warning(
+            "forwarding %s to %s with NO injected IAP assertion (inbound had it: %s)",
+            request.method,
+            mount.app_id,
+            IAP_HEADER in inbound,
+        )
     url = api_target(mount, tail)
     if request.url.query:
         url = f"{url}?{request.url.query}"

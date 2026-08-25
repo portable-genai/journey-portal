@@ -79,6 +79,46 @@ resource "google_project_iam_member" "portal_log_writer" {
   member  = "serviceAccount:${google_service_account.portal.email}"
 }
 
+# The runtime baseline for every EMBEDDED app's identity.
+#
+# This stack creates a service account per embedded app, so this stack owes them the roles any
+# service needs simply to run observably: write its own logs, and export its own spans. The
+# embedded app's OWN stack cannot grant these, because it has never heard of an account the
+# portal invented. Missing, the app runs and then fails on its first traced request with
+# "Permission 'cloudtrace.traces.patch' denied" -- a message about tracing, on a request that was
+# building a dossier.
+#
+# Deliberately only the baseline. Anything an app needs for its own DATA (a bucket, a dataset, a
+# database) stays with that app's stack, which is where the resource and its access list live;
+# this stack would otherwise be granting itself access to data it does not own.
+locals {
+  embedded_runtime_members = merge(
+    {
+      for app_id, sa in google_service_account.embedded_api : "api-${app_id}" => sa.email
+    },
+    {
+      for app_id, sa in google_service_account.embedded_ui : "ui-${app_id}" => sa.email
+    },
+  )
+  embedded_runtime_bindings = {
+    for pair in setproduct(keys(local.embedded_runtime_members), [
+      "roles/logging.logWriter",
+      "roles/cloudtrace.agent",
+      "roles/monitoring.metricWriter",
+      ]) : "${pair[0]}|${pair[1]}" => {
+      member = local.embedded_runtime_members[pair[0]]
+      role   = pair[1]
+    }
+  }
+}
+
+resource "google_project_iam_member" "embedded_runtime_baseline" {
+  for_each = local.embedded_runtime_bindings
+  project  = var.project_id
+  role     = each.value.role
+  member   = "serviceAccount:${each.value.member}"
+}
+
 locals {
   computed_portal_iap_audience = "/projects/${data.google_project.current.number}/global/backendServices/${google_compute_backend_service.portal.generated_id}"
   iap_backends = {
