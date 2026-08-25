@@ -1,4 +1,4 @@
-.PHONY: help install lint format typecheck test eval check run-api run-rm run-ops journeys demo demo-selftest demo-browser-selftest e2e-local e2e-gcp portability deployment-check deployment-render docker-build docker-build-all tf-validate clean lock
+.PHONY: test-managed help install lint format typecheck test eval check run-api run-rm run-ops journeys demo demo-selftest demo-browser-selftest e2e-local e2e-gcp portability deployment-check deployment-render docker-build docker-build-all tf-validate clean lock
 
 PY ?= python3
 PY := $(if $(wildcard .venv/bin/python),.venv/bin/python,$(PY))
@@ -64,6 +64,13 @@ e2e-gcp: ## Drive the SAME journey against the deployment (needs gcloud + the .e
 	PORTAL_E2E_IAP_AUDIENCE=$${PORTAL_E2E_IAP_AUDIENCE:?name the IAP OAuth client id} \
 	PORTAL_E2E_SERVICE_ACCOUNT=$${PORTAL_E2E_SERVICE_ACCOUNT:?name the e2e service account} \
 	$(PY) e2e/rm_journey.py
+
+test-managed: ## Managed trust-boundary suite against a NAMED deployment (needs gcloud).
+	@# Three states, never two: PORTAL_MANAGED_TEST_BASE_URL unset skips (so the offline gate is
+	@# unaffected), named-and-reachable runs, named-and-unusable FAILS. What it asserts are
+	@# properties of the HOP, which no offline fixture can carry: the reserved x-goog namespace,
+	@# the injected hop credential, and the frontend-answered /healthz.
+	$(PY) -m pytest -m integration -q tests/test_managed_trust_boundary.py -rs
 
 e2e-pair: ## F4: assert the laptop and the deployment AGREE (needs both runs to have happened).
 	$(PY) e2e/pair_report.py
