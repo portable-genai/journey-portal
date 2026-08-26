@@ -61,3 +61,9 @@ service-account*.json
 # Completed deployment dossiers: real institution values, never tracked
 *.local.md
 e2e/out/
+
+# Next.js 16 writes these agent-rule files into each UI directory during a build. They are
+# generated, not authored here, and an untracked pair after every `--built` run is what makes
+# the portfolio gate report this tree as dirty for no change anyone made.
+ui-*/AGENTS.md
+ui-*/CLAUDE.md
