@@ -11,14 +11,21 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from hex_service_kit.assertion import require_claims, require_pinned_algorithm
+from hex_service_kit.federation import IAP_ASSERTION_HEADER, IAP_ISSUER, IAP_KEYS_URL
 from hex_service_kit.identity import IdentityError, Principal, RequestContext
 
 from ...config import Settings
 from ...ports.identity import VERIFIED
 
-_IAP_ASSERTION_HEADER = "x-goog-iap-jwt-assertion"
-_IAP_CERTS_URL = "https://www.gstatic.com/iap/verify/public_key"
-_IAP_ISSUER = "https://cloud.google.com/iap"
+# The three transport facts are REBOUND from the kit, not re-declared here. This module was the
+# one place in the portal the transport adoption missed: ``domain/identity_injection.py`` has
+# taken them from the commons since tier 3 landed, while these three literals stayed behind and
+# nothing could notice, because a literal always agrees with itself. Two modules in one
+# repository disagreeing about which header carries identity is the exact drift the kit exists
+# to make impossible.
+_IAP_ASSERTION_HEADER = IAP_ASSERTION_HEADER
+_IAP_CERTS_URL = IAP_KEYS_URL
+_IAP_ISSUER = IAP_ISSUER
 
 #: The claims this deployment requires before it reads any of them.
 _REQUIRED_CLAIMS = ("iss", "sub", "email", "exp")
