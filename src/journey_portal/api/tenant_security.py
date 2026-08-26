@@ -18,10 +18,15 @@ _METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD")
 _BASE_HEADERS = frozenset({"authorization", "content-type"})
 _LOCAL_HEADERS = frozenset({"x-dev-persona"})
 #: The only paths served without a verified principal and without a tenant policy decision.
-#: ``/healthz`` carries no tenant data; the JWK set is public key material a relying party must
-#: fetch BEFORE it holds any credential of ours, so requiring a session there would make the
-#: registration it exists for impossible. Both still receive the framing and nosniff headers.
-UNAUTHENTICATED_PATHS = frozenset({"/healthz", "/.well-known/doc1-bff-jwks.json"})
+#: ``/healthz`` and its versioned twin carry no tenant data; the JWK set is public key material a
+#: relying party must fetch BEFORE it holds any credential of ours, so requiring a session there
+#: would make the registration it exists for impossible. All still receive the framing and
+#: nosniff headers.
+#:
+#: ``/v1/healthz`` is listed for the same reason as ``/healthz`` and carries the identical body.
+#: It exists because the serverless frontend answers ``/healthz`` itself, so that path never
+#: reaches this container and a proxied probe against it reports healthy either way.
+UNAUTHENTICATED_PATHS = frozenset({"/healthz", "/v1/healthz", "/.well-known/doc1-bff-jwks.json"})
 
 
 def _error_response(exc: HTTPException) -> JSONResponse:
