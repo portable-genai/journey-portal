@@ -51,6 +51,26 @@ EXEMPT: dict[str, str] = {
         "invent a result, which is the exact defect the not-screened/none-found distinction "
         "exists to prevent. The absence is itself correct behaviour on one profile."
     ),
+    "sow.sources[].kind / sow.confidence": (
+        "EXTRACTION quality, which the published claim already permits to differ. Both profiles "
+        "read the SAME document and both produce a source-of-wealth breakdown; what differs is "
+        "how a frontier model and a laptop model classify the wealth described in one page of "
+        "prose -- `asset_sale` and `business_ownership` against `business_ownership` and "
+        "`other` -- and what confidence each assigns its own reading. That is the declared "
+        "reduction the invariant names as quality, in the same class as the adverse_media and "
+        "ownership exemptions above. "
+        "**Only the classification and the confidence are exempt.** sow.amounts, sow.present "
+        "and sow.citations stay compared, deliberately, and the first of those is the point: "
+        "an amount, a currency and a period are consequential figures a reviewer acts on, so "
+        "two profiles reading one statement must agree about the money even when they disagree "
+        "about what to call it. Exempting the whole subtree would have taken the amounts with "
+        "it -- the over-broad exemption this module exists to refuse, and the first attempt at "
+        "this entry did exactly that until a guard in tests/test_pairing.py caught it. "
+        "A profile that extracted NOTHING is still caught by sow.present, and the band and "
+        "score are no longer downstream of any of this: since 2026-08-27 they come from the "
+        "deterministic scorecard, so how the narrative is classified can no longer move the "
+        "consequential number. Decided 2026-08-27."
+    ),
     "ownership.owners / ownership.citations": (
         "entity resolution against two different sources of truth, which is a property of the "
         "PROFILE and not of a run. The laptop resolves the demo subject from a seeded registry "
@@ -180,19 +200,27 @@ def comparable(dossier: dict[str, Any]) -> dict[str, Any]:
             ),
             key=lambda f: str(f["id"]),
         ),
-        "sow.confidence": sow.get("confidence"),
-        "sow.sources": sorted(
+        # The KIND a source is classified as, and the confidence a profile assigns its own
+        # reading, are EXEMPT (see EXEMPT above). The FIGURES are not: an amount, a currency
+        # and a period are consequential, they are what a reviewer acts on, and two profiles
+        # reading one statement must agree about the money even when they disagree about what
+        # to call it. Exempting the whole subtree would have taken the amounts with it, which
+        # is the over-broad exemption this module exists to refuse.
+        "sow.amounts": sorted(
             (
                 {
-                    "kind": s.get("kind") or s.get("type"),
                     "amount": s.get("amount"),
                     "currency": s.get("currency"),
                     "period": s.get("period"),
                 }
                 for s in sow.get("sources") or []
             ),
-            key=lambda s: (str(s["kind"]), str(s["amount"])),
+            key=lambda s: (str(s["amount"]), str(s["currency"]), str(s["period"])),
         ),
+        # And the question exempting a subtree would otherwise bury: did this profile extract a
+        # source of wealth AT ALL. A laptop that silently returned nothing and a deployment
+        # that returned two sources must still be caught disagreeing.
+        "sow.present": bool(sow.get("sources")),
         # Evidence links.
         "rating.citations": _citations(rating.get("citations")),
         "sow.citations": _citations(sow.get("citations")),
