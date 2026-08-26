@@ -51,6 +51,20 @@ EXEMPT: dict[str, str] = {
         "invent a result, which is the exact defect the not-screened/none-found distinction "
         "exists to prevent. The absence is itself correct behaviour on one profile."
     ),
+    "ownership.owners / ownership.citations": (
+        "entity resolution against two different sources of truth, which is a property of the "
+        "PROFILE and not of a run. The laptop resolves the demo subject from a seeded registry "
+        "fixture; the managed profile asks a grounded web search, which correctly finds nothing "
+        "for an entity that does not exist. Comparing them would demand that the managed side "
+        "invent an owner for a fictional company, which is the same defect the adverse_media "
+        "exemption above exists to prevent, and the citations diverge only because they are "
+        "citations OF those two different sources. "
+        "**ownership.present and ownership.root_entity stay compared**, deliberately: whether "
+        "this profile resolved ownership at all is exactly the kind of silent omission the pair "
+        "exists to catch, and exempting the subtree wholesale would have hidden it. Decided "
+        "2026-08-26 rather than fixed, because no code change can make a grounded search find a "
+        "company that was never incorporated."
+    ),
     "citations[].snippet": (
         "parser fidelity. Portable OCR and Document AI extract different spans of one page."
     ),
@@ -203,21 +217,12 @@ def comparable(dossier: dict[str, Any]) -> dict[str, Any]:
             key=lambda a: (str(a["list"]), str(a["matched_name"])),
         )
 
+    # ``owners`` and ``citations`` are exempt (see EXEMPT): the two profiles resolve ownership
+    # against different sources of truth by design. Presence and the root entity are NOT, because
+    # a profile that quietly stopped resolving ownership would otherwise read as agreement.
     out["ownership.present"] = ownership is not None
     if ownership is not None:
         out["ownership.root_entity"] = ownership.get("root_entity")
-        out["ownership.owners"] = sorted(
-            (
-                {
-                    "name": o.get("name"),
-                    "percentage": o.get("percentage") or o.get("effective_percentage"),
-                    "control_basis": o.get("control_basis"),
-                }
-                for o in ownership.get("owners") or []
-            ),
-            key=lambda o: str(o["name"]),
-        )
-        out["ownership.citations"] = _citations(ownership.get("citations"))
 
     return out
 
