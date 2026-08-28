@@ -11,6 +11,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+from journey_portal.config import load_journeys_mapping
+from journey_portal.domain.catalog import JourneyCatalog
+
 _SCRIPT = Path(__file__).with_name("run_journeys.py")
 sys.path.insert(0, str(_SCRIPT.parent.parent / "src"))
 _SPEC = importlib.util.spec_from_file_location("run_journeys", _SCRIPT)
@@ -161,6 +164,63 @@ class BackendProfileTests(unittest.TestCase):
         # would start, and they without the profile is the failure this test exists for.
         self.assertIn("REVIEW_DB_PATH", backend_env)
         self.assertIn("REVIEW_S2S_TOKEN", backend_env)
+
+
+class AppMapTests(unittest.TestCase):
+    """The real maps, deliberately unpatched: these assert the shipped configuration."""
+
+    def test_every_mounted_app_has_a_profile_variable(self) -> None:
+        """No app the launcher can start may be left to inherit its posture.
+
+        The journey config decides which app ids exist, so a journey that mounts a new app
+        without naming its profile variable is the exact omission this catches, before that
+        app is first launched rather than after a demo step fails against it.
+        """
+        self.assertEqual(
+            set(run_journeys._APP_REPOS),
+            set(run_journeys._APP_PROFILE_ENVS),
+            "every launchable app names its profile variable, and nothing else does",
+        )
+
+    def test_every_journey_shell_origin_is_allowed_by_the_local_policy(self) -> None:
+        """A shell the launcher serves must be an origin the portal accepts.
+
+        The tenant embedding policy is what decides, and its refusal reaches the browser as
+        a 403 on the embedded app's own assets rather than as anything about origins: the
+        app renders its chrome, fails to hydrate, and reports its backend unreachable. A new
+        journey whose port was never added to the allowlist looks exactly like a broken app.
+        """
+        from journey_portal.config import _LOCAL_CORS_ORIGINS
+
+        ports = (*run_journeys._SHELL_PORTS.values(), run_journeys._OPS_SHELL_PORT)
+        for port in ports:
+            for host in ("localhost", "127.0.0.1"):
+                with self.subTest(origin=f"{host}:{port}"):
+                    self.assertIn(f"http://{host}:{port}", _LOCAL_CORS_ORIGINS)
+
+    def test_every_journey_has_a_shell_to_serve_it(self) -> None:
+        catalog = JourneyCatalog.from_mapping(
+            load_journeys_mapping(Path(__file__).resolve().parent.parent / "config/journeys.yaml")
+        )
+        for key in catalog.journeys:
+            with self.subTest(journey=key):
+                served = key == "ops" or key in run_journeys._SHELL_PORTS
+                self.assertTrue(served, f"journey {key!r} has no shell port assigned")
+
+    def test_every_configured_journey_app_is_launchable(self) -> None:
+        """The journey config and the launcher's repo map cannot drift apart.
+
+        A journey may only mount an app the launcher knows how to start; otherwise the
+        portal advertises a tab whose upstream nothing ever brings up, and the failure
+        surfaces as a blank frame at demo time.
+        """
+        catalog = JourneyCatalog.from_mapping(
+            load_journeys_mapping(Path(__file__).resolve().parent.parent / "config/journeys.yaml")
+        )
+        for key, journey in catalog.journeys.items():
+            for app_id in journey.app_ids:
+                with self.subTest(journey=key, app=app_id):
+                    self.assertIn(app_id, run_journeys._APP_REPOS)
 
 
 if __name__ == "__main__":

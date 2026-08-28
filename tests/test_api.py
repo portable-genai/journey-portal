@@ -55,11 +55,26 @@ def test_the_versioned_readiness_path_needs_no_tenant_session(client: TestClient
 
 def test_journeys_feed(client: TestClient) -> None:
     journeys = {j["key"]: j for j in client.get("/v1/journeys").json()["journeys"]}
-    assert set(journeys) == {"rm", "ops"}
+    assert set(journeys) == {"rm", "ops", "mkt", "gov", "svc"}
     rm_apps = [a["id"] for a in journeys["rm"]["apps"]]
     ops_apps = [a["id"] for a in journeys["ops"]["apps"]]
     assert rm_apps == ["doc1", "doc5", "doc3"]
     assert ops_apps == ["doc2", "doc4", "rsk1", "hrz7"]
+    # Each persona workbench is one ordered journey through its own systems, and the
+    # review console is shared by the three that end in a human decision.
+    assert [a["id"] for a in journeys["mkt"]["apps"]] == [
+        "mkt1",
+        "mkt2",
+        "mkt3",
+        "mkt6",
+        "mkt4",
+        "mkt5",
+        "hrz7",
+    ]
+    assert [a["id"] for a in journeys["gov"]["apps"]] == ["rsk3", "hrz4", "hrz7"]
+    assert [a["id"] for a in journeys["svc"]["apps"]] == ["doc6", "rsk1", "hrz7"]
+    # An app appearing in two journeys is mounted once, so its route cannot diverge.
+    assert journeys["ops"]["apps"][3]["api_base"] == journeys["gov"]["apps"][2]["api_base"]
     # the shells embed the same-origin ui_base and call the same-origin api_base
     doc1 = journeys["rm"]["apps"][0]
     assert doc1["ui_base"] == "/apps/doc1/"

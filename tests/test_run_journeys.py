@@ -107,6 +107,8 @@ def test_launcher_wires_doc1_to_hrz7_as_a_loopback_service_producer(
     hrz7_backend = launcher._spawn.call_args_list[1]
     assert doc1_backend.kwargs["env"] == {
         "PYTHONPATH": "src",
+        # Named, never inherited. Every app the launcher starts is told its posture.
+        "CDD_PROFILE": launcher_module._PORTAL_LOCAL_PROFILE,
         "CDD_CHANNEL_PROFILE": "native",
         "CDD_IDENTITY_PROFILE": "local-persona",
         "CDD_ALLOW_INSECURE_DEMO": "1",

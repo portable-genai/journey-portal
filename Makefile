@@ -15,8 +15,8 @@ install: ## Editable install with the SDK-free dev toolchain.
 	pip install --no-deps -e .
 
 lint: ## ruff check + format check.
-	ruff check src tests eval scripts/deployment_config.py scripts/live_profile_check.py scripts/verify_gcp_control_plane.py scripts/demo_selftest.py scripts/demo_browser_selftest.py scripts/portability_demo.py scripts/rename_fork.py ui-rm/static_server.py ui-ops/static_server.py
-	ruff format --check src tests eval scripts/deployment_config.py scripts/live_profile_check.py scripts/verify_gcp_control_plane.py scripts/demo_selftest.py scripts/demo_browser_selftest.py scripts/portability_demo.py scripts/rename_fork.py ui-rm/static_server.py ui-ops/static_server.py
+	ruff check src tests eval scripts/deployment_config.py scripts/live_profile_check.py scripts/verify_gcp_control_plane.py scripts/demo_selftest.py scripts/demo_browser_selftest.py scripts/portability_demo.py scripts/journey_ui_smoke.py scripts/rename_fork.py ui-rm/static_server.py ui-ops/static_server.py
+	ruff format --check src tests eval scripts/deployment_config.py scripts/live_profile_check.py scripts/verify_gcp_control_plane.py scripts/demo_selftest.py scripts/demo_browser_selftest.py scripts/portability_demo.py scripts/journey_ui_smoke.py scripts/rename_fork.py ui-rm/static_server.py ui-ops/static_server.py
 
 format: ## Auto-format and fix.
 	ruff format src tests eval

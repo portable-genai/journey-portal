@@ -1,6 +1,7 @@
 "use client";
 
-// The RM Journey shell. Deliberately THIN: it renders a persona switcher and a tabbed set of
+// The journey shell, serving whichever journey NEXT_PUBLIC_JOURNEY names. Deliberately THIN:
+// it renders a persona switcher and a tabbed set of
 // same-origin iframes over the portal BFF, and nothing else. All identity, proxying and config
 // live in the BFF; the shell just composes. Its small size IS the point - it is the evidence that
 // the agents drop into an existing React app with a couple of hundred lines of host code.
@@ -64,10 +65,11 @@ export default function Page() {
   const app = journey.apps.find((a) => a.id === activeApp) ?? journey.apps[0];
 
   return (
-    <main className="shell" data-demo="rm-journey">
+    <main className="shell" data-demo={`${JOURNEY_KEY}-journey`}>
       <header className="topbar">
         <div className="brand">
-          <span className="tier">RM</span>
+          {/* The mark names the journey being served, because one shell serves them all. */}
+          <span className="tier">{JOURNEY_KEY.toUpperCase()}</span>
           <div>
             <h1>{journey.label}</h1>
             <p>{journey.blurb}</p>

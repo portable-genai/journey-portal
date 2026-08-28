@@ -143,11 +143,15 @@ _LOCAL_DOC1_INSTALLATION = "inst_local_demo"
 _LOCAL_BFF_CLIENT_ID = "hrz9-journey-portal-bff-local-demo"
 _LOCAL_PUBLIC_ORIGIN = "http://127.0.0.1:8110"
 _DEFAULT_DOC1_SCOPES = ("cdd.embed", "cdd.read")
-_LOCAL_CORS_ORIGINS = (
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://localhost:4200",
-    "http://127.0.0.1:4200",
+# One entry per journey shell the local demo serves, on both loopback spellings. A shell
+# whose origin is missing here is refused by the tenant embedding policy, and the refusal
+# reaches the browser as a 403 on the embedded app's own assets rather than as a message
+# about origins, so the app renders its chrome and then reports its backend unreachable.
+# Ports: rm 3000, mkt 3001, gov 3002, svc 3003, ops 4200 (see scripts/run_journeys.py).
+_LOCAL_CORS_ORIGINS = tuple(
+    f"http://{host}:{port}"
+    for port in (3000, 3001, 3002, 3003, 4200)
+    for host in ("localhost", "127.0.0.1")
 )
 
 # ``${VAR}`` or ``${VAR:-default}`` interpolation over config strings.
