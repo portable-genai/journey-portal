@@ -650,6 +650,16 @@ Run the complete presentation, advancing each narrated step with Enter:
 python scripts/demo_walkthrough.py
 ```
 
+To hold again once each form is filled and BEFORE it is submitted, so the audience can read
+exactly what is about to be sent while you narrate it:
+
+```bash
+python scripts/demo_walkthrough.py --confirm-inputs
+```
+
+The hold is ignored under `--no-pause`, because an unattended capture run must never block
+on a prompt.
+
 Rehearse the script and its notes without starting a browser:
 
 ```bash
@@ -670,13 +680,29 @@ For an unattended capture run, disable the Enter pauses and write one image per 
 python scripts/demo_walkthrough.py --no-pause --screenshots docs/images/walkthrough
 ```
 
-For the hosted portal, point the same runner at the reviewed origins:
+For the hosted portal, name the deployment target. `--target gcp` selects the subset of
+steps the deployment can honestly serve (the RM journey it actually embeds, with no
+persona picker), narrates them with their hosted variants, and requires each app to report
+the managed profile rather than a local one:
 
 ```bash
-python scripts/demo_walkthrough.py \
-  --rm-origin https://portal.example.test \
-  --ops-origin https://portal.example.test
+python scripts/demo_walkthrough.py --target gcp --rm-origin https://portal.example.test
 ```
+
+The browser opens and waits for you to complete the IAP sign-in before the first step,
+which is worth doing in front of the room. For an unattended run, or when the presenter is
+not a member of the access group, mint the e2e service-account token instead (the same
+mechanism `make e2e-gcp` uses, so no human credential is typed):
+
+```bash
+PORTAL_E2E_IAP_AUDIENCE=<iap-oauth-client-id> \
+PORTAL_E2E_SERVICE_ACCOUNT=<e2e-service-account> \
+python scripts/demo_walkthrough.py --target gcp --iap-impersonate \
+  --rm-origin https://portal.example.test
+```
+
+`--rm-origin` may be left off when `PORTAL_E2E_BASE_URL` already names the deployed origin.
+The org-level run sheets wrap all of this: see `org-metadata/docs/demos/`.
 
 Doc5 has its own four-state fixture walkthrough in the sibling repository for explaining its
 deterministic outcome states locally. For hosted evidence, use the Doc5 tab in this portal,

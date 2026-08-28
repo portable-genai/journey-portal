@@ -121,5 +121,47 @@ class BuiltModeTests(unittest.TestCase):
         self.assertIn("doc1-ui", launcher._startup_failures)
 
 
+class BackendProfileTests(unittest.TestCase):
+    """Every backend the launcher starts is told which posture it is running.
+
+    These apps refuse a seeded persona whose profile was INHERITED rather than chosen, and
+    they refuse it on the WRITE path while their health check still reads green. A launcher
+    that omits the profile therefore produces a demo where the queue lists and disposes of
+    nothing, and nothing on screen says why. That failure is invisible to a readiness table,
+    so it has to be caught here.
+    """
+
+    def setUp(self) -> None:
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.workspace = Path(self.tempdir.name)
+        self.repo = self.workspace / "review-app"
+        (self.repo / "src" / "review_console" / "api").mkdir(parents=True)
+        (self.repo / "src" / "review_console" / "api" / "app.py").touch()
+        (self.repo / "ui").mkdir()
+        (self.repo / "ui" / "package.json").write_text("{}", encoding="utf-8")
+        for patcher in (
+            patch.object(run_journeys, "_WORKSPACE", self.workspace),
+            patch.object(run_journeys, "_APP_REPOS", {"hrz7": "review-app"}),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.addCleanup(self.tempdir.cleanup)
+
+    def test_hrz7_backend_is_told_its_profile(self) -> None:
+        launcher = run_journeys.Launcher(with_shells=False)
+        launcher._spawn = Mock()  # type: ignore[method-assign]
+
+        launcher.launch_app("hrz7", api_port=9001, ui_port=9002)
+
+        backend_call = launcher._spawn.call_args_list[0]  # type: ignore[union-attr]
+        self.assertEqual(backend_call.args[0], "hrz7-backend")
+        backend_env = backend_call.kwargs["env"]
+        self.assertEqual(backend_env["REVIEW_PROFILE"], run_journeys._PORTAL_LOCAL_PROFILE)
+        # The database and the service credential travel with it; a profile without them
+        # would start, and they without the profile is the failure this test exists for.
+        self.assertIn("REVIEW_DB_PATH", backend_env)
+        self.assertIn("REVIEW_S2S_TOKEN", backend_env)
+
+
 if __name__ == "__main__":
     unittest.main()

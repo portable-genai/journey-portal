@@ -8,6 +8,7 @@ driver separately with ``pip install playwright && playwright install chromium``
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import re
 import sys
@@ -24,6 +25,52 @@ RM_ORIGIN = "http://localhost:3000"
 OPS_ORIGIN = "http://localhost:4200"
 Journey = str
 PageAction = Callable[[Any], None]
+
+# True when driving the deployed portal (``--target gcp``): hosted steps relax the
+# persona-picker expectations (IAP owns identity there) and accept the managed profile.
+_HOSTED = False
+# True when the presenter asked to hold after every form is filled, before submitting
+# (``--confirm-inputs``), so the audience can read exactly what is about to be sent.
+_CONFIRM_INPUTS = False
+# App id -> same-origin API base, discovered once per run from /v1/journeys. Doc1's
+# canonical mount is /agent on every target; /apps/doc1 is only a local compatibility
+# route, so hardcoding either would break one target.
+_APP_API_BASES: dict[str, str] = {}
+
+
+def _inputs_ready(summary: str) -> None:
+    """Hold once the inputs are on screen, before submission, when the presenter asked to.
+
+    The pause sits between filling and submitting so the presenter can narrate exactly
+    what is about to be sent while the audience reads it; Enter performs the submission.
+    """
+    if _CONFIRM_INPUTS:
+        input(f"\nINPUTS READY ({summary}). Enter to submit...")
+
+
+def _api_base(page: Any, app_id: str) -> str:
+    """Resolve the app's same-origin API base from the portal's own journey catalog.
+
+    ``/v1/journeys`` is what the shells themselves render their mounts from, so asking it
+    keeps this script correct on both targets without duplicating the mount table. Falls
+    back to the conventional ``/apps/<id>/api`` when the catalog cannot be read (offline
+    unit tests exercise the preflight with a stub page).
+    """
+    if not _APP_API_BASES:
+        try:
+            catalog = page.evaluate(
+                """async () => {
+                const response = await fetch('/v1/journeys');
+                if (!response.ok) throw new Error(`journeys failed: ${response.status}`);
+                return response.json();
+            }"""
+            )
+            for journey in catalog.get("journeys", []):
+                for app in journey.get("apps", []):
+                    _APP_API_BASES[str(app["id"])] = str(app["api_base"])
+        except Exception:  # noqa: BLE001 - the fallback below keeps offline stubs working
+            pass
+    return _APP_API_BASES.get(app_id, f"/apps/{app_id}/api")
 
 
 def configure_origins(rm_origin: str, ops_origin: str) -> None:
@@ -58,6 +105,10 @@ _DOC1_PACK_DIR = _WORKSPACE / "cdd-sow-research" / "scripts" / "out" / "live-dem
 _LIVE_LAUNCH_HINT = (
     "the demo steps need the live profiles; relaunch the stack with "
     "'python scripts/run_journeys.py --live' (see DEMO.md)"
+)
+_HOSTED_PROFILE_HINT = (
+    "the hosted walkthrough expects the deployed managed profile; check the origin points "
+    "at the deployment (PORTAL_E2E_BASE_URL or --rm-origin) rather than a local stack"
 )
 # Which shell origin proxies each live-checked app (healthz goes through the shell).
 _APP_ORIGINS: dict[str, tuple[str, str]] = {
@@ -124,18 +175,25 @@ def _doc1_manifest() -> dict[str, Any]:
 
 
 def _require_live(page: Any, app_id: str) -> None:
-    """Refuse to run a step against a profile that can only produce fixture data."""
+    """Refuse to run a step against a profile that can only produce fixture data.
+
+    Locally that means the app's ``live`` profile (real and audience data); against the
+    deployment it means the managed ``gcp`` profile, which is the deployment's own real
+    data path. Anything else is a stack that can only demonstrate fixtures.
+    """
     health = page.evaluate(
-        """async (appId) => {
-        const response = await fetch(`/apps/${appId}/api/healthz`);
-        if (!response.ok) throw new Error(`${appId} healthz failed: ${response.status}`);
+        """async (apiBase) => {
+        const response = await fetch(`${apiBase}/healthz`);
+        if (!response.ok) throw new Error(`${apiBase} healthz failed: ${response.status}`);
         return response.json();
     }""",
-        app_id,
+        _api_base(page, app_id),
     )
     profile = health.get("profile")
-    if profile != "live":
-        raise RuntimeError(f"{app_id} is running profile {profile!r}: {_LIVE_LAUNCH_HINT}")
+    expected = "gcp" if _HOSTED else "live"
+    hint = _HOSTED_PROFILE_HINT if _HOSTED else _LIVE_LAUNCH_HINT
+    if profile != expected:
+        raise RuntimeError(f"{app_id} is running profile {profile!r}: {hint}")
 
 
 def _require_live_doc1(page: Any) -> None:
@@ -220,6 +278,26 @@ OPENING_NOTES = (
     "hand the system afterwards is handled by exactly the same path."
 )
 
+#: Spoken before the first step of a hosted run. The hosted walkthrough is the second half
+#: of the portability demonstration, so its frame is the flip itself: same journey, same
+#: code, a managed deployment selected by configuration. Honesty first: the reference
+#: deployment's limits and its screening stand-in are said out loud before any screen.
+HOSTED_OPENING_NOTES = (
+    "This is the same journey you have already watched run on a single machine, now served "
+    "from a managed cloud deployment. Nothing about the application changed to get here: the "
+    "same code runs with a different profile string, so the model, the document reader, the "
+    "retrieval index and the audit sink are now managed services in a pinned region, and "
+    "sign-in is a verified identity at the edge rather than a role picked in the page.\n\n"
+    "Two honest boundaries before we start. This is a reference deployment rather than a "
+    "production service: it runs without high availability and without a rehearsed recovery, "
+    "and it says so rather than waiting to be asked. And its watchlist copy is a small "
+    "labelled stand-in rather than the published lists, so screening here demonstrates the "
+    "code path, while the run you saw on the laptop screens the real published data.\n\n"
+    "What must stay identical across the two runs is every consequential figure, and that "
+    "claim is not left to the eye: an automated comparison runs the same case on both and "
+    "refuses to pass when a figure, a band or an escalation reason differs."
+)
+
 
 @dataclass(frozen=True)
 class Step:
@@ -234,6 +312,20 @@ class Step:
     # A preflight checks them once before the run so a non-live stack fails at the
     # outset instead of part-way through the browser demo.
     requires_live: tuple[str, ...] = ()
+    # True when the step can also drive the deployed portal. Hosted runs are the RM
+    # journey subset that exists on the deployment; persona-picker steps and apps the
+    # deployment does not embed stay local-only.
+    hosted: bool = False
+    # Spoken instead of presenter_notes on a hosted run, where the mechanics differ
+    # (managed services, edge sign-on, the deployment's labelled screening stand-in).
+    hosted_notes: str | None = None
+
+
+def _notes_for(step: Step) -> str:
+    """The narration for the current target: hosted variant when one exists."""
+    if _HOSTED and step.hosted_notes is not None:
+        return step.hosted_notes
+    return step.presenter_notes
 
 
 def _open_shell(page: Any, origin: str, heading: str) -> None:
@@ -257,7 +349,10 @@ def _select_tab(page: Any, origin: str, shell_heading: str, tab: str, frame_titl
 
 def _rm_open(page: Any) -> None:
     _open_shell(page, RM_ORIGIN, "RM Journey")
-    page.get_by_text("Demo identity", exact=False).wait_for()
+    # The persona picker is a local-profile affordance; on the deployment identity is
+    # whoever signed in through IAP and no picker is rendered.
+    if not _HOSTED:
+        page.get_by_text("Demo identity", exact=False).wait_for()
 
 
 def _rm_whoami(page: Any) -> None:
@@ -297,13 +392,17 @@ def _rm_doc1(page: Any) -> None:
         file_path=_DOC1_PACK_DIR / pack["file"],
         doc_type="fin_statement",
     )
+    _inputs_ready("the clean subject's name, jurisdiction and filed evidence")
     frame.get_by_role("button", name="Build CDD dossier").click()
     frame.get_by_text("HUMAN REVIEW REQUIRED", exact=False).wait_for(timeout=_DOSSIER_TIMEOUT_MS)
     # The true negative must be a REAL screen: the CLEAR verdict, against a synced
     # (non-fixture) snapshot, with zero alerts.
     frame.get_by_text("Watchlist screening", exact=False).wait_for()
     frame.get_by_text("CLEAR", exact=True).wait_for()
-    if frame.get_by_text("fixture", exact=False).count():
+    # The deployment deliberately screens a labelled stand-in snapshot until its real
+    # sync job exists; the hosted narration discloses that, so only the local run
+    # refuses a fixture-labelled screen.
+    if not _HOSTED and frame.get_by_text("fixture", exact=False).count():
         raise RuntimeError("screening ran against the bundled fixture, not the synced lists")
 
 
@@ -330,6 +429,7 @@ def _rm_doc1_flagged(page: Any) -> None:
         file_path=_DOC1_PACK_DIR / pack["file"],
         doc_type="other",
     )
+    _inputs_ready("the designated subject's name and its designation record")
     frame.get_by_role("button", name="Build CDD dossier").click()
     frame.get_by_text("HUMAN REVIEW REQUIRED", exact=False).wait_for(timeout=_DOSSIER_TIMEOUT_MS)
     # The true positive: at least one open alert naming the real source list.
@@ -361,6 +461,17 @@ def _rm_spoofed_identity(page: Any) -> None:
             spoofed: await read({ 'X-Dev-Persona': 'approver' }),
         };
     }""")
+    if _HOSTED:
+        # The deployment's identity is the IAP assertion, not a named local persona, so
+        # the invariant under test is that the spoof CHANGED NOTHING about it.
+        if not result["honest"].get("subject"):
+            raise RuntimeError(f"the portal reported no verified subject: {result['honest']!r}")
+        if result["honest"] != result["spoofed"]:
+            raise RuntimeError(
+                "a browser-asserted X-Dev-Persona header changed the verified identity: "
+                f"{result['honest']!r} became {result['spoofed']!r}"
+            )
+        return
     honest = result["honest"].get("persona")
     spoofed = result["spoofed"].get("persona")
     if honest != "analyst":
@@ -401,6 +512,7 @@ def _rm_doc1_blocked(page: Any) -> None:
         file_path=_DOC1_PACK_DIR / manifest["clean"]["file"],
         doc_type="other",
     )
+    _inputs_ready("the manipulated subject text the guardrail must refuse")
     frame.get_by_role("button", name="Build CDD dossier").click()
     frame.get_by_text("blocked by the safety guardrail", exact=False).wait_for()
     # No dossier may be rendered from a screened-out request.
@@ -485,6 +597,7 @@ def _rm_doc3(page: Any) -> None:
     )
     client_id = str(_DOC3_DEMO_CLIENT["client_id"])
     frame.get_by_placeholder("client-000042").fill(client_id)
+    _inputs_ready("the registered client the briefing is for")
     frame.get_by_role("button", name="Build briefing").click()
     # First run performs the grounded research pass; later runs serve its cache.
     frame.get_by_text("decision-support, not advice", exact=False).wait_for(
@@ -524,6 +637,7 @@ def _ops_doc2(page: Any) -> None:
     frame.get_by_label("Borrower").fill(_DOC2_BORROWER["name"])
     frame.get_by_label("Sector").fill(_DOC2_BORROWER["sector"])
     frame.get_by_label("Jurisdiction").fill(_DOC2_BORROWER["jurisdiction"])
+    _inputs_ready("the real listed borrower the memo grounds on")
     frame.get_by_role("button", name="Build credit memo").click()
     frame.get_by_text("Credit memo", exact=False).wait_for(timeout=_LIVE_STEP_TIMEOUT_MS)
     # The grounding must be the real public record, visibly cited.
@@ -549,6 +663,7 @@ def _ops_doc4(page: Any) -> None:
     presentation = json.loads(editor.input_value())
     presentation["lc"]["lc_number"] = _DOC4_DEMO_LC
     editor.fill(json.dumps(presentation, indent=2))
+    _inputs_ready("the edited letter-of-credit presentation")
     frame.get_by_role("button", name="Check presentation").click()
     frame.get_by_text("Presentation summary", exact=True).wait_for(timeout=_LIVE_STEP_TIMEOUT_MS)
     frame.get_by_text(_DOC4_DEMO_LC, exact=False).first.wait_for()
@@ -586,6 +701,7 @@ def _ops_rsk1(page: Any) -> None:
     submit = composer.locator("xpath=following-sibling::button[@type='button']")
     if submit.count() != 1:
         raise RuntimeError("expected exactly one compliance composer submit button")
+    _inputs_ready("the grounded compliance question")
     submit.click()
     # A live answer runs retrieval plus a local model call.
     frame.get_by_text("Grounded answer with", exact=False).wait_for(timeout=_LIVE_STEP_TIMEOUT_MS)
@@ -645,6 +761,7 @@ def _ops_hrz7(page: Any) -> None:
     frame.get_by_placeholder("Reason for your decision").fill(
         "Independent approver verified the escalation."
     )
+    _inputs_ready("the approver's reasoned decision")
     frame.get_by_role("button", name="Approve", exact=True).click()
     frame.get_by_text("approve recorded", exact=False).wait_for()
     # The watchlist-alerted case must NOT have been swept up by this approval.
@@ -679,6 +796,15 @@ STEPS: tuple[Step, ...] = (
         "the adopting institution makes, rather than a constraint the capability imposes.",
         frozenset({"rm"}),
         _rm_open,
+        hosted=True,
+        hosted_notes=(
+            "A relationship manager opens the same workbench, this time served from the "
+            "managed deployment behind the institution's single sign-on. There is no role "
+            "picker here: the identity is whoever signed in at the edge, verified before the "
+            "page is ever served. The composition underneath is unchanged, and that is the "
+            "point: where this surface runs is an infrastructure decision, not an "
+            "application rewrite."
+        ),
     ),
     Step(
         "rm-whoami",
@@ -701,6 +827,15 @@ STEPS: tuple[Step, ...] = (
         "says yes cannot be told apart from no control at all.",
         frozenset({"rm"}),
         _rm_spoofed_identity,
+        hosted=True,
+        hosted_notes=(
+            "The same identity check runs again, and this time the browser claims a more "
+            "senior role on the wire. The answer does not change, because the only identity "
+            "the portal trusts is the signed assertion verified at the edge, and a header "
+            "added by the page is discarded before anything reads it. The control you "
+            "watched decide both ways on a single machine decides the same both ways here, "
+            "enforced by the same code."
+        ),
     ),
     Step(
         "rm-doc1-cdd",
@@ -716,6 +851,18 @@ STEPS: tuple[Step, ...] = (
         frozenset({"rm"}),
         _rm_doc1,
         requires_live=("doc1",),
+        hosted=True,
+        hosted_notes=(
+            "The manager uploads the same public filings and asks for the same assessment, "
+            "and this time the documents are read by the managed document service and the "
+            "narrative is written by the managed model, inside one pinned region. Every "
+            "statement still carries the source it came from, and the risk figures are still "
+            "computed in plain code, so what improved is quality and scale rather than the "
+            "decision. One disclosure belongs out loud: on this reference deployment the "
+            "watchlist copy is a small labelled stand-in rather than the published lists, so "
+            "the screen you are watching demonstrates the code path, and the run on the "
+            "laptop is the one that screens the real data."
+        ),
     ),
     Step(
         "rm-doc1-flagged",
@@ -859,15 +1006,24 @@ STEPS: tuple[Step, ...] = (
         "seen today is one worked set of answers to those four questions.",
         frozenset({"rm", "ops"}),
         _close,
+        hosted=True,
     ),
 )
 
 
-def selected_steps(journey: str, from_step: str | None = None) -> tuple[Step, ...]:
-    """Return the journey's script, optionally resuming inclusively at a named step."""
+def selected_steps(
+    journey: str, from_step: str | None = None, *, hosted: bool = False
+) -> tuple[Step, ...]:
+    """Return the journey's script, optionally resuming inclusively at a named step.
+
+    A hosted selection keeps only the steps the deployment can honestly serve: the RM
+    subset that exists there, with no persona-picker steps and no apps it does not embed.
+    """
 
     selected = frozenset({"rm", "ops"}) if journey == "both" else frozenset({journey})
-    steps = tuple(step for step in STEPS if step.journeys & selected)
+    steps = tuple(
+        step for step in STEPS if step.journeys & selected and (not hosted or step.hosted)
+    )
     if from_step is None:
         return steps
     for index, step in enumerate(steps):
@@ -877,10 +1033,15 @@ def selected_steps(journey: str, from_step: str | None = None) -> tuple[Step, ..
     raise ValueError(f"unknown or excluded step {from_step!r}; choose one of: {choices}")
 
 
+def opening_notes() -> str:
+    """The opening for the current target: the flip narration on a hosted run."""
+    return HOSTED_OPENING_NOTES if _HOSTED else OPENING_NOTES
+
+
 def print_script(steps: Iterable[Step]) -> None:
-    print(f"OPENING NOTES:\n{OPENING_NOTES}\n")
+    print(f"OPENING NOTES:\n{opening_notes()}\n")
     for number, step in enumerate(steps, start=1):
-        notes = step.presenter_notes.replace("\n", "\n           ")
+        notes = _notes_for(step).replace("\n", "\n           ")
         print(f"{number:02d}. {step.id}: {step.title}")
         print(f"    Notes: {notes}")
 
@@ -893,10 +1054,38 @@ def print_narration(steps: Iterable[Step]) -> None:
     them, so the output can go straight into a voice tool and line up with a screen
     recording of the same run.
     """
-    print(OPENING_NOTES)
+    print(opening_notes())
     for step in steps:
         print()
-        print(step.presenter_notes)
+        print(_notes_for(step))
+
+
+def _mint_hosted_headers() -> dict[str, str]:
+    """Mint the service-account IAP bearer the e2e suite uses; nothing types a password.
+
+    Reuses ``e2e/targets.py`` so the audience, the service account and the gcloud
+    invocation stay defined in exactly one place.
+    """
+    targets_path = Path(__file__).resolve().parent.parent / "e2e" / "targets.py"
+    spec = importlib.util.spec_from_file_location("portal_e2e_targets", targets_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load {targets_path}")
+    targets = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(targets)
+    audience = targets._setting("PORTAL_E2E_IAP_AUDIENCE")
+    service_account = targets._setting("PORTAL_E2E_SERVICE_ACCOUNT")
+    missing = [
+        name
+        for name, value in (
+            ("PORTAL_E2E_IAP_AUDIENCE", audience),
+            ("PORTAL_E2E_SERVICE_ACCOUNT", service_account),
+        )
+        if value is None
+    ]
+    if missing:
+        raise RuntimeError("--iap-impersonate needs these set: " + ", ".join(missing))
+    token = targets._mint_iap_token(service_account, audience)
+    return {"Authorization": f"Bearer {token}"}
 
 
 def parser() -> argparse.ArgumentParser:
@@ -921,6 +1110,22 @@ def parser() -> argparse.ArgumentParser:
         help="local Ops shell or reviewed hosted HTTPS origin",
     )
     argument_parser.add_argument("--from", dest="from_step", metavar="STEP-ID")
+    argument_parser.add_argument(
+        "--target",
+        choices=("local", "gcp"),
+        default="local",
+        help="drive the local stack, or the deployed portal's hosted step subset",
+    )
+    argument_parser.add_argument(
+        "--confirm-inputs",
+        action="store_true",
+        help="pause again after each form is filled, before it is submitted",
+    )
+    argument_parser.add_argument(
+        "--iap-impersonate",
+        action="store_true",
+        help="gcp target: mint the e2e service-account IAP token instead of signing in",
+    )
     argument_parser.add_argument("--slow-mo", type=int, default=0, metavar="MS")
     argument_parser.add_argument(
         "--list", action="store_true", help="print the script without opening a browser"
@@ -939,7 +1144,15 @@ def parser() -> argparse.ArgumentParser:
     return argument_parser
 
 
-def run(steps: Sequence[Step], *, slow_mo: int, pause: bool, screenshots: Path | None) -> None:
+def run(
+    steps: Sequence[Step],
+    *,
+    slow_mo: int,
+    pause: bool,
+    screenshots: Path | None,
+    extra_headers: dict[str, str] | None = None,
+    hosted: bool = False,
+) -> None:
     """Execute the script in a headed Chromium browser."""
 
     try:
@@ -956,20 +1169,30 @@ def run(steps: Sequence[Step], *, slow_mo: int, pause: bool, screenshots: Path |
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=False, slow_mo=slow_mo)
         try:
-            page = browser.new_page(viewport={"width": 1440, "height": 1000})
+            context = browser.new_context(
+                viewport={"width": 1440, "height": 1000},
+                extra_http_headers=extra_headers or {},
+            )
+            page = context.new_page()
             page.set_default_timeout(30_000)
+            if hosted and extra_headers is None:
+                # IAP owns the deployed front door. Let the presenter complete the
+                # sign-in first, otherwise the preflight's first fetch is answered by a
+                # sign-in redirect rather than by the portal.
+                page.goto(RM_ORIGIN)
+                input("Complete the sign-in in the opened browser, then Enter...")
             # Check the CDD preconditions once before any step runs, so a stack started
             # without --live (or a workspace with no evidence packs) fails immediately with
             # the exact fix instead of part-way through the visible demo.
             _preflight(page, steps)
             # The portability frame lands before the first screen: the audience needs to
             # know which question each step is answering before they see any of them.
-            print(f"\n{'=' * 72}\nOPENING\n\n{OPENING_NOTES}\n")
+            print(f"\n{'=' * 72}\nOPENING\n\n{opening_notes()}\n")
             if pause:
                 input("Enter to begin...")
             for number, step in enumerate(steps, start=1):
                 print(f"\n{'=' * 72}\nSTEP {number:02d}: {step.title}\nID: {step.id}\n")
-                print(f"PRESENTER NOTES: {step.presenter_notes}")
+                print(f"PRESENTER NOTES: {_notes_for(step)}")
                 step.action(page)
                 if screenshots is not None:
                     page.screenshot(
@@ -982,22 +1205,64 @@ def run(steps: Sequence[Step], *, slow_mo: int, pause: bool, screenshots: Path |
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    global _CONFIRM_INPUTS, _HOSTED
     args = parser().parse_args(argv)
     if args.slow_mo < 0:
         parser().error("--slow-mo must be zero or greater")
+    hosted = args.target == "gcp"
+    _HOSTED = hosted
+    # Unattended runs (--no-pause) must never block on a prompt, so the input hold is
+    # only honoured on a paced run.
+    _CONFIRM_INPUTS = args.confirm_inputs and not args.no_pause
     try:
-        configure_origins(args.rm_origin, args.ops_origin)
-        steps = selected_steps(args.journey, args.from_step)
+        steps = selected_steps(args.journey, args.from_step, hosted=hosted)
     except ValueError as error:
         parser().error(str(error))
+    # Rehearsal modes need no origin and no deployment inputs.
     if args.narration:
         print_narration(steps)
         return 0
     if args.list:
         print_script(steps)
         return 0
+    extra_headers: dict[str, str] | None = None
     try:
-        run(steps, slow_mo=args.slow_mo, pause=not args.no_pause, screenshots=args.screenshots)
+        rm_origin = args.rm_origin
+        ops_origin = args.ops_origin
+        if hosted:
+            if not rm_origin.startswith("https://"):
+                base = read_env_setting("PORTAL_E2E_BASE_URL")
+                if base.is_configured_empty:
+                    raise ValueError(
+                        "PORTAL_E2E_BASE_URL is set but empty; name the deployed RM origin "
+                        "or unset it and pass --rm-origin"
+                    )
+                if not base.has_value:
+                    raise ValueError(
+                        "the gcp target needs the deployed RM origin: pass --rm-origin or "
+                        "set PORTAL_E2E_BASE_URL"
+                    )
+                rm_origin = base.value
+            # Hosted steps are the RM subset; one origin drives them all.
+            ops_origin = rm_origin
+            if args.no_pause and not args.iap_impersonate:
+                raise ValueError(
+                    "an unattended hosted run cannot sign in by hand; add --iap-impersonate"
+                )
+        configure_origins(rm_origin, ops_origin)
+        if hosted and args.iap_impersonate:
+            extra_headers = _mint_hosted_headers()
+    except (RuntimeError, ValueError) as error:
+        parser().error(str(error))
+    try:
+        run(
+            steps,
+            slow_mo=args.slow_mo,
+            pause=not args.no_pause,
+            screenshots=args.screenshots,
+            extra_headers=extra_headers,
+            hosted=hosted,
+        )
     except RuntimeError as error:
         print(f"demo walkthrough failed: {error}", file=sys.stderr)
         return 1
