@@ -309,7 +309,12 @@ def _prepare_doc1_case(
     frame.get_by_label(_TYPE_LABEL).select_option(subject_type)
     code = jurisdiction if re.fullmatch(r"[A-Za-z]{2}", jurisdiction or "") else ""
     frame.get_by_label("Jurisdiction", exact=True).fill(code)
-    uploaded = frame.get_by_role("link", name=file_path.name)
+    # A filed document is a BUTTON that opens the document, not a link. It was a link once,
+    # and waiting for one meant this never found an already-filed document and never
+    # confirmed a fresh upload either: the step uploaded and then failed thirty seconds
+    # later looking for something that could not match. Role and name together, so a second
+    # document in the same case cannot satisfy the wait for this one.
+    uploaded = frame.get_by_role("button", name=file_path.name)
     try:  # documents persist in custody, so a re-run must not file a duplicate
         uploaded.first.wait_for(timeout=3_000)
     except Exception:  # noqa: BLE001 - not uploaded yet is the normal first-run case
