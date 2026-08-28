@@ -56,40 +56,57 @@ terminate at the same person. The identical decision is recorded in Doc1's dossi
 |---|---|---|
 | GCP organization and project | The reference deployment SHARES Doc1's project, decided by the apply rather than on paper. One consequence is load-bearing: a project belongs to exactly one regular VPC-SC perimeter, and the Doc1 stack owns it, so this stack configures none | Dedicated or explicitly approved shared project |
 | Approved region | `us-central1` | Must be in `allowed_regions` |
-| Allowed regions | `us-central1` | Security and legal approval attached |
+| Allowed regions | `["asia-southeast1", "us-central1"]` | Security and legal approval attached. TWO members is a deliberate, temporary exception to the one-region rule while the target region and the running deployment differ; it returns to one when the deployment moves |
 | Parent origin | `PENDING` | Dedicated HTTPS origin, exact, no wildcard |
 | DNS managed zone | `PENDING`, per Doc1's dossier | Change window recorded |
 | Certificate authority | Google-managed certificate (Certificate Manager) | Managed certificate or approved equivalent |
 | IAP OAuth client and JWT audience | `PENDING`; Terraform computes the exact IAP audience during the first apply and operators must not guess it | Edge authentication configured on the service |
 | Terraform state backend | `PENDING` | GCS bucket plus installation-specific prefix; local state is rejected |
 
-**Settled: the two systems co-locate in `us-central1`.** They once defaulted to different
-regions, and this section used to record that as an open choice. It is not one any more.
+**Settled: the two systems co-locate.** They once defaulted to different regions, and this
+section used to record that as an open choice. It is not one any more. What IS still in motion is
+where they co-locate: the target region and the running deployment currently differ, and this
+section says which is which rather than blurring them.
 
 The residency decision is the catalog's
 [deployment region alignment](https://github.com/portable-genai/org-metadata/blob/main/docs/deployment-region-alignment.md)
-record, taken 2026-08-23 and **REVISED 2026-08-24**: the launch set CO-LOCATES, and that region is
-`us-central1`, not the `asia-southeast1` the first version named. Deploying any service outside it
-is an exception needing the service named, the reason it cannot run in-region, a data-flow record
-and approval. Read the revision, not only the original date: the two say different things.
+record, taken 2026-08-23 and **REVISED TWICE**: to `us-central1` on 2026-08-24, and back to
+`asia-southeast1` on 2026-08-27 once the deferred per-service availability check was finally run.
+The launch set CO-LOCATES, and the target region is now `asia-southeast1`. Deploying any service
+outside it is an exception needing the service named, the reason it cannot run in-region, a
+data-flow record and approval. Read the revisions, not only the original date: the three say
+different things.
 
-**The defaults on this side follow that decision**, and had to be changed to do so. Both the
-Terraform `region` and `allowed_regions` (`infra/terraform/variables.tf`) and the runtime
-`config.py` preflight now default to `us-central1`. They previously defaulted to
-`asia-southeast1`, which meant a default `terraform plan` against the live stack failed its own
-residency validation — and failed looking like a working guard rather than a stale default, which
-is the more expensive kind of wrong. The region remains a deploy-time input on both sides, so an
-institution deploying in-country sets the region and the allowlist together and edits no code.
+**The defaults on this side follow that decision**, and have now been changed twice to do so. The
+Terraform `region` and the runtime `config.py` preflight default to `asia-southeast1`;
+`allowed_regions` carries `asia-southeast1` AND `us-central1`.
 
-**What the revision retired.** The original record deferred a per-service availability check to
-just before the apply, because it could not evidence that every managed service Doc1 binds is
-available in `asia-southeast1`. Under `us-central1` that check is moot and is NOT carried forward;
-it returns the moment a target region other than `us-central1` is chosen.
+**This deployment has NOT moved: it still runs in `us-central1`**, held there by an explicit
+deploy-time override, because the deploy path always renders `.generated.tfvars.json` from `.env`
+and passes it with `-var-file`. So the default no longer agrees with the running deployment, and
+that is deliberate this time rather than stale — a fork should inherit the region that serves the
+newest model, Document AI and Chirp 3, none of which `us-central1` serves. The two-member
+allowlist is what keeps both honest at once: dropping `us-central1` would make the running
+deployment fail its own residency validation, and dropping `asia-southeast1` would make a bare
+`terraform plan` fail. The region remains a deploy-time input on both sides, so an institution
+deploying in-country sets the region and the allowlist together and edits no code.
 
-**What it costs, stated rather than absorbed.** `us-central1` satisfies no Asia-Pacific residency
-regime. This deployment demonstrates that the residency MECHANISM works — an allowlist enforced at
-`terraform plan` and again at app load, with a drift test — and does not demonstrate an in-country
-APAC deployment. Any pitch citing it says which of the two it is showing.
+**What the 2026-08-24 revision retired, and 2026-08-27 reinstated.** The original record deferred
+a per-service availability check to just before the apply. The 2026-08-24 revision called it moot
+under `us-central1`, on the condition that it returned the moment another target region was
+chosen. It was run on 2026-08-27 anyway, and it should have been run first: it falsified the
+assumption the region had been chosen on. `asia-southeast1` serves a current-generation Gemini 3
+model with a documented Singapore ML-processing commitment; `us-central1` serves no Gemini 3 and
+no Document AI at all. Agent Search serves no Cloud region at either end — `global`, `us` and `eu`
+only — which is a genuine capability gap and not one a region change fixes. The findings live in
+[which services serve which region](https://github.com/portable-genai/org-metadata/blob/main/docs/gcp-service-region-availability.md).
+
+**What it costs, stated rather than absorbed.** `us-central1`, where this deployment actually
+runs, satisfies no Asia-Pacific residency regime. This deployment demonstrates that the residency
+MECHANISM works — an allowlist enforced at `terraform plan` and again at app load, with a drift
+test — and does not demonstrate an in-country APAC deployment. It does not become an APAC
+deployment because the default moved; only a new project in the target region would do that, and
+none has been provisioned. Any pitch citing it says which of the two it is showing.
 
 Sign-off stays where it was. Owner: security owner. Status: `PENDING` sign-off against a recorded
 position, no longer an unmade choice.
@@ -207,7 +224,7 @@ The evidence pack for a Mode 5 sign-off must contain, in addition to the standar
 | Cross-repo agreement with Doc1 | Ready | `tests/test_cross_repo_doc1_private_key_jwt.py` verifies a portal-minted assertion against Doc1's ACTUAL `PrivateKeyJwtVerifier`, imported from the sibling checkout and run in its own virtualenv, with the replay, tamper, expiry, wrong-audience and unregistered-client negatives all refused |
 | Named institution inputs | PARTIAL | Section 2 is settled by the apply: the project is shared with Doc1, the region is `us-central1`, the IAP client and its audience exist and Terraform computed the audience rather than an operator guessing it, and the state backend is configured. Still outstanding: section 1's incident channel and evidence-retention location, and section 3's key custody and rotation dates |
 | Subject-token source | BLOCKED | Section 6: the dedicated Google OAuth client id and a portal-side OIDC session. Both are also the last Mode 5 blocker on Doc1's own row |
-| Residency decision | RECORDED, sign-off PENDING | Section 2: the region is a deploy-time input validated against `allowed_regions` on both sides. The choice is the catalog's deployment region alignment decision, recorded 2026-08-23 and **revised 2026-08-24**: co-locate in `us-central1`, deviation by named exception. The revision also retired the per-service availability check the first version owed, so that is no longer outstanding. What remains is the security owner's sign-off |
+| Residency decision | RECORDED, sign-off PENDING | Section 2: the region is a deploy-time input validated against `allowed_regions` on both sides. The choice is the catalog's deployment region alignment decision, recorded 2026-08-23 and **revised twice** — to `us-central1` on 2026-08-24, and to `asia-southeast1` on 2026-08-27: co-locate, deviation by named exception. The per-service availability check the first version owed was run on 2026-08-27 and is discharged; it is what reversed the region. This deployment still runs in `us-central1` by deploy-time override. What remains is the security owner's sign-off |
 | Controlled pre-production apply | DONE, and not a production service | Applied and serving. What is live, and how far each claim is proved rather than merely configured, is the catalog's deployment record; this dossier does not keep a second copy. Not evidenced on this stack: VPC-SC (the Doc1 stack owns the project's one perimeter), audit retention applied but unlocked, no HA, no rehearsed rollback |
 
 The remaining work on this side is inputs, not code. Every `PENDING` row names exactly what is

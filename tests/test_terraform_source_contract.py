@@ -52,14 +52,16 @@ def test_cmek_vpc_sc_and_retention_controls_are_code_enforced() -> None:
     # The region is a deploy-time input validated against the residency allowlist, NOT a
     # literal pin. The DEFAULTS are a single region, so an unset deploy cannot spread across
     # jurisdictions; another region needs both variables set, which is the review. That single
-    # region follows the portfolio decision (us-central1 since its 2026-08-24 revision), and
-    # the two defaults must agree or an unset deploy fails its own validation.
+    # region follows the portfolio decision (asia-southeast1 since its 2026-08-27 revision,
+    # which returned it after the deferred availability check was run), and the two defaults
+    # must agree or an unset deploy fails its own validation. allowed_regions carries
+    # us-central1 as well for as long as the reference deployment still runs there.
     assert "contains(var.allowed_regions, var.region)" in variables
     assert "length(var.allowed_regions) > 0" in variables
     assert 'var.region == "us-central1"' not in variables
     assert 'var.allowed_regions == toset(["us-central1"])' not in variables
-    assert 'default     = "us-central1"' in variables
-    assert 'default     = ["us-central1"]' in variables
+    assert 'default     = "asia-southeast1"' in variables
+    assert 'default     = ["asia-southeast1", "us-central1"]' in variables
 
 
 def test_embedded_apps_receive_the_edge_iap_audience() -> None:

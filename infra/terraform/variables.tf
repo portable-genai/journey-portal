@@ -19,7 +19,7 @@ variable "name_prefix" {
 
 variable "region" {
   type        = string
-  default     = "us-central1"
+  default     = "asia-southeast1"
   description = <<-EOT
     Region used by every regional service, SELECTED AT DEPLOY TIME. Validated against
     var.allowed_regions so an unapproved region fails fast at `terraform plan` rather than
@@ -27,12 +27,19 @@ variable "region" {
     deployment-contract precondition.
 
     The default follows the portfolio region decision (org-metadata
-    docs/deployment-region-alignment.md, recorded 2026-08-23 and REVISED 2026-08-24): the
-    launch set co-locates, and that region is us-central1. It was asia-southeast1 until the
-    revision. This default exists so an unset deploy agrees with the running reference
-    deployment; it is NOT a residency recommendation. us-central1 satisfies no Asia-Pacific
-    residency regime. An institution deploying in-country sets this and allowed_regions
-    together, which is a reviewed input change and not a repository edit.
+    docs/deployment-region-alignment.md, recorded 2026-08-23 and REVISED twice: to us-central1
+    on 2026-08-24, and back to asia-southeast1 on 2026-08-27 once the deferred per-service
+    availability check was finally run and found asia-southeast1 the stronger region).
+
+    IMPORTANT, and the reason this is a default and not a claim: the reference deployment has
+    NOT moved. It still runs in us-central1 and is overridden there at deploy time, because
+    the deploy path always renders .generated.tfvars.json from .env and passes it with
+    -var-file. So an unset deploy no longer agrees with the running reference deployment, and
+    that is deliberate rather than stale -- what a fork INHERITS should be the region that
+    serves the newest model, Document AI and Chirp 3, none of which us-central1 serves.
+
+    This is not a residency recommendation. An institution deploying in-country sets this and
+    allowed_regions together, which is a reviewed input change and not a repository edit.
   EOT
   validation {
     condition     = contains(var.allowed_regions, var.region)
@@ -42,7 +49,7 @@ variable "region" {
 
 variable "allowed_regions" {
   type        = set(string)
-  default     = ["us-central1"]
+  default     = ["asia-southeast1", "us-central1"]
   description = <<-EOT
     Institution-approved residency allowlist: the regions this portal may be deployed to.
     The region is chosen at deploy time (var.region) and validated against this list to FAIL
@@ -50,9 +57,14 @@ variable "allowed_regions" {
     embedded app is configured for that region and that your residency obligations are met
     there first.
 
-    The default is the single region the portfolio decision names, so an unset deploy cannot
-    silently spread across regions and cannot disagree with var.region. Co-location is the
-    rule: a deviation needs the service named, the reason it cannot run in-region, a
+    The default carries TWO members, which is a deliberate and temporary exception to the
+    one-region rule and is the honest shape while a migration is in flight: asia-southeast1 is
+    the region the portfolio decision now names and what var.region defaults to, and
+    us-central1 is where the reference deployment still actually runs. Dropping the latter
+    would make the running deployment fail its own residency validation; dropping the former
+    would make a bare plan fail. It returns to a single member when the reference deployment
+    moves. Co-location is still the rule: a deviation needs the service named, the reason it
+    cannot run in-region, a
     data-flow record and the security owner's approval.
   EOT
   validation {
