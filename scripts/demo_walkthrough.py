@@ -403,7 +403,29 @@ def _notes_for(step: Step) -> str:
 
 
 def _open_shell(page: Any, origin: str, heading: str) -> None:
-    page.goto(origin, wait_until="networkidle")
+    """Open one workbench, and say what to do when it is not there.
+
+    A refused connection here means the journey was not launched, which is the single most
+    likely thing to be wrong a minute before a demo. The stack trace that Playwright raises
+    is a poor way to learn that, so it is turned into the command that fixes it.
+    """
+    try:
+        page.goto(origin, wait_until="networkidle")
+    except Exception as error:  # noqa: BLE001 - re-raised as an actionable message
+        journey = next(
+            (key for key, (shell, _) in _JOURNEY_SHELLS.items() if shell == origin),
+            None,
+        )
+        launch = (
+            f"python scripts/run_journeys.py --journey {journey} --built"
+            if journey
+            else "python scripts/run_journeys.py --built"
+        )
+        raise RuntimeError(
+            f"no workbench is answering at {origin}, so this journey was never launched. "
+            f"Start it with '{launch}' and wait for its readiness table. The original error "
+            f"was: {type(error).__name__}"
+        ) from error
     page.get_by_role("heading", name=heading).wait_for()
 
 
