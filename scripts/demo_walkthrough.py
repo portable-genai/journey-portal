@@ -8,6 +8,7 @@ driver separately with ``pip install playwright && playwright install chromium``
 from __future__ import annotations
 
 import argparse
+import contextlib
 import importlib.util
 import json
 import re
@@ -1705,6 +1706,45 @@ def parser() -> argparse.ArgumentParser:
     return argument_parser
 
 
+def _capture(page: Any, path: Path) -> None:
+    """Save the step's evidence, including what the embedded console is showing.
+
+    A full-page capture of the workbench photographs the workbench: the console is in a
+    frame with its own scrollbar, so the result a step just produced sits below the fold and
+    never appears. Every image was a picture of the form that had been filled in, which is
+    the least interesting half of the step.
+
+    So the frame is grown to its own content height before the capture and restored after.
+    A step with no embedded console (opening a workbench, the close) simply captures as it
+    is.
+    """
+    frames = page.locator("iframe")
+    resized: list[Any] = []
+    try:
+        for index in range(frames.count()):
+            frame = frames.nth(index)
+            height = frame.evaluate(
+                "e => e.contentDocument && e.contentDocument.body"
+                " ? e.contentDocument.body.scrollHeight : 0"
+            )
+            if height and height > 0:
+                frame.evaluate(
+                    "(e, h) => { e.dataset.priorHeight = e.style.height;"
+                    " e.style.height = h + 'px'; }",
+                    height,
+                )
+                resized.append(frame)
+        page.wait_for_timeout(250)
+        page.screenshot(path=str(path), full_page=True)
+    except Exception:  # noqa: BLE001 - evidence must never break the demonstration
+        page.screenshot(path=str(path), full_page=True)
+    finally:
+        for frame in resized:
+            # The page may have navigated on; restoring is best effort by design.
+            with contextlib.suppress(Exception):
+                frame.evaluate("e => { e.style.height = e.dataset.priorHeight || ''; }")
+
+
 def run(
     steps: Sequence[Step],
     *,
@@ -1756,9 +1796,7 @@ def run(
                 print(f"PRESENTER NOTES: {_notes_for(step)}")
                 step.action(page)
                 if screenshots is not None:
-                    page.screenshot(
-                        path=str(screenshots / f"{number:02d}-{step.id}.png"), full_page=True
-                    )
+                    _capture(page, screenshots / f"{number:02d}-{step.id}.png")
                 if pause:
                     input("Enter for next step...")
         finally:
