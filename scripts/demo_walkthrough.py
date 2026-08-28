@@ -454,18 +454,18 @@ def _open_shell(page: Any, origin: str, heading: str) -> None:
     page.get_by_role("heading", name=heading).wait_for()
 
 
-def _select_tab(page: Any, origin: str, shell_heading: str, tab: str, frame_title: str) -> Any:
-    """Open a shell and return the selected embedded app's frame.
+def _select_tab(page: Any, origin: str, shell_heading: str, tab: str, app_id: str) -> Any:
+    """Open a shell and return the selected console, once it is interactive.
 
     Opening the shell for each application step is intentional: ``--from`` can resume any
     individual step after a presenter interruption without relying on browser history.
-    """
 
-    _open_shell(page, origin, shell_heading)
-    page.get_by_role("button", name=tab, exact=True).click()
-    frame = page.frame_locator(f'iframe[title="{frame_title}"]')
-    frame.locator("body").wait_for()
-    return frame
+    This waits on the same signal the persona workbenches do. It used to wait only for the
+    frame's body to exist, which is true long before the console can accept input: under the
+    live profile that raced the very first upload, and the step failed looking for a document
+    that had never been filed.
+    """
+    return _open_console(page, origin, shell_heading, tab, app_id)
 
 
 def _rm_open(page: Any) -> None:
@@ -503,7 +503,7 @@ def _rm_doc1(page: Any) -> None:
         RM_ORIGIN,
         "RM Journey",
         "CDD + Source of Wealth",
-        "CDD + Source of Wealth",
+        "doc1",
     )
     _prepare_doc1_case(
         frame,
@@ -540,7 +540,7 @@ def _rm_doc1_flagged(page: Any) -> None:
         RM_ORIGIN,
         "RM Journey",
         "CDD + Source of Wealth",
-        "CDD + Source of Wealth",
+        "doc1",
     )
     _prepare_doc1_case(
         frame,
@@ -620,7 +620,7 @@ def _rm_doc1_blocked(page: Any) -> None:
         RM_ORIGIN,
         "RM Journey",
         "CDD + Source of Wealth",
-        "CDD + Source of Wealth",
+        "doc1",
     )
     # The live profile refuses an assessment with no evidence on file, so give the
     # manipulated request a document too: the guardrail must be what refuses it, before
@@ -672,23 +672,22 @@ def _open_journey(page: Any, journey: str) -> Any:
     return origin, heading
 
 
-def _select_journey_tab(page: Any, journey: str, tab: str, app_id: str) -> Any:
-    """Open the workbench, select one console, and wait until it is INTERACTIVE.
+def _open_console(page: Any, origin: str, heading: str, tab: str, app_id: str) -> Any:
+    """Open a workbench, select one console, and wait until it is INTERACTIVE.
 
-    The frame appearing is not the same as the console being ready. Typing into a form whose
-    page has not finished starting puts the text into the document and not into the console's
-    own state, so the form then submits as if it were empty, which reads on screen as the
-    application ignoring the presenter.
+    The frame appearing is not the same as the console being ready. Filling a form whose page
+    has not finished starting puts the values into the document and not into the console's own
+    state, so the form then submits as if it were empty and an upload never happens, which
+    reads on screen as the application ignoring the presenter.
 
-    The signal used here is the console's own first call to its API. It is the earliest proof
-    that the page is RUNNING rather than merely rendered, and unlike any particular sentence
-    on the page it means the same thing for every console in every journey.
+    The signal is the console's own first call to its API: the earliest proof that the page is
+    RUNNING rather than merely rendered, and unlike any particular sentence on the page it
+    means the same thing for every console in every journey.
 
-    Recording starts BEFORE the workbench is opened, because the journey's first console is
+    Recording starts BEFORE the workbench is opened, because a journey's first console is
     already loading by the time its tab could be clicked, and a listener attached after that
     would wait for a call that has already happened.
     """
-    origin, heading = _JOURNEY_SHELLS[journey]
     api_calls: list[str] = []
 
     def _note(request: Any) -> None:
@@ -714,6 +713,12 @@ def _select_journey_tab(page: Any, journey: str, tab: str, app_id: str) -> Any:
     finally:
         page.remove_listener("request", _note)
     return page.frame_locator(f'iframe[title="{tab}"]')
+
+
+def _select_journey_tab(page: Any, journey: str, tab: str, app_id: str) -> Any:
+    """Select a console in one of the persona workbenches."""
+    origin, heading = _JOURNEY_SHELLS[journey]
+    return _open_console(page, origin, heading, tab, app_id)
 
 
 def _mkt_open(page: Any) -> None:
@@ -949,7 +954,7 @@ def _rm_doc3(page: Any) -> None:
         RM_ORIGIN,
         "RM Journey",
         "CIO Advisory Assistant",
-        "CIO Advisory Assistant",
+        "doc3",
     )
     client_id = str(_DOC3_DEMO_CLIENT["client_id"])
     frame.get_by_placeholder("client-000042").fill(client_id)
@@ -988,7 +993,7 @@ def _ops_doc2(page: Any) -> None:
         OPS_ORIGIN,
         "Ops Journey",
         "Credit Memo / Underwriting",
-        "Credit Memo / Underwriting",
+        "doc2",
     )
     frame.get_by_label("Borrower").fill(_DOC2_BORROWER["name"])
     frame.get_by_label("Sector").fill(_DOC2_BORROWER["sector"])
@@ -1013,7 +1018,7 @@ def _ops_doc4(page: Any) -> None:
         OPS_ORIGIN,
         "Ops Journey",
         "Trade-Finance Checker (UCP600)",
-        "Trade-Finance Checker (UCP600)",
+        "doc4",
     )
     editor = frame.locator("textarea")
     presentation = json.loads(editor.input_value())
@@ -1046,7 +1051,7 @@ def _ops_rsk1(page: Any) -> None:
         OPS_ORIGIN,
         "Ops Journey",
         "Compliance Assistant & Control Mapper",
-        "Compliance Assistant & Control Mapper",
+        "rsk1",
     )
     # The accessible name includes the long regulator label and jurisdiction beneath "MAS".
     frame.get_by_role("button", name="MAS", exact=False).click()
