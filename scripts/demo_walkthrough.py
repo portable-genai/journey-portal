@@ -29,6 +29,8 @@ PageAction = Callable[[Any], None]
 # True when driving the deployed portal (``--target gcp``): hosted steps relax the
 # persona-picker expectations (IAP owns identity there) and accept the managed profile.
 _HOSTED = False
+#: The journey being narrated. The opening differs per persona workbench.
+_ACTIVE_JOURNEY = "both"
 # True when the presenter asked to hold after every form is filled, before submitting
 # (``--confirm-inputs``), so the audience can read exactly what is about to be sent.
 _CONFIRM_INPUTS = False
@@ -345,6 +347,29 @@ OPENING_NOTES = (
     "way, immediately beside the case where it allows. And nothing here is staged: the "
     "companies, the filings, the sanctions lists and the regulations are real, and anything you "
     "hand the system afterwards is handled by exactly the same path."
+)
+
+#: Spoken before the first step of a persona workbench run. The relationship manager's and
+#: the operations analyst's opening frames a portability demonstration across two shells; a
+#: single workbench cannot claim that, so these journeys are framed by what they actually
+#: show: one person's work, assembled from systems that were built separately.
+PERSONA_OPENING_NOTES = (
+    "Before the first screen, one idea to hold on to. Everything you are about to see belongs "
+    "to a single person doing a single job, in the order they would actually do it. What makes "
+    "that worth watching is that none of it was built as one product. Each capability here is a "
+    "separate application, with its own codebase, its own release and its own store of records, "
+    "and they are brought together into one place at the moment somebody needs them.\n\n"
+    "That has a consequence worth listening for as we go. Adding a capability to this workbench, "
+    "or giving another team a workbench of its own, is a decision about what belongs in front of "
+    "whom. It is not a rebuild, and it does not create a second copy of anything to govern.\n\n"
+    "Two things to watch for. Every figure that somebody is accountable for is computed in plain "
+    "code rather than produced by the model, and you will see the workings each time. And at "
+    "least once you will watch a control refuse something, and name the rule it refused it "
+    "under, because a control that only ever agrees cannot be told apart from no control at "
+    "all.\n\n"
+    "One thing said plainly first. These particular capabilities run here against the data each "
+    "of them ships with, so what you are watching is how the decisions get made rather than a "
+    "judgement about real customers."
 )
 
 #: Spoken before the first step of a hosted run. The hosted walkthrough is the second half
@@ -1545,9 +1570,19 @@ def selected_steps(
     raise ValueError(f"unknown or excluded step {from_step!r}; choose one of: {choices}")
 
 
-def opening_notes() -> str:
-    """The opening for the current target: the flip narration on a hosted run."""
-    return HOSTED_OPENING_NOTES if _HOSTED else OPENING_NOTES
+def opening_notes(journey: str | None = None) -> str:
+    """The opening for what is being run: hosted, a persona workbench, or the pair.
+
+    A journey is passed explicitly by anything rendering a deck; a run uses the journey it
+    was started with. The relationship manager's and the operations analyst's opening frames
+    a demonstration ACROSS two workbenches, so a single persona workbench must not borrow it.
+    """
+    if _HOSTED:
+        return HOSTED_OPENING_NOTES
+    selected = journey if journey is not None else _ACTIVE_JOURNEY
+    if selected in _JOURNEY_SHELLS:
+        return PERSONA_OPENING_NOTES
+    return OPENING_NOTES
 
 
 def print_script(steps: Iterable[Step]) -> None:
@@ -1721,12 +1756,13 @@ def run(
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    global _CONFIRM_INPUTS, _HOSTED
+    global _ACTIVE_JOURNEY, _CONFIRM_INPUTS, _HOSTED
     args = parser().parse_args(argv)
     if args.slow_mo < 0:
         parser().error("--slow-mo must be zero or greater")
     hosted = args.target == "gcp"
     _HOSTED = hosted
+    _ACTIVE_JOURNEY = args.journey
     # Unattended runs (--no-pause) must never block on a prompt, so the input hold is
     # only honoured on a paced run.
     _CONFIRM_INPUTS = args.confirm_inputs and not args.no_pause
