@@ -91,8 +91,14 @@ def configure_origins(rm_origin: str, ops_origin: str) -> None:
             raise ValueError(f"{name} origin must be loopback HTTP or an exact HTTPS origin")
     RM_ORIGIN = rm_origin.rstrip("/")
     OPS_ORIGIN = ops_origin.rstrip("/")
+    # Only the two shells this function names. The persona workbenches keep their own
+    # origins: rewriting every app that is not the relationship manager's onto the
+    # operations origin sent the marketing steps at a shell that was not even running.
     for app_id, (_origin, journey) in tuple(_APP_ORIGINS.items()):
-        _APP_ORIGINS[app_id] = (RM_ORIGIN if journey == "RM Journey" else OPS_ORIGIN, journey)
+        if journey == "RM Journey":
+            _APP_ORIGINS[app_id] = (RM_ORIGIN, journey)
+        elif journey == "Ops Journey":
+            _APP_ORIGINS[app_id] = (OPS_ORIGIN, journey)
 
 
 # Every application step runs on REAL or audience-provided data, so each requires its
@@ -110,13 +116,33 @@ _HOSTED_PROFILE_HINT = (
     "the hosted walkthrough expects the deployed managed profile; check the origin points "
     "at the deployment (PORTAL_E2E_BASE_URL or --rm-origin) rather than a local stack"
 )
-# Which shell origin proxies each live-checked app (healthz goes through the shell).
+# The persona workbenches beyond the relationship manager's and the operations analyst's.
+# Each is the same React shell told a different journey, so it is an origin and a heading.
+MKT_ORIGIN = "http://localhost:3001"
+GOV_ORIGIN = "http://localhost:3002"
+SVC_ORIGIN = "http://localhost:3003"
+_JOURNEY_SHELLS: dict[str, tuple[str, str]] = {
+    "mkt": (MKT_ORIGIN, "Marketing Journeys"),
+    "gov": (GOV_ORIGIN, "AI Governance Journeys"),
+    "svc": (SVC_ORIGIN, "Service Journeys"),
+}
+
+# Which shell origin proxies each profile-checked app (healthz goes through the shell).
 _APP_ORIGINS: dict[str, tuple[str, str]] = {
     "doc1": (RM_ORIGIN, "RM Journey"),
     "doc3": (RM_ORIGIN, "RM Journey"),
     "doc2": (OPS_ORIGIN, "Ops Journey"),
     "doc4": (OPS_ORIGIN, "Ops Journey"),
     "rsk1": (OPS_ORIGIN, "Ops Journey"),
+    "mkt1": (MKT_ORIGIN, "Marketing Journeys"),
+    "mkt2": (MKT_ORIGIN, "Marketing Journeys"),
+    "mkt3": (MKT_ORIGIN, "Marketing Journeys"),
+    "mkt4": (MKT_ORIGIN, "Marketing Journeys"),
+    "mkt5": (MKT_ORIGIN, "Marketing Journeys"),
+    "mkt6": (MKT_ORIGIN, "Marketing Journeys"),
+    "rsk3": (GOV_ORIGIN, "AI Governance Journeys"),
+    "hrz4": (GOV_ORIGIN, "AI Governance Journeys"),
+    "doc6": (SVC_ORIGIN, "Service Journeys"),
 }
 # The audience-registered demo client Doc3's briefing runs on (opaque id, never PII).
 _DOC3_DEMO_CLIENT = {
@@ -174,6 +200,28 @@ def _doc1_manifest() -> dict[str, Any]:
     return manifest
 
 
+#: The profile a system with no live binding runs in: its own bundled corpus.
+_PORTAL_FIXTURE_PROFILE = "local"
+
+
+def _require_profile(page: Any, app_id: str, expected: str) -> None:
+    """Refuse to run a step against a profile that is not the one it was written for."""
+    health = page.evaluate(
+        """async (apiBase) => {
+        const response = await fetch(`${apiBase}/healthz`);
+        if (!response.ok) throw new Error(`${apiBase} healthz failed: ${response.status}`);
+        return response.json();
+    }""",
+        _api_base(page, app_id),
+    )
+    profile = health.get("profile")
+    if profile != expected:
+        raise RuntimeError(
+            f"{app_id} is running profile {profile!r}, and this step needs {expected!r}; "
+            "relaunch the journey with 'python scripts/run_journeys.py --journey <key> --built'"
+        )
+
+
 def _require_live(page: Any, app_id: str) -> None:
     """Refuse to run a step against a profile that can only produce fixture data.
 
@@ -200,28 +248,49 @@ def _require_live_doc1(page: Any) -> None:
     _require_live(page, "doc1")
 
 
-def _preflight(page: Any, steps: Sequence[Step]) -> None:
-    """Fail before the first step when a selected step's live requirement cannot be met.
+def _shell_of(journey: str) -> tuple[str, str]:
+    """The origin and heading of the workbench that serves one journey."""
+    if journey == "rm":
+        return RM_ORIGIN, "RM Journey"
+    if journey == "ops":
+        return OPS_ORIGIN, "Ops Journey"
+    return _JOURNEY_SHELLS[journey]
 
-    Every application step runs on real or audience data, so it needs its app's live
-    profile (Doc1 additionally needs the prepared evidence packs). Checking everything
-    once up front means a stack started without ``--live`` (or a workspace with no packs
-    built) is reported at second zero, with the exact command to fix, instead of after
-    the browser has visibly run the earlier steps. Skipped when no selected step
-    requires live (a resume past the application steps).
+
+def _preflight(page: Any, steps: Sequence[Step]) -> None:
+    """Fail before the first step when a selected step's profile requirement cannot be met.
+
+    Checking everything once up front means a stack started the wrong way is reported at
+    second zero, with the command to fix it, instead of part-way through the visible demo.
+
+    The workbench each check runs against comes from the STEP's own journey rather than from
+    a table keyed by app. One system can be mounted in several journeys, and resolving its
+    workbench globally sent the service journey's checks at the operations workbench, which
+    was not even running.
     """
-    apps: tuple[str, ...] = tuple(
-        dict.fromkeys(app for step in steps for app in step.requires_live)
-    )
-    if not apps:
+    #: (origin, heading) -> {app_id: required profile}
+    wanted: dict[tuple[str, str], dict[str, str]] = {}
+    needs_doc1_packs = False
+    for step in steps:
+        for journey in step.journeys:
+            shell = _shell_of(journey)
+            for app_id in step.requires_live:
+                wanted.setdefault(shell, {})[app_id] = "gcp" if _HOSTED else "live"
+            for app_id in step.requires_fixture:
+                wanted.setdefault(shell, {})[app_id] = _PORTAL_FIXTURE_PROFILE
+        if "doc1" in step.requires_live:
+            needs_doc1_packs = True
+    if not wanted:
         return
-    if "doc1" in apps:
+    if needs_doc1_packs:
         _doc1_manifest()  # raises _PACK_HINT if the evidence packs are not built
-    for origin, heading in dict.fromkeys(_APP_ORIGINS[app] for app in apps):
+    for (origin, heading), apps in wanted.items():
         _open_shell(page, origin, heading)
-        for app_id in apps:
-            if _APP_ORIGINS[app_id][0] == origin:
+        for app_id, expected in apps.items():
+            if expected in {"live", "gcp"}:
                 _require_live(page, app_id)
+            else:
+                _require_profile(page, app_id, expected)
 
 
 def _prepare_doc1_case(
@@ -523,6 +592,244 @@ def _rm_doc1_blocked(page: Any) -> None:
     # No dossier may be rendered from a screened-out request.
     if frame.get_by_text("Source of wealth", exact=True).count():
         raise RuntimeError("a guardrail-blocked request still rendered a dossier")
+
+
+# --------------------------------------------------------------------------------------
+# The persona workbenches: marketing, governance and service.
+#
+# These systems ship no live profile, so every step below runs against each system's own
+# bundled corpus. That is stated in the narration rather than left for the room to assume,
+# and the preflight refuses anything else. What they demonstrate is the half that does not
+# change with the data: where the judgement is made, what it cites, and what escalates.
+#
+# Fields are located by position within each form and named here, because these consoles
+# label their controls with adjacent text rather than a bound label element.
+# --------------------------------------------------------------------------------------
+
+#: The subject the campaign manager researches, plans and then advertises.
+_MKT_TOPIC = "digital savings accounts"
+_MKT_OBJECTIVE = "grow deposits with under-35s"
+_MKT_BUDGET = "250000"
+_MKT_THEME = "everyday saver, higher rate"
+_MKT_OFFER = "4.10% p.a."
+#: Copy written to fail: an unqualified guarantee, and no risk warning attached.
+_MKT_NONCOMPLIANT_COPY = (
+    "Guaranteed 90% returns, risk free, the best savings account in the world."
+)
+_MKT_ACCOUNT = "acct-sg-001"
+#: A customer the recommendation engine actually holds a profile for.
+_MKT_CUSTOMER = "cust-sg-bank-1"
+
+
+def _open_journey(page: Any, journey: str) -> Any:
+    origin, heading = _JOURNEY_SHELLS[journey]
+    _open_shell(page, origin, heading)
+    return origin, heading
+
+
+def _select_journey_tab(page: Any, journey: str, tab: str, app_id: str) -> Any:
+    """Open the workbench, select one console, and wait until it is INTERACTIVE.
+
+    The frame appearing is not the same as the console being ready. Typing into a form whose
+    page has not finished starting puts the text into the document and not into the console's
+    own state, so the form then submits as if it were empty, which reads on screen as the
+    application ignoring the presenter.
+
+    The signal used here is the console's own first call to its API. It is the earliest proof
+    that the page is RUNNING rather than merely rendered, and unlike any particular sentence
+    on the page it means the same thing for every console in every journey.
+
+    Recording starts BEFORE the workbench is opened, because the journey's first console is
+    already loading by the time its tab could be clicked, and a listener attached after that
+    would wait for a call that has already happened.
+    """
+    origin, heading = _JOURNEY_SHELLS[journey]
+    api_calls: list[str] = []
+
+    def _note(request: Any) -> None:
+        if "/api/" in request.url:
+            api_calls.append(request.url)
+
+    page.on("request", _note)
+    try:
+        _open_shell(page, origin, heading)
+        api_base = _api_base(page, app_id)
+        page.get_by_role("button", name=tab, exact=True).click()
+        page.locator(f'iframe[title="{tab}"]').wait_for()
+        waited = 0
+        while not any(api_base in url for url in api_calls) and waited < _LIVE_STEP_TIMEOUT_MS:
+            page.wait_for_timeout(250)
+            waited += 250
+        if not any(api_base in url for url in api_calls):
+            raise RuntimeError(
+                f"the {tab} console never called {api_base}, so it is rendered but not "
+                "running. A development server is the usual cause: its own policy refuses "
+                "the code such a server compiles, so relaunch the journey with '--built'"
+            )
+    finally:
+        page.remove_listener("request", _note)
+    return page.frame_locator(f'iframe[title="{tab}"]')
+
+
+def _mkt_open(page: Any) -> None:
+    _open_journey(page, "mkt")
+
+
+def _mkt_brief(page: Any) -> None:
+    """The research step: a cited market brief the rest of the journey is planned from."""
+    _require_profile(page, "mkt1", _PORTAL_FIXTURE_PROFILE)
+    frame = _select_journey_tab(page, "mkt", "Market Intelligence", "mkt1")
+    frame.locator("input").first.fill(_MKT_TOPIC)  # topic
+    _inputs_ready("the topic, market and vertical to research")
+    frame.get_by_role("button", name="Build cited brief", exact=True).click()
+    frame.get_by_text("Competitor moves", exact=False).first.wait_for(timeout=_LIVE_STEP_TIMEOUT_MS)
+    # Every movement the brief reports names the source it was read from.
+    frame.get_by_text("Sources", exact=False).first.wait_for()
+
+
+def _mkt_plan(page: Any) -> None:
+    """The planning step: channel mix, budget split and pacing, each computed."""
+    _require_profile(page, "mkt2", _PORTAL_FIXTURE_PROFILE)
+    frame = _select_journey_tab(page, "mkt", "Campaign Planner", "mkt2")
+    frame.locator("input").nth(0).fill(_MKT_OBJECTIVE)
+    frame.locator("input").nth(1).fill(_MKT_BUDGET)
+    _inputs_ready("the objective and the total budget")
+    frame.get_by_role("button", name="Build cited plan", exact=True).click()
+    frame.get_by_text("Pacing calendar", exact=False).first.wait_for(timeout=_LIVE_STEP_TIMEOUT_MS)
+    # The split is arithmetic against named benchmarks, and the plan shows both.
+    frame.get_by_text("All citations", exact=False).first.wait_for()
+
+
+def _mkt_creative(page: Any) -> None:
+    """The positive half of the brand-safety pair: variants that pass every check."""
+    _require_profile(page, "mkt3", _PORTAL_FIXTURE_PROFILE)
+    frame = _select_journey_tab(page, "mkt", "Creative Studio", "mkt3")
+    frame.locator("input").nth(0).fill(_MKT_THEME)
+    frame.locator("input").nth(1).fill(_MKT_OFFER)
+    _inputs_ready("the campaign theme and the offer")
+    frame.get_by_role("button", name="Generate brand-safe creative", exact=True).click()
+    frame.get_by_text("passed every deterministic check", exact=False).first.wait_for(
+        timeout=_LIVE_STEP_TIMEOUT_MS
+    )
+    if frame.get_by_text("FAIL", exact=True).count():
+        raise RuntimeError("a variant failed its brand checks on the clean offer")
+
+
+def _mkt_gate_refused(page: Any) -> None:
+    """The negative half: the gate refuses a claim, and names the rule it broke.
+
+    Paired with the creative step directly before it. Same gate, same rules, opposite
+    answer, which is what makes either of them evidence.
+    """
+    _require_profile(page, "mkt6", _PORTAL_FIXTURE_PROFILE)
+    frame = _select_journey_tab(page, "mkt", "Marketing Compliance Gate", "mkt6")
+    frame.locator("textarea").first.fill(_MKT_NONCOMPLIANT_COPY)
+    _inputs_ready("marketing copy that promises a guaranteed return")
+    frame.get_by_role("button", name="Run compliance review", exact=True).click()
+    # The refusal has to name the governing rule, not merely decline.
+    frame.get_by_text("Cited rules", exact=False).first.wait_for(timeout=_LIVE_STEP_TIMEOUT_MS)
+    frame.get_by_text("risk-warning", exact=False).first.wait_for()
+
+
+def _mkt_performance(page: Any) -> None:
+    """Return against target, the significance of each test, and the anomalies found."""
+    _require_profile(page, "mkt4", _PORTAL_FIXTURE_PROFILE)
+    frame = _select_journey_tab(page, "mkt", "Performance Marketing", "mkt4")
+    frame.locator("input").nth(0).fill(_MKT_ACCOUNT)
+    _inputs_ready("the advertising account to report on")
+    frame.get_by_role("button", name="Build cited report", exact=True).click()
+    frame.get_by_text("A/B significance", exact=False).first.wait_for(timeout=_LIVE_STEP_TIMEOUT_MS)
+    frame.get_by_text("Anomalies", exact=False).first.wait_for()
+
+
+def _mkt_next_best_action(page: Any) -> None:
+    """One customer, an eligibility and consent decision made in code, ranked."""
+    _require_profile(page, "mkt5", _PORTAL_FIXTURE_PROFILE)
+    frame = _select_journey_tab(page, "mkt", "Next Best Action", "mkt5")
+    frame.locator("input").nth(0).fill(_MKT_CUSTOMER)
+    _inputs_ready("the customer to recommend for")
+    frame.get_by_role("button", name="Recommend next-best-action", exact=True).click()
+    frame.get_by_text("Recommended", exact=False).first.wait_for(timeout=_LIVE_STEP_TIMEOUT_MS)
+    if frame.get_by_text("unknown customer", exact=False).count():
+        raise RuntimeError("the recommendation ran against a customer the engine does not hold")
+
+
+def _gov_open(page: Any) -> None:
+    _open_journey(page, "gov")
+
+
+def _gov_architecture(page: Any) -> None:
+    """The intake gate: a proposed system judged against the written standard."""
+    _require_profile(page, "rsk3", _PORTAL_FIXTURE_PROFILE)
+    frame = _select_journey_tab(page, "gov", "Architecture Validator", "rsk3")
+    _inputs_ready("the proposed system, its region and the controls it declares")
+    frame.get_by_role("button", name="Validate at intake", exact=True).click()
+    # Each finding names the principle it comes from and what would close it.
+    frame.get_by_text("General Principle", exact=False).first.wait_for(
+        timeout=_LIVE_STEP_TIMEOUT_MS
+    )
+
+
+def _gov_promotion_gate(page: Any) -> None:
+    """The promotion gate: measured quality and adversarial probes, then a verdict."""
+    _require_profile(page, "hrz4", _PORTAL_FIXTURE_PROFILE)
+    frame = _select_journey_tab(page, "gov", "AI Quality & Promotion Gate", "hrz4")
+    _inputs_ready("the model, the prompt version and the golden dataset to judge")
+    frame.get_by_role("button", name="Run promotion gate", exact=True).click()
+    frame.get_by_text("RED-TEAM REPORT", exact=False).first.wait_for(
+        timeout=_LIVE_STEP_TIMEOUT_MS
+    )
+    # A gate that reported nothing blocked would be a gate that ran no probes.
+    frame.get_by_text("BLOCKED", exact=False).first.wait_for()
+
+
+#: A complaint of the kind a fair-dealing regime exists for: a capital-protection claim.
+_SVC_COMPLAINT = (
+    "I was sold a structured investment product at the branch and was told it was capital "
+    "protected. I have now lost part of my capital and nobody explained the risk to me."
+)
+#: What the handler needs to know before answering it.
+_SVC_QUESTION = "What does MAS expect when a customer complains about a mis-sold product?"
+
+
+def _svc_open(page: Any) -> None:
+    _open_journey(page, "svc")
+
+
+def _svc_complaint(page: Any) -> None:
+    """Assess one complaint: outcome, root cause, citations, and an unsent draft."""
+    _require_profile(page, "doc6", _PORTAL_FIXTURE_PROFILE)
+    frame = _select_journey_tab(page, "svc", "Complaints Review", "doc6")
+    frame.locator("textarea").first.fill(_SVC_COMPLAINT)
+    _inputs_ready("the complaint as the customer wrote it")
+    frame.get_by_role("button", name="Review complaint", exact=True).click()
+    frame.get_by_text("Draft response", exact=False).first.wait_for(
+        timeout=_LIVE_STEP_TIMEOUT_MS
+    )
+    # The draft must be visibly held for a person, and the assessment must cite its sources.
+    frame.get_by_text("not sent", exact=False).first.wait_for()
+    frame.get_by_text("REGUL", exact=False).first.wait_for()
+
+
+def _svc_rules(page: Any) -> None:
+    """The handler's own question, answered from the regulators' published instruments."""
+    _require_profile(page, "rsk1", _PORTAL_FIXTURE_PROFILE)
+    frame = _select_journey_tab(page, "svc", "Compliance Assistant & Control Mapper", "rsk1")
+    frame.get_by_role("button", name="MAS", exact=False).first.click()
+    composer = frame.get_by_placeholder("Ask a grounded compliance question", exact=False)
+    composer.fill(_SVC_QUESTION)
+    submit = composer.locator("xpath=following-sibling::button[@type='button']")
+    if submit.count() != 1:
+        raise RuntimeError("expected exactly one compliance composer submit button")
+    _inputs_ready("the question the complaints handler needs answered")
+    submit.click()
+    frame.get_by_text("Grounded answer", exact=False).first.wait_for(
+        timeout=_LIVE_STEP_TIMEOUT_MS
+    )
+
+
+def _persona_close(page: Any) -> None:
+    page.bring_to_front()
 
 
 def _ops_hrz7_self_approval(page: Any) -> None:
@@ -974,6 +1281,181 @@ STEPS: tuple[Step, ...] = (
         requires_live=("rsk1",),
     ),
     Step(
+        "mkt-open",
+        "Open the marketing workbench",
+        "A campaign manager opens one workbench for the whole of a campaign: understanding the "
+        "market, planning it, making the advertising, clearing it, measuring it and deciding what "
+        "to offer each customer. Nothing about this surface was built for marketing. It is the "
+        "same workbench the relationship manager uses, told to compose a different set of "
+        "capabilities, which is what it costs an institution to give a new team its own place to "
+        "work. One thing to say plainly before we start: these capabilities run here on the data "
+        "each of them ships with, so what you are watching is how the decisions are made rather "
+        "than a judgement about a real campaign.",
+        frozenset({"mkt"}),
+        _mkt_open,
+    ),
+    Step(
+        "mkt-brief",
+        "Research the market",
+        "The manager asks what is happening in a product category before committing a budget to "
+        "it. What comes back is a brief in which every movement carries the source it was read "
+        "from, and the comparison between competitors is computed rather than described. That "
+        "matters more than it sounds: the research a campaign is justified by is exactly the "
+        "material a regulator asks to see afterwards, so it is kept as records that can be "
+        "exported and checked rather than as a summary somebody wrote once.",
+        frozenset({"mkt"}),
+        _mkt_brief,
+        requires_fixture=("mkt1",),
+    ),
+    Step(
+        "mkt-plan",
+        "Plan the campaign",
+        "Now the budget. The split across channels, the reach each one buys and the week by week "
+        "pacing are arithmetic against named benchmarks, and the plan shows both the number and "
+        "the benchmark it came from. The model is not consulted about how to spend the money. "
+        "That is the same division you saw in the lending and onboarding work: the figures a "
+        "person is accountable for are computed, and the writing around them is drafted.",
+        frozenset({"mkt"}),
+        _mkt_plan,
+        requires_fixture=("mkt2",),
+    ),
+    Step(
+        "mkt-creative",
+        "Make the advertising",
+        "The manager asks for advertising variants for that offer. Each one is checked against "
+        "the brand and product rules as it is produced, and every variant here passes. Hold on to "
+        "that result, because the next step is the same class of control answering the other way.",
+        frozenset({"mkt"}),
+        _mkt_creative,
+        requires_fixture=("mkt3",),
+    ),
+    Step(
+        "mkt-gate-refused",
+        "Refuse a claim that breaks the rules",
+        "This copy promises a guaranteed return and carries no risk warning, which is exactly "
+        "what a marketing team under pressure produces. The gate refuses it, and it names the "
+        "rule it broke and the missing statement rather than simply declining. Watch this "
+        "refusal and the variants that just passed as one pair: a gate that only ever approves "
+        "is indistinguishable from no gate, and the reason this one can be trusted is that you "
+        "have now seen it decide both ways on the same rules within a minute.",
+        frozenset({"mkt"}),
+        _mkt_gate_refused,
+        requires_fixture=("mkt6",),
+    ),
+    Step(
+        "mkt-performance",
+        "Measure what the campaign did",
+        "After the campaign runs, the manager asks how it performed. The return against target, "
+        "the statistical significance of each test and the spending anomalies are all computed, "
+        "and each is cited back to the measurements it was computed from. Two of these results "
+        "say keep running rather than ship, which is the honest answer when a test has not "
+        "separated yet, and it is the answer a system optimising for a confident narrative would "
+        "not give.",
+        frozenset({"mkt"}),
+        _mkt_performance,
+        requires_fixture=("mkt4",),
+    ),
+    Step(
+        "mkt-next-best-action",
+        "Decide what to offer one customer",
+        "Finally the same manager asks what to offer a particular customer. Eligibility, the "
+        "consent that customer has actually given, and the ranking between candidate offers are "
+        "each decided in plain code, and the recommendation carries the reason. This is the point "
+        "in a marketing stack where a regulator asks how a person came to be targeted, and the "
+        "answer here is a rule and a record rather than a score nobody can reconstruct.",
+        frozenset({"mkt"}),
+        _mkt_next_best_action,
+        requires_fixture=("mkt5",),
+    ),
+    Step(
+        "gov-open",
+        "Open the governance workbench",
+        "This workbench belongs to the people who decide whether an assistant may go live at "
+        "all. It is worth noticing what is being composed here: the controls that govern the "
+        "other systems are themselves applications of the same kind, built the same way and "
+        "inspected on the same surface. An institution that cannot open its own gates and read "
+        "them is trusting a supplier's word about them.",
+        frozenset({"gov"}),
+        _gov_open,
+    ),
+    Step(
+        "gov-architecture",
+        "Judge a proposal against the written standard",
+        "A team proposes a customer-facing assistant and declares which controls it will carry. "
+        "The gate answers with findings, and every finding names the principle it comes from, "
+        "how serious it is, and what would close it. None of that is a matter of opinion on the "
+        "day: the principles are written down, the check is plain code, and two reviewers "
+        "running it get the same answer. That is what makes an intake gate something a risk "
+        "committee can rely on rather than a meeting.",
+        frozenset({"gov"}),
+        _gov_architecture,
+        requires_fixture=("rsk3",),
+    ),
+    Step(
+        "gov-promotion-gate",
+        "Decide whether a release may ship",
+        "Now the release itself. The gate scores the model against a fixed set of examples with "
+        "named thresholds, and separately attacks it: attempts to hijack its instructions, to "
+        "extract personal data, to make it produce something harmful, and to make it invent an "
+        "answer it has no grounds for. Each probe reports what happened. Two things matter here. "
+        "The thresholds belong to the institution rather than to the model supplier, and the "
+        "probes run against every candidate, so a new model earns its place by passing your "
+        "checks instead of arriving with a certificate.",
+        frozenset({"gov"}),
+        _gov_promotion_gate,
+        requires_fixture=("hrz4",),
+    ),
+    Step(
+        "svc-open",
+        "Open the service workbench",
+        "A complaints handler opens a third workbench, and the only thing built for them is the "
+        "list of capabilities on it. One of those capabilities is the same compliance assistant "
+        "the operations team uses, mounted here as well rather than deployed a second time. That "
+        "is worth pointing at: an institution adds a capability to a team's workbench without "
+        "duplicating it, and there is still exactly one of it to govern, patch and audit.",
+        frozenset({"svc"}),
+        _svc_open,
+    ),
+    Step(
+        "svc-complaint",
+        "Assess a complaint",
+        "Here is a complaint of the kind every fair-dealing regime exists for: a customer told a "
+        "product was protected, who then lost money. The assessment names the outcome and the "
+        "root cause, and cites both the firm's own policy and the regulator's guidance for each. "
+        "Then look at what it does NOT do. It drafts a reply and marks it as not sent, held for a "
+        "person to sign. The system is allowed to prepare the answer and not to send it, and that "
+        "boundary is in the code rather than in a working practice somebody might skip.",
+        frozenset({"svc"}),
+        _svc_complaint,
+        requires_fixture=("doc6",),
+    ),
+    Step(
+        "svc-rules",
+        "Ask what the rules actually require",
+        "Before signing that reply the handler asks what the regulator expects of a firm in this "
+        "position. The answer is assembled from the regulators' own published instruments and "
+        "cited to the document and the page, so the handler can open the source and read it "
+        "rather than trusting a summary. This is the same assistant the operations workbench "
+        "carries, answering a different person's question, with one corpus behind both.",
+        frozenset({"svc"}),
+        _svc_rules,
+        requires_fixture=("rsk1",),
+    ),
+    Step(
+        "persona-close",
+        "Close on what stayed the same",
+        "To close, notice what did not change across everything you have just watched. The "
+        "workbench is the same one another team uses, told to compose different capabilities. "
+        "Every consequential figure was computed in plain code and every claim carried the record "
+        "it came from, so replacing the model changes the wording and none of the decisions. And "
+        "each capability keeps its own store and its own release, so composing them into one "
+        "surface for one person cost a line of configuration rather than an integration project. "
+        "Those three properties are what let an institution add a team's workbench in an "
+        "afternoon and still answer for every decision made on it.",
+        frozenset({"mkt", "gov", "svc"}),
+        _persona_close,
+    ),
+    Step(
         "ops-hrz7-self-approval",
         "Refuse the maker's own approval",
         "The person who produced the assessment now tries to sign it off themselves, which is "
@@ -1103,7 +1585,11 @@ def parser() -> argparse.ArgumentParser:
                 "or provide an exact HTTPS origin"
             )
     argument_parser = argparse.ArgumentParser(description=__doc__)
-    argument_parser.add_argument("--journey", choices=("rm", "ops", "both"), default="both")
+    argument_parser.add_argument(
+        "--journey",
+        choices=("rm", "ops", "mkt", "gov", "svc", "both"),
+        default="both",
+    )
     argument_parser.add_argument(
         "--rm-origin",
         default=rm_origin.value or RM_ORIGIN,
