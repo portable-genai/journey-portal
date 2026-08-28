@@ -19,6 +19,18 @@ journeys:
     label: "Ops Journeys"
     blurb: "Operations Workbench: Underwriting, Trade Docs, Compliance & Review Queue"
     apps: [doc2, doc4, rsk1, hrz7]
+  mkt:
+    label: "Marketing Journeys"
+    blurb: "Campaign Manager Workbench: Research, Plan, Create, Clear, Optimise & Personalise"
+    apps: [mkt1, mkt2, mkt3, mkt6, mkt4, mkt5, hrz7]
+  gov:
+    label: "AI Governance Journeys"
+    blurb: "Model-Risk Workbench: Architecture Conformance, Promotion Gate & Sign-off"
+    apps: [rsk3, hrz4, hrz7]
+  svc:
+    label: "Service Journeys"
+    blurb: "Complaints Handler Workbench: Intake, Outcome Assessment & Review"
+    apps: [doc6, rsk1, hrz7]
 
 apps:
   doc1:
@@ -50,3 +62,41 @@ apps:
     label: "Human-Review Console"
     ui_upstream: "${PORTAL_HRZ7_UI:-http://127.0.0.1:3107}"
     api_upstream: "${PORTAL_HRZ7_API:-http://127.0.0.1:8087}"
+  # The marketing family keeps the consecutive API ports its repositories already assign
+  # (8100 to 8105), so a port here matches the port that repo's own Makefile serves on.
+  mkt1:
+    label: "Market Intelligence"
+    ui_upstream: "${PORTAL_MKT1_UI:-http://127.0.0.1:3110}"
+    api_upstream: "${PORTAL_MKT1_API:-http://127.0.0.1:8100}"
+  mkt2:
+    label: "Campaign Planner"
+    ui_upstream: "${PORTAL_MKT2_UI:-http://127.0.0.1:3111}"
+    api_upstream: "${PORTAL_MKT2_API:-http://127.0.0.1:8101}"
+  mkt3:
+    label: "Creative Studio"
+    ui_upstream: "${PORTAL_MKT3_UI:-http://127.0.0.1:3112}"
+    api_upstream: "${PORTAL_MKT3_API:-http://127.0.0.1:8102}"
+  mkt4:
+    label: "Performance Marketing"
+    ui_upstream: "${PORTAL_MKT4_UI:-http://127.0.0.1:3113}"
+    api_upstream: "${PORTAL_MKT4_API:-http://127.0.0.1:8103}"
+  mkt5:
+    label: "Next Best Action"
+    ui_upstream: "${PORTAL_MKT5_UI:-http://127.0.0.1:3114}"
+    api_upstream: "${PORTAL_MKT5_API:-http://127.0.0.1:8104}"
+  mkt6:
+    label: "Marketing Compliance Gate"
+    ui_upstream: "${PORTAL_MKT6_UI:-http://127.0.0.1:3115}"
+    api_upstream: "${PORTAL_MKT6_API:-http://127.0.0.1:8105}"
+  rsk3:
+    label: "Architecture Validator"
+    ui_upstream: "${PORTAL_RSK3_UI:-http://127.0.0.1:3116}"
+    api_upstream: "${PORTAL_RSK3_API:-http://127.0.0.1:8088}"
+  hrz4:
+    label: "AI Quality & Promotion Gate"
+    ui_upstream: "${PORTAL_HRZ4_UI:-http://127.0.0.1:3117}"
+    api_upstream: "${PORTAL_HRZ4_API:-http://127.0.0.1:8084}"
+  doc6:
+    label: "Complaints Review"
+    ui_upstream: "${PORTAL_DOC6_UI:-http://127.0.0.1:3118}"
+    api_upstream: "${PORTAL_DOC6_API:-http://127.0.0.1:8095}"

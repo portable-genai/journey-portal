@@ -52,9 +52,17 @@ const frameAncestors = resolveFrameAncestors(process.env.NEXT_PUBLIC_FRAME_ANCES
 const proxyTimeout = Number(process.env.PORTAL_SHELL_PROXY_TIMEOUT_MS || 900_000);
 const staticExport = process.env.PORTAL_STATIC_EXPORT === "1";
 
+// This shell renders whichever journey NEXT_PUBLIC_JOURNEY names, so one codebase serves
+// every persona workbench rather than being copied per journey. Serving several at once
+// needs one thing beyond a port: a build directory each, because concurrent instances
+// sharing `.next` overwrite each other's compiled output. Unset keeps the default, so a
+// single-shell run is unchanged.
+const distDir = process.env.PORTAL_SHELL_DIST_DIR || undefined;
+
 const nextConfig = {
   reactStrictMode: true,
   output: staticExport ? "export" : undefined,
+  ...(distDir ? { distDir } : {}),
   experimental: { proxyTimeout },
   ...(staticExport
     ? {}

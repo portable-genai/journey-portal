@@ -7,7 +7,8 @@ Brings up, as child processes:
   configured api port) and its Next.js UI (on its configured ui port, built with its canonical
   base path plus embed env so it mounts same-origin under the portal);
 * the portal BFF (``uvicorn journey_portal.api.app:app`` on :8110);
-* the two shells - the React RM shell (:3000) and the Angular Ops shell (:4200).
+* one shell per journey - the React shell in `ui-rm` serves every journey but `ops`, each
+  on its own port, and `ops` keeps its Angular shell so two front-end stacks are proved.
 
 Each app repo is discovered next to this one in the polyrepo workspace; its backend package is
 found by globbing ``src/*/api/app.py`` so no per-repo package name is hard-coded. A missing repo
@@ -57,7 +58,14 @@ from journey_portal.domain.catalog import JourneyCatalog
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _WORKSPACE = _REPO_ROOT.parent
-_SHELL_ORIGINS = "http://localhost:3000 http://localhost:4200"
+#: Journey key -> the port its shell serves on. The React shell in `ui-rm` renders whichever
+#: journey it is told to, so every journey but `ops` (which keeps its own Angular shell, to
+#: prove two front-end stacks against one portal contract) is served by that one codebase.
+_SHELL_PORTS: dict[str, int] = {"rm": 3000, "mkt": 3001, "gov": 3002, "svc": 3003}
+_OPS_SHELL_PORT = 4200
+_SHELL_ORIGINS = " ".join(
+    f"http://localhost:{port}" for port in (*_SHELL_PORTS.values(), _OPS_SHELL_PORT)
+)
 # This credential exists solely inside launcher-created backend processes.  It is intentionally
 # synthetic and never passed to a shell, iframe, or portal BFF environment.  A user may override
 # it for a local integration test, but production wiring must inject a secret through its runtime.
@@ -152,6 +160,41 @@ _APP_REPOS: dict[str, str] = {
     "doc4": "trade-finance-checker",
     "rsk1": "compliance-advisory",
     "hrz7": "human-review-console",
+    "mkt1": "market-intelligence",
+    "mkt2": "campaign-planner",
+    "mkt3": "creative-studio",
+    "mkt4": "performance-marketing-optimisation",
+    "mkt5": "next-best-action",
+    "mkt6": "marketing-compliance-gate",
+    "rsk3": "architecture-validator",
+    "hrz4": "model-quality-gate",
+    "doc6": "complaints-review",
+}
+
+# app id -> the environment variable that app reads its profile from.
+#
+# Every app is TOLD its posture rather than left to inherit one. Only some of them refuse an
+# inherited profile today, and relying on that is how the review console ended up refusing
+# every write while its health check read green: the failure is invisible until a demo step
+# tries to do something. Naming the profile for all of them costs one line each and removes
+# the whole class.
+_APP_PROFILE_ENVS: dict[str, str] = {
+    "doc1": "CDD_PROFILE",
+    "doc2": "CREDIT_MEMO_PROFILE",
+    "doc3": "CIO_PROFILE",
+    "doc4": "TRADE_FINANCE_PROFILE",
+    "doc5": "LOAN_DOC_PROFILE",
+    "doc6": "COMPLAINTS_PROFILE",
+    "rsk1": "COMPLIANCE_PROFILE",
+    "rsk3": "ARCH_VALIDATOR_PROFILE",
+    "hrz4": "AI_QUALITY_PROFILE",
+    "hrz7": "REVIEW_PROFILE",
+    "mkt1": "MKT_INTEL_PROFILE",
+    "mkt2": "MKT_CAMPAIGN_PROFILE",
+    "mkt3": "MKT_CREATIVE_PROFILE",
+    "mkt4": "MKT_PERF_PROFILE",
+    "mkt5": "MKT_NBA_PROFILE",
+    "mkt6": "MKT_GOV_PROFILE",
 }
 
 
@@ -569,6 +612,11 @@ class Launcher:
         ):
             return
         backend_env = {"PYTHONPATH": "src"}
+        # Name the posture for every app before anything app-specific runs. The branches
+        # below may raise it to a live profile; none of them may leave it inherited.
+        profile_env = _APP_PROFILE_ENVS.get(app_id)
+        if profile_env is not None:
+            backend_env[profile_env] = _PORTAL_LOCAL_PROFILE
         # The CDD assessment must reach Hrz7 as a service producer, never by borrowing the
         # browser's portal identity.  This remains entirely local: both endpoints bind loopback
         # and the shared synthetic token is present only in their backend process environments.
@@ -588,11 +636,6 @@ class Launcher:
         elif app_id == "hrz7":
             backend_env.update(
                 {
-                    # Hrz7 refuses a seeded persona whose profile was INHERITED rather than
-                    # chosen, so leaving this unset answered 401 on every review while its
-                    # health check still read green: the queue looked up and disposed of
-                    # nothing. This launcher is the deliberate demo run its error names.
-                    "REVIEW_PROFILE": _PORTAL_LOCAL_PROFILE,
                     "REVIEW_DB_PATH": str(_HRZ7_REVIEW_DB),
                     "REVIEW_S2S_TOKEN": self._local_demo_s2s_token(),
                 }
@@ -653,20 +696,34 @@ class Launcher:
         )
 
     def launch_shells(self, journeys: tuple[str, ...]) -> None:
-        if "rm" in journeys and (_REPO_ROOT / "ui-rm" / "node_modules").is_dir():
+        for journey in journeys:
+            if journey == "ops":
+                continue  # its own Angular shell, below
+            port = _SHELL_PORTS.get(journey)
+            if port is None:
+                self._unavailable(f"{journey}-shell", f"no shell port is assigned to {journey!r}")
+                continue
+            if not (_REPO_ROOT / "ui-rm" / "node_modules").is_dir():
+                self._unavailable(f"{journey}-shell", "run 'npm install' in ui-rm first")
+                continue
             if self.built and not self._clear_stale_listener(
-                "rm-shell", 3000, _REPO_ROOT / "ui-rm"
+                f"{journey}-shell", port, _REPO_ROOT / "ui-rm"
             ):
                 return
+            # One codebase, one instance per journey. The shell renders whatever journey it
+            # is named, so a new persona workbench is configuration rather than a second
+            # front end; the separate build directory is what lets the instances coexist,
+            # because concurrent runs sharing `.next` overwrite each other's output.
             self._spawn(
-                "rm-shell",
-                ["npm", "run", "dev"],
+                f"{journey}-shell",
+                ["npm", "run", "dev", "--", "--port", str(port)],
                 cwd=_REPO_ROOT / "ui-rm",
-                env={},
-                readiness_url="http://127.0.0.1:3000/",
+                env={
+                    "NEXT_PUBLIC_JOURNEY": journey,
+                    "PORTAL_SHELL_DIST_DIR": f".next-{journey}",
+                },
+                readiness_url=f"http://127.0.0.1:{port}/",
             )
-        elif "rm" in journeys:
-            self._unavailable("rm-shell", "run 'npm install' in ui-rm first")
         if "ops" in journeys and (_REPO_ROOT / "ui-ops" / "node_modules").is_dir():
             if self.built and not self._clear_stale_listener(
                 "ops-shell", 4200, _REPO_ROOT / "ui-ops"
@@ -781,10 +838,11 @@ class Launcher:
 
     def wait(self, journeys: tuple[str, ...]) -> None:
         destinations = []
-        if "rm" in journeys and self.with_shells:
-            destinations.append("RM shell at http://localhost:3000")
-        if "ops" in journeys and self.with_shells:
-            destinations.append("Ops shell at http://localhost:4200")
+        if self.with_shells:
+            for journey in journeys:
+                port = _OPS_SHELL_PORT if journey == "ops" else _SHELL_PORTS.get(journey)
+                if port is not None:
+                    destinations.append(f"{journey} shell at http://localhost:{port}")
         if destinations:
             print(f"\ndemo ready. Open the {' and the '.join(destinations)}.")
             print("Ctrl-C to stop everything.\n")
@@ -868,7 +926,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--journey",
-        choices=("rm", "ops"),
+        choices=("rm", "ops", "mkt", "gov", "svc"),
         help="Launch only one journey's embedded apps and matching shell.",
     )
     parser.add_argument(
@@ -898,10 +956,12 @@ def main() -> int:
     for app_id, (api_port, ui_port) in plan.items():
         repo_name = _APP_REPOS.get(app_id, "?")
         print(f"  {app_id:6} backend :{api_port}   ui :{ui_port}   repo {repo_name}")
-    if not args.no_shells and "rm" in selected_journeys:
-        print("  RM shell (React)  :3000")
-    if not args.no_shells and "ops" in selected_journeys:
-        print("  Ops shell (Angular):4200")
+    if not args.no_shells:
+        for journey in selected_journeys:
+            if journey == "ops":
+                print(f"  ops shell (Angular) :{_OPS_SHELL_PORT}")
+            elif journey in _SHELL_PORTS:
+                print(f"  {journey} shell (React)   :{_SHELL_PORTS[journey]}")
     ui_mode = "built (next build + next start)" if args.built else "dev (next dev)"
     print(f"  embedded UIs      {ui_mode}")
     if args.fresh_state:

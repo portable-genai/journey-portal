@@ -312,6 +312,11 @@ class Step:
     # A preflight checks them once before the run so a non-live stack fails at the
     # outset instead of part-way through the browser demo.
     requires_live: tuple[str, ...] = ()
+    # Apps whose only demo profile is `local`, because the system ships no live profile.
+    # Named separately from requires_live rather than folded into it: the two say different
+    # things to a presenter, and blurring them is how a fixture run gets narrated as real
+    # data. A step may not appear in both.
+    requires_fixture: tuple[str, ...] = ()
     # True when the step can also drive the deployed portal. Hosted runs are the RM
     # journey subset that exists on the deployment; persona-picker steps and apps the
     # deployment does not embed stay local-only.
