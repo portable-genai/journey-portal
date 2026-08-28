@@ -43,7 +43,7 @@ resource "google_compute_backend_service" "portal" {
   }
   log_config {
     enable      = true
-    sample_rate = 1
+    sample_rate = var.lb_log_sample_rate
   }
 }
 
@@ -62,7 +62,7 @@ resource "google_compute_backend_service" "rm_shell" {
   }
   log_config {
     enable      = true
-    sample_rate = 1
+    sample_rate = var.lb_log_sample_rate
   }
 }
 
@@ -81,7 +81,7 @@ resource "google_compute_backend_service" "ops_shell" {
   }
   log_config {
     enable      = true
-    sample_rate = 1
+    sample_rate = var.lb_log_sample_rate
   }
 }
 

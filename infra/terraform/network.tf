@@ -36,6 +36,6 @@ resource "google_compute_router_nat" "portal" {
 
   log_config {
     enable = true
-    filter = "ALL"
+    filter = var.nat_log_filter
   }
 }

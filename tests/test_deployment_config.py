@@ -81,6 +81,9 @@ def _valid_values() -> dict[str, str]:
         "DEPLOY_AUDIT_RETENTION_DAYS": "180",
         "DEPLOY_LOCK_AUDIT_BUCKET": "false",
         "DEPLOY_CLOUD_RUN_DELETION_PROTECTION": "true",
+        "DEPLOY_RUN_MIN_INSTANCES": "1",
+        "DEPLOY_LB_LOG_SAMPLE_RATE": "1",
+        "DEPLOY_NAT_LOG_FILTER": "ALL",
         "DEPLOY_TERRAFORM_STATE_BUCKET": "bank-hrz9-prod-state",
         "DEPLOY_TERRAFORM_STATE_PREFIX": "hrz9/production",
         "DEPLOYMENT_OWNER": "deployment@bank.internal",
@@ -449,6 +452,52 @@ def test_named_deployment_requires_six_month_minimum_retention(
 
     with pytest.raises(DeploymentConfigError, match="DEPLOY_AUDIT_RETENTION_DAYS"):
         _load(tmp_path, values)
+
+
+@pytest.mark.parametrize("floor", ["-1", "101", "one", ""])
+def test_rejects_an_instance_floor_outside_supported_bounds(tmp_path: Path, floor: str) -> None:
+    values = _valid_values()
+    values["DEPLOY_RUN_MIN_INSTANCES"] = floor
+
+    with pytest.raises(DeploymentConfigError, match="DEPLOY_RUN_MIN_INSTANCES"):
+        _load(tmp_path, values)
+
+
+@pytest.mark.parametrize("rate", ["-0.1", "1.1", "most", ""])
+def test_rejects_a_load_balancer_sample_rate_outside_zero_to_one(tmp_path: Path, rate: str) -> None:
+    values = _valid_values()
+    values["DEPLOY_LB_LOG_SAMPLE_RATE"] = rate
+
+    with pytest.raises(DeploymentConfigError, match="DEPLOY_LB_LOG_SAMPLE_RATE"):
+        _load(tmp_path, values)
+
+
+@pytest.mark.parametrize("nat_filter", ["ERRORS", "all", "NONE", ""])
+def test_rejects_an_unknown_nat_log_filter(tmp_path: Path, nat_filter: str) -> None:
+    # Refused HERE as well as in Terraform: an operator edits this file without an apply, and
+    # an apply happens without this file. A rule enforced on one side of that boundary is
+    # enforced on neither.
+    values = _valid_values()
+    values["DEPLOY_NAT_LOG_FILTER"] = nat_filter
+
+    with pytest.raises(DeploymentConfigError, match="DEPLOY_NAT_LOG_FILTER"):
+        _load(tmp_path, values)
+
+
+def test_the_cost_posture_reaches_terraform_as_the_deployment_stated_it(tmp_path: Path) -> None:
+    # The point of the whole change: a deployment that declines the floor must actually reach
+    # Terraform having declined it. Rendering it back as the code default is the failure this
+    # asserts against, and it is exactly what happened to the audit lock in the sibling stack.
+    values = _valid_values()
+    values["DEPLOY_RUN_MIN_INSTANCES"] = "0"
+    values["DEPLOY_LB_LOG_SAMPLE_RATE"] = "0.1"
+    values["DEPLOY_NAT_LOG_FILTER"] = "ERRORS_ONLY"
+
+    config = _load(tmp_path, values)
+
+    assert config.terraform_inputs["runtime_min_instances"] == 0
+    assert config.terraform_inputs["lb_log_sample_rate"] == 0.1
+    assert config.terraform_inputs["nat_log_filter"] == "ERRORS_ONLY"
 
 
 @pytest.mark.parametrize(

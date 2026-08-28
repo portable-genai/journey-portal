@@ -33,7 +33,16 @@ def test_internal_only_upstreams_are_paired_with_direct_vpc_egress() -> None:
     assert "depends_on              = [google_project_service.services]" in network
     assert 'resource "google_compute_router_nat" "portal"' in network
     assert 'source_subnetwork_ip_ranges_to_nat = "LIST_OF_SUBNETWORKS"' in network
-    assert 'filter = "ALL"' in network
+    # NAT flow logging is on, and what it captures is a reviewed variable rather than a
+    # literal. This used to assert `filter = "ALL"` in place, which stopped being the
+    # durable statement the moment the volume became something a deployment could lower:
+    # the invariant is that logging is enabled and that declining full capture is a choice
+    # someone makes, not that this file spells one value.
+    assert "enable = true" in network
+    assert "filter = var.nat_log_filter" in network
+    variables = _source("variables.tf")
+    assert 'variable "nat_log_filter"' in variables
+    assert 'default     = "ALL"' in variables
 
 
 def test_cmek_vpc_sc_and_retention_controls_are_code_enforced() -> None:
