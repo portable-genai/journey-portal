@@ -966,14 +966,22 @@ def _rm_doc3(page: Any) -> None:
     frame.get_by_placeholder("client-000042").fill(client_id)
     _inputs_ready("the registered client the briefing is for")
     frame.get_by_role("button", name="Build briefing").click()
-    # First run performs the grounded research pass; later runs serve its cache.
-    frame.get_by_text("decision-support, not advice", exact=False).wait_for(
+    # The wait that matters is for the briefing itself, and it carries the long timeout: the
+    # first run performs a grounded research pass and later runs serve its cache.
+    #
+    # This used to wait first on "decision-support, not advice", which is part of the
+    # console's own STATIC header. That matched the instant the page rendered, spent none of
+    # the long timeout it was given, and left the real assertion below with the default
+    # thirty seconds while the research was still running. The step then failed on a
+    # briefing that was about to arrive, and would equally have passed on a page where
+    # nothing had happened at all.
+    #
+    # The panel names the client, which proves the briefing is the registered portfolio and
+    # not a sample. Headlines are model-written here, so they are never asserted on; the
+    # citation is the evidence that matters.
+    frame.get_by_text(f"Talking points (client {client_id})", exact=False).wait_for(
         timeout=_LIVE_STEP_TIMEOUT_MS
     )
-    # The panel names the client, which proves the briefing is the audience-registered
-    # portfolio and not a sample. Headlines are model-written under live, so they are
-    # never asserted on; the citation is the evidence that matters.
-    frame.get_by_text(f"Talking points (client {client_id})", exact=False).wait_for()
     # Every talking point cites its real research source, never the fictional corpus.
     frame.get_by_text("house view", exact=False).first.wait_for()
     if frame.get_by_text("example.test", exact=False).count():
