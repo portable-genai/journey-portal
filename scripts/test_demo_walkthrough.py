@@ -251,9 +251,15 @@ class WalkthroughSelectionTests(unittest.TestCase):
         # Only the hyphenated ids: those are code names a narrator would have to spell
         # out. A bare word like "close" is also a step id and also ordinary English.
         step_ids = {step.id for step in walkthrough.STEPS if "-" in step.id}
-        for step in walkthrough.STEPS:
-            with self.subTest(step=step.id):
-                notes = step.presenter_notes
+        spoken = [(step.id, step.presenter_notes) for step in walkthrough.STEPS]
+        spoken += [
+            (f"{step.id} (hosted)", step.hosted_notes)
+            for step in walkthrough.STEPS
+            if step.hosted_notes is not None
+        ]
+        spoken.append(("hosted opening", walkthrough.HOSTED_OPENING_NOTES))
+        for step_id, notes in spoken:
+            with self.subTest(step=step_id):
                 self.assertFalse(any(word in notes.lower() for word in forbidden))
                 self.assertFalse(any(other in notes for other in step_ids))
                 # Prose, not a form: several sentences, and no label-and-colon headings.
@@ -261,7 +267,7 @@ class WalkthroughSelectionTests(unittest.TestCase):
                 self.assertGreaterEqual(len(sentences), 2)
                 for line in notes.splitlines():
                     self.assertFalse(
-                        _LABEL_HEADING.match(line), f"heading-style label in {step.id}: {line!r}"
+                        _LABEL_HEADING.match(line), f"heading-style label in {step_id}: {line!r}"
                     )
 
     def test_the_opening_frames_all_three_portability_layers(self) -> None:
@@ -294,6 +300,118 @@ class WalkthroughSelectionTests(unittest.TestCase):
         self.assertIn("tamper-evident", notes["ops-hrz7-review"])
         # The close returns to the four questions the whole demonstration answers.
         self.assertIn("four questions", notes["close"])
+
+
+class HostedWalkthroughTests(unittest.TestCase):
+    """The gcp target: the deployed portal's honest subset, with hosted narration."""
+
+    def tearDown(self) -> None:
+        walkthrough._HOSTED = False
+        walkthrough._CONFIRM_INPUTS = False
+
+    def test_hosted_rm_script_is_the_deployed_subset(self) -> None:
+        self.assertEqual(
+            [step.id for step in walkthrough.selected_steps("rm", hosted=True)],
+            ["rm-open", "rm-spoof-rejected", "rm-doc1-cdd", "close"],
+        )
+
+    def test_hosted_selection_excludes_apps_the_deployment_does_not_embed(self) -> None:
+        # The Ops journey's apps are not deployed, so a hosted ops run is only the close.
+        self.assertEqual(
+            [step.id for step in walkthrough.selected_steps("ops", hosted=True)],
+            ["close"],
+        )
+        with self.assertRaisesRegex(ValueError, "unknown or excluded step"):
+            walkthrough.selected_steps("rm", "rm-doc1-flagged", hosted=True)
+
+    def test_hosted_notes_exist_only_on_hosted_steps(self) -> None:
+        for step in walkthrough.STEPS:
+            with self.subTest(step=step.id):
+                if step.hosted_notes is not None:
+                    self.assertTrue(step.hosted, f"{step.id} narrates a run it never joins")
+
+    def test_hosted_opening_frames_the_flip_and_the_honest_boundaries(self) -> None:
+        opening = walkthrough.HOSTED_OPENING_NOTES.lower()
+        # The flip: same code, different profile, managed services.
+        self.assertIn("profile string", opening)
+        self.assertIn("managed", opening)
+        # The honesty said before any screen: reference status and the screening stand-in.
+        self.assertIn("reference deployment", opening)
+        self.assertIn("stand-in", opening)
+        # The pair claim: agreement is asserted by a comparison, not by the eye.
+        self.assertIn("refuses to pass", opening)
+
+    def test_hosted_list_needs_no_deployment_inputs(self) -> None:
+        output = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(output):
+                code = walkthrough.main(["--journey", "rm", "--target", "gcp", "--list"])
+        finally:
+            walkthrough._HOSTED = False
+        self.assertEqual(code, 0)
+        text = output.getvalue()
+        self.assertIn("rm-doc1-cdd", text)
+        self.assertNotIn("rm-doc1-flagged", text)
+        self.assertIn("reference deployment", text)
+
+    def test_hosted_preflight_expects_the_managed_profile(self) -> None:
+        from unittest import mock
+
+        walkthrough._HOSTED = True
+        with mock.patch.object(walkthrough, "_doc1_manifest", lambda: {}):
+            page = _FakePage(profile="gcp")
+            walkthrough._preflight(page, walkthrough.selected_steps("rm", hosted=True))
+            local_page = _FakePage(profile="live")
+            with self.assertRaisesRegex(RuntimeError, r"profile 'live'"):
+                walkthrough._preflight(local_page, walkthrough.selected_steps("rm", hosted=True))
+
+
+class ConfirmInputsTests(unittest.TestCase):
+    """The fill-then-hold contract: inputs are confirmed before every submission."""
+
+    def tearDown(self) -> None:
+        walkthrough._CONFIRM_INPUTS = False
+
+    def test_every_fill_and_submit_step_confirms_its_inputs(self) -> None:
+        """Each step that fills a form holds via the shared gate before submitting.
+
+        Source-level on purpose: the gate must sit between the fill and the click, and a
+        step that grows a new submission without the hold should fail here rather than
+        surprise a presenter mid-demo.
+        """
+        import inspect
+
+        submitting = {
+            "rm-doc1-cdd",
+            "rm-doc1-flagged",
+            "rm-doc1-blocked",
+            "rm-doc3-briefing",
+            "ops-doc2-credit-memo",
+            "ops-doc4-ucp600",
+            "ops-rsk1-compliance",
+            "ops-hrz7-review",
+        }
+        for step in walkthrough.STEPS:
+            if step.id not in submitting:
+                continue
+            with self.subTest(step=step.id):
+                source = inspect.getsource(step.action)
+                self.assertIn("_inputs_ready(", source)
+                # The hold precedes the step's final submitting click.
+                self.assertLess(source.index("_inputs_ready("), source.rindex(".click()"))
+
+    def test_the_hold_only_engages_when_asked(self) -> None:
+        from unittest import mock
+
+        prompts: list[str] = []
+        with mock.patch("builtins.input", side_effect=lambda p="": prompts.append(p)):
+            walkthrough._CONFIRM_INPUTS = False
+            walkthrough._inputs_ready("something")
+            self.assertEqual(prompts, [])
+            walkthrough._CONFIRM_INPUTS = True
+            walkthrough._inputs_ready("something")
+        self.assertEqual(len(prompts), 1)
+        self.assertIn("submit", prompts[0].lower())
 
 
 if __name__ == "__main__":

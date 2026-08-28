@@ -588,6 +588,11 @@ class Launcher:
         elif app_id == "hrz7":
             backend_env.update(
                 {
+                    # Hrz7 refuses a seeded persona whose profile was INHERITED rather than
+                    # chosen, so leaving this unset answered 401 on every review while its
+                    # health check still read green: the queue looked up and disposed of
+                    # nothing. This launcher is the deliberate demo run its error names.
+                    "REVIEW_PROFILE": _PORTAL_LOCAL_PROFILE,
                     "REVIEW_DB_PATH": str(_HRZ7_REVIEW_DB),
                     "REVIEW_S2S_TOKEN": self._local_demo_s2s_token(),
                 }

@@ -25,8 +25,13 @@ format: ## Auto-format and fix.
 typecheck: ## Static type check (mypy strict).
 	mypy src
 
+# The presenter runners' own suites live beside them under scripts/ and sit outside
+# `testpaths`, so naming them here is what makes them run at all. A test the gate never
+# invokes cannot catch anything, however much it asserts. `tests` is named explicitly
+# alongside them because any path argument replaces `testpaths` entirely, which would
+# quietly reduce this target to the two scripts suites.
 test: ## Offline pytest suite (local profile).
-	pytest -m 'not integration'
+	pytest -m 'not integration' tests scripts/test_demo_walkthrough.py scripts/test_run_journeys.py
 
 eval: ## Offline evaluation gate (smoke; exit non-zero on fail).
 	$(PY) eval/run_eval.py
