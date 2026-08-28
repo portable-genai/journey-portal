@@ -103,6 +103,10 @@ _ALL_MANAGED_ENV_NAMES = (
     _CLOUD_RUN_MANAGED_ENV_NAMES | _ALL_PROFILE_ENV_NAMES | _ALL_IAP_AUDIENCE_ENV_NAMES
 )
 _DURATION_RE = re.compile(r"^[0-9]+(?:\.[0-9]{1,9})?s$")
+# Mirrors the nat_log_filter validation in infra/terraform/variables.tf. Both halves refuse,
+# because an operator can change this file without an apply and Terraform can be applied
+# without this file.
+_NAT_LOG_FILTERS = frozenset({"ALL", "ERRORS_ONLY", "TRANSLATIONS_ONLY"})
 _MIN_KMS_ROTATION_SECONDS = Decimal(86_400)
 _MAX_KMS_ROTATION_SECONDS = Decimal(3_153_600_000)
 _OWNER_KEYS = (
@@ -152,6 +156,14 @@ REQUIRED_NONSECRET_KEYS = frozenset(
         "DEPLOY_AUDIT_RETENTION_DAYS",
         "DEPLOY_LOCK_AUDIT_BUCKET",
         "DEPLOY_CLOUD_RUN_DELETION_PROTECTION",
+        # The deployment's own cost posture. Required rather than optional, and required for
+        # the reason the WORM lock next door was NOT: a default that a deployment never states
+        # is a decision nobody made. These three are the whole of this stack's standing spend
+        # that a deployment can actually decline, so it declines them here or says it keeps
+        # them.
+        "DEPLOY_RUN_MIN_INSTANCES",
+        "DEPLOY_LB_LOG_SAMPLE_RATE",
+        "DEPLOY_NAT_LOG_FILTER",
         "DEPLOY_TERRAFORM_STATE_BUCKET",
         "DEPLOY_TERRAFORM_STATE_PREFIX",
         "DEPLOYMENT_OWNER",
@@ -694,6 +706,23 @@ def load_deployment_config(env_file: Path, secrets_file: Path) -> DeploymentConf
         raise DeploymentConfigError("DEPLOY_AUDIT_RETENTION_DAYS must be an integer") from exc
     if not 180 <= retention_days <= 3650:
         raise DeploymentConfigError("DEPLOY_AUDIT_RETENTION_DAYS must be between 180 and 3650")
+    try:
+        run_min_instances = int(values["DEPLOY_RUN_MIN_INSTANCES"])
+    except ValueError as exc:
+        raise DeploymentConfigError("DEPLOY_RUN_MIN_INSTANCES must be an integer") from exc
+    if not 0 <= run_min_instances <= 100:
+        raise DeploymentConfigError("DEPLOY_RUN_MIN_INSTANCES must be between 0 and 100")
+    try:
+        lb_log_sample_rate = float(values["DEPLOY_LB_LOG_SAMPLE_RATE"])
+    except ValueError as exc:
+        raise DeploymentConfigError("DEPLOY_LB_LOG_SAMPLE_RATE must be a number") from exc
+    if not 0.0 <= lb_log_sample_rate <= 1.0:
+        raise DeploymentConfigError("DEPLOY_LB_LOG_SAMPLE_RATE must be between 0 and 1")
+    nat_log_filter = values["DEPLOY_NAT_LOG_FILTER"]
+    if nat_log_filter not in _NAT_LOG_FILTERS:
+        raise DeploymentConfigError(
+            "DEPLOY_NAT_LOG_FILTER must be one of " + ", ".join(sorted(_NAT_LOG_FILTERS))
+        )
     rotation_period = values["DEPLOY_CMEK_ROTATION_PERIOD"]
     if not _DURATION_RE.fullmatch(rotation_period):
         raise DeploymentConfigError(
@@ -759,6 +788,9 @@ def load_deployment_config(env_file: Path, secrets_file: Path) -> DeploymentConf
         "audit_retention_days": retention_days,
         "lock_audit_bucket": _boolean(values, "DEPLOY_LOCK_AUDIT_BUCKET"),
         "cloud_run_deletion_protection": _boolean(values, "DEPLOY_CLOUD_RUN_DELETION_PROTECTION"),
+        "runtime_min_instances": run_min_instances,
+        "lb_log_sample_rate": lb_log_sample_rate,
+        "nat_log_filter": nat_log_filter,
     }
     return DeploymentConfig(values=values, secrets=secrets, terraform_inputs=terraform_inputs)
 

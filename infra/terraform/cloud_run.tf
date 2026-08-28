@@ -23,13 +23,24 @@ resource "google_cloud_run_v2_service" "portal" {
   ingress             = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
   deletion_protection = var.cloud_run_deletion_protection
 
+  # The floor used to live inside the `runtime` object, where one validation held it against
+  # the ceiling. Splitting it out gave the deployment a surface and cost that pairing: a
+  # `validation` block may not read a second variable on the Terraform floor this stack
+  # declares (>= 1.7), so the check moves here, where it still refuses at plan time.
+  lifecycle {
+    precondition {
+      condition     = var.runtime_min_instances <= var.runtime.max_instances
+      error_message = "runtime_min_instances must not exceed runtime.max_instances: a floor above the ceiling is not a scaling policy."
+    }
+  }
+
   template {
     service_account                  = google_service_account.portal.email
     encryption_key                   = google_kms_crypto_key.portal.id
     timeout                          = var.runtime.timeout
     max_instance_request_concurrency = var.runtime.concurrency
     scaling {
-      min_instance_count = var.runtime.min_instances
+      min_instance_count = var.runtime_min_instances
       max_instance_count = var.runtime.max_instances
     }
     vpc_access {
@@ -182,7 +193,7 @@ resource "google_cloud_run_v2_service" "rm_shell" {
     timeout                          = var.runtime.timeout
     max_instance_request_concurrency = var.runtime.concurrency
     scaling {
-      min_instance_count = var.runtime.min_instances
+      min_instance_count = var.runtime_min_instances
       max_instance_count = var.runtime.max_instances
     }
     containers {
@@ -228,7 +239,7 @@ resource "google_cloud_run_v2_service" "ops_shell" {
     timeout                          = var.runtime.timeout
     max_instance_request_concurrency = var.runtime.concurrency
     scaling {
-      min_instance_count = var.runtime.min_instances
+      min_instance_count = var.runtime_min_instances
       max_instance_count = var.runtime.max_instances
     }
     containers {
@@ -275,7 +286,7 @@ resource "google_cloud_run_v2_service" "embedded_ui" {
     timeout                          = var.runtime.timeout
     max_instance_request_concurrency = var.runtime.concurrency
     scaling {
-      min_instance_count = var.runtime.min_instances
+      min_instance_count = var.runtime_min_instances
       max_instance_count = var.runtime.max_instances
     }
     containers {
@@ -339,7 +350,7 @@ resource "google_cloud_run_v2_service" "embedded_api" {
     timeout                          = var.runtime.timeout
     max_instance_request_concurrency = var.runtime.concurrency
     scaling {
-      min_instance_count = var.runtime.min_instances
+      min_instance_count = var.runtime_min_instances
       max_instance_count = var.runtime.max_instances
     }
     containers {

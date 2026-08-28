@@ -383,7 +383,6 @@ variable "runtime" {
     cpu           = string
     memory        = string
     concurrency   = number
-    min_instances = number
     max_instances = number
     timeout       = string
   })
@@ -391,14 +390,78 @@ variable "runtime" {
     cpu           = "1"
     memory        = "512Mi"
     concurrency   = 40
-    min_instances = 1
     max_instances = 10
     timeout       = "300s"
   }
-  description = "Bounded Cloud Run sizing shared by the portal services."
+  description = <<-EOT
+    Bounded Cloud Run sizing shared by the portal services.
+
+    The instance FLOOR is deliberately not in here; it is `runtime_min_instances`. It was the
+    one field of this object a deployment had reason to set on its own, and while it lived
+    inside a reviewed object with no deployment surface, the only way to change it was to edit
+    the default every adopter inherits.
+  EOT
   validation {
-    condition     = var.runtime.concurrency >= 1 && var.runtime.concurrency <= 1000 && var.runtime.min_instances >= 0 && var.runtime.max_instances >= var.runtime.min_instances && var.runtime.max_instances <= 100 && can(regex("^[1-9][0-9]*s$", var.runtime.timeout))
+    condition     = var.runtime.concurrency >= 1 && var.runtime.concurrency <= 1000 && var.runtime.max_instances >= 1 && var.runtime.max_instances <= 100 && can(regex("^[1-9][0-9]*s$", var.runtime.timeout))
     error_message = "runtime concurrency, scaling, and timeout are outside safe bounds."
+  }
+}
+
+variable "runtime_min_instances" {
+  type        = number
+  default     = 1
+  description = <<-EOT
+    Warm instances held per portal service. Default 1; this stack runs five services, so the
+    default is five instances billed around the clock whether or not anyone calls them.
+
+    It is the deployment's dominant idle cost, and until this variable existed it was not
+    something a deployment could decline: the value sat inside the reviewed `runtime` object,
+    which no deployment input reaches, so declining it meant editing the default every adopter
+    inherits. That is the same shape as an audit bucket that locked itself because the tfvars
+    said nothing -- a control with no surface is a control nobody chooses.
+
+    0 means cold starts: the first request after an idle period waits for a container. That is
+    the right trade for a reference deployment and the wrong one for a service whose callers
+    fail closed while it wakes. Set it back to 1 for a demonstration.
+  EOT
+  validation {
+    condition     = var.runtime_min_instances >= 0 && var.runtime_min_instances <= 100
+    error_message = "runtime_min_instances must be between 0 and 100."
+  }
+}
+
+variable "lb_log_sample_rate" {
+  type        = number
+  default     = 1
+  description = <<-EOT
+    Fraction of load-balancer requests logged, per backend service. Default 1, meaning every
+    request, across three backends.
+
+    Full sampling is the right default for a deployment whose access log is evidence. It is an
+    odd one for a reference deployment carrying demonstration traffic into a CMEK-encrypted
+    retained bucket, and nothing here reads the volume it produces. Lower it deliberately; do
+    not lower it on a stack whose access log is part of an evidence claim.
+  EOT
+  validation {
+    condition     = var.lb_log_sample_rate >= 0 && var.lb_log_sample_rate <= 1
+    error_message = "lb_log_sample_rate must be between 0 and 1."
+  }
+}
+
+variable "nat_log_filter" {
+  type        = string
+  default     = "ALL"
+  description = <<-EOT
+    Which NAT connections are logged: ALL, ERRORS_ONLY or TRANSLATIONS_ONLY. Default ALL.
+
+    ERRORS_ONLY keeps what a NAT log is usually consulted for -- the connection that failed --
+    and drops the successful-translation volume that nothing reads. Kept as a variable rather
+    than lowered in place because on a stack with an egress claim to defend, the translations
+    ARE the evidence.
+  EOT
+  validation {
+    condition     = contains(["ALL", "ERRORS_ONLY", "TRANSLATIONS_ONLY"], var.nat_log_filter)
+    error_message = "nat_log_filter must be ALL, ERRORS_ONLY or TRANSLATIONS_ONLY."
   }
 }
 
