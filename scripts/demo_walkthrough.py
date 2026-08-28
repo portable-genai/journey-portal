@@ -613,9 +613,7 @@ _MKT_BUDGET = "250000"
 _MKT_THEME = "everyday saver, higher rate"
 _MKT_OFFER = "4.10% p.a."
 #: Copy written to fail: an unqualified guarantee, and no risk warning attached.
-_MKT_NONCOMPLIANT_COPY = (
-    "Guaranteed 90% returns, risk free, the best savings account in the world."
-)
+_MKT_NONCOMPLIANT_COPY = "Guaranteed 90% returns, risk free, the best savings account in the world."
 _MKT_ACCOUNT = "acct-sg-001"
 #: A customer the recommendation engine actually holds a profile for.
 _MKT_CUSTOMER = "cust-sg-bank-1"
@@ -776,11 +774,14 @@ def _gov_promotion_gate(page: Any) -> None:
     frame = _select_journey_tab(page, "gov", "AI Quality & Promotion Gate", "hrz4")
     _inputs_ready("the model, the prompt version and the golden dataset to judge")
     frame.get_by_role("button", name="Run promotion gate", exact=True).click()
-    frame.get_by_text("RED-TEAM REPORT", exact=False).first.wait_for(
-        timeout=_LIVE_STEP_TIMEOUT_MS
-    )
+    frame.get_by_text("RED-TEAM REPORT", exact=False).first.wait_for(timeout=_LIVE_STEP_TIMEOUT_MS)
     # A gate that reported nothing blocked would be a gate that ran no probes.
     frame.get_by_text("BLOCKED", exact=False).first.wait_for()
+    # The verdict is the point of the step: quality passed and promotion is still refused,
+    # for a governance reason the gate names. Asserting it keeps the narration honest if the
+    # fixture ever changes to one that passes.
+    frame.get_by_text("PROMOTION GATE VERDICT", exact=False).first.wait_for()
+    frame.get_by_text("not attested promotion evidence", exact=False).first.wait_for()
 
 
 #: A complaint of the kind a fair-dealing regime exists for: a capital-protection claim.
@@ -803,9 +804,7 @@ def _svc_complaint(page: Any) -> None:
     frame.locator("textarea").first.fill(_SVC_COMPLAINT)
     _inputs_ready("the complaint as the customer wrote it")
     frame.get_by_role("button", name="Review complaint", exact=True).click()
-    frame.get_by_text("Draft response", exact=False).first.wait_for(
-        timeout=_LIVE_STEP_TIMEOUT_MS
-    )
+    frame.get_by_text("Draft response", exact=False).first.wait_for(timeout=_LIVE_STEP_TIMEOUT_MS)
     # The draft must be visibly held for a person, and the assessment must cite its sources.
     frame.get_by_text("not sent", exact=False).first.wait_for()
     frame.get_by_text("REGUL", exact=False).first.wait_for()
@@ -823,9 +822,7 @@ def _svc_rules(page: Any) -> None:
         raise RuntimeError("expected exactly one compliance composer submit button")
     _inputs_ready("the question the complaints handler needs answered")
     submit.click()
-    frame.get_by_text("Grounded answer", exact=False).first.wait_for(
-        timeout=_LIVE_STEP_TIMEOUT_MS
-    )
+    frame.get_by_text("Grounded answer", exact=False).first.wait_for(timeout=_LIVE_STEP_TIMEOUT_MS)
 
 
 def _persona_close(page: Any) -> None:
@@ -1397,10 +1394,16 @@ STEPS: tuple[Step, ...] = (
         "Now the release itself. The gate scores the model against a fixed set of examples with "
         "named thresholds, and separately attacks it: attempts to hijack its instructions, to "
         "extract personal data, to make it produce something harmful, and to make it invent an "
-        "answer it has no grounds for. Each probe reports what happened. Two things matter here. "
-        "The thresholds belong to the institution rather than to the model supplier, and the "
-        "probes run against every candidate, so a new model earns its place by passing your "
-        "checks instead of arriving with a certificate.",
+        "answer it has no grounds for. Each probe reports what happened.\n\n"
+        "Now read the verdict at the top, because it is the most interesting thing on this "
+        "screen. Every quality measure passed and every attack was blocked, and the gate still "
+        "refuses to promote. The reason it gives is that the evidence it was handed is not "
+        "attested, which is a governance answer rather than a quality one: passing the tests is "
+        "not the same as having proof that the tests were run on the thing being shipped. A gate "
+        "that approved here would be measuring the model and calling it control. And notice "
+        "whose thresholds those are: they belong to the institution, not to the model supplier, "
+        "so a new model earns its place by passing your checks rather than by arriving with a "
+        "certificate.",
         frozenset({"gov"}),
         _gov_promotion_gate,
         requires_fixture=("hrz4",),
