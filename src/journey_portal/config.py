@@ -70,15 +70,20 @@ _DOC1_SCOPES_ENV = "PORTAL_DOC1_REQUESTED_SCOPES"
 _PUBLIC_ORIGIN_ENV = "PORTAL_PUBLIC_ORIGIN"
 _SESSION_SIGNING_KEY_ENV = "PORTAL_SESSION_SIGNING_KEY"
 #: The DEFAULT region when PORTAL_REGION is unset. It follows the portfolio region decision
-#: (org-metadata docs/deployment-region-alignment.md, recorded 2026-08-23 and REVISED
-#: 2026-08-24: the launch set co-locates, and that region is us-central1). Terraform passes
-#: its own region and allowlist to the runtime so the two cannot disagree; this default is
-#: what an unset deploy gets, and it is not a residency recommendation.
-REGION = "us-central1"
+#: (org-metadata docs/deployment-region-alignment.md, recorded 2026-08-23 and REVISED twice:
+#: to us-central1 on 2026-08-24, and back to asia-southeast1 on 2026-08-27 once the deferred
+#: per-service availability check was run). Terraform passes its own region and allowlist to
+#: the runtime so the two cannot disagree; this default is what an unset deploy gets, and it
+#: is not a residency recommendation. The reference deployment has NOT moved -- it still runs
+#: in us-central1 and is overridden there at deploy time, which is why us-central1 remains a
+#: member of DEFAULT_ALLOWED_REGIONS below.
+REGION = "asia-southeast1"
 _ALLOWED_REGIONS_ENV = "PORTAL_ALLOWED_REGIONS"
 _DEPLOYED_APPS_ENV = "PORTAL_APPS"
-#: The DEFAULT residency allowlist: the APAC regions this portal was first built for, plus the
-#: region the portfolio decision co-locates the reference deployment in. It is a default, never
+#: The DEFAULT residency allowlist: the APAC regions this portal was built for, plus
+#: us-central1, which stays a member for as long as the reference deployment runs there.
+#: Removing it would make the running deployment fail its own residency validation. It is a
+#: default, never
 #: a ceiling. Residency is a deploy-time decision in every other repository in
 #: this catalog — Doc1 takes DOC1_ALLOWED_REGIONS — and hardcoding a fixed set here made the
 #: portal the one component that could not follow a portfolio region decision without a code

@@ -19,7 +19,7 @@ def test_healthz(client: TestClient) -> None:
     body = client.get("/healthz").json()
     assert body["status"] == "ok"
     assert body["profile"] == "local"
-    assert body["region"] == "us-central1"
+    assert body["region"] == "asia-southeast1"
 
 
 def test_the_versioned_readiness_path_is_answered_by_the_application(client: TestClient) -> None:
@@ -38,7 +38,7 @@ def test_the_versioned_readiness_path_is_answered_by_the_application(client: Tes
     body = response.json()
     assert body["status"] == "ok"
     assert body["profile"] == "local"
-    assert body["region"] == "us-central1"
+    assert body["region"] == "asia-southeast1"
     assert body == client.get("/healthz").json(), (
         "the versioned readiness path must report exactly what /healthz reports, or the two "
         "probes disagree about the same container"
