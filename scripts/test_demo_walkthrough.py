@@ -10,6 +10,7 @@ import re
 import sys
 import unittest
 from pathlib import Path
+from typing import Any
 
 _SCRIPT = Path(__file__).with_name("demo_walkthrough.py")
 _SPEC = importlib.util.spec_from_file_location("demo_walkthrough", _SCRIPT)
@@ -43,6 +44,255 @@ class _FakePage:
     def evaluate(self, script: str, *args: object) -> dict[str, str]:
         self.consulted = True
         return {"profile": self._profile}
+
+
+class _Timeout(RuntimeError):
+    """Stands in for the timeout Playwright raises when a wait never resolves."""
+
+
+class _El:
+    """One rendered element: the exact text it puts in the document, and how it is reached.
+
+    ``rule_id`` is the rule name a findings row carries beside its status badge, which the
+    marketing-gate step reaches from the badge itself.
+    """
+
+    def __init__(self, text: str, *, role: str = "", tag: str = "", rule_id: str = "") -> None:
+        self.text = text
+        self.role = role
+        self.tag = tag
+        self.rule_id = rule_id
+
+
+class _FakeConsole:
+    """A console stand-in that renders one screen before a submission and another after.
+
+    It models the two matching rules the walkthrough's assertions actually depend on: a text
+    match is a case-INSENSITIVE substring of an element's own text unless ``exact`` is set, in
+    which case it is a case-sensitive whole-string match; a role match is against the element's
+    role with a case-insensitive whole-string accessible name. Screens are given as the strings
+    the real components render, read off those components.
+    """
+
+    def __init__(self, before: list[_El], after: list[_El]) -> None:
+        self._rendered = list(before)
+        self._after = list(after)
+        self.submitted = False
+
+    def submit(self) -> None:
+        self.submitted = True
+        self._rendered = list(self._after)
+
+    def _loc(self, matches: list[_El], label: str) -> _FakeElementList:
+        return _FakeElementList(self, matches, label)
+
+    def get_by_text(self, text: Any, exact: bool = False) -> _FakeElementList:
+        if isinstance(text, re.Pattern):
+            hits = [el for el in self._rendered if text.search(el.text)]
+            return self._loc(hits, f"text matching {text.pattern!r}")
+        if exact:
+            hits = [el for el in self._rendered if el.text.strip() == text]
+            return self._loc(hits, f"the exact text {text!r}")
+        needle = text.lower()
+        hits = [el for el in self._rendered if needle in el.text.lower()]
+        return self._loc(hits, f"text containing {text!r}")
+
+    def get_by_role(self, role: str, name: str | None = None, exact: bool = False) -> Any:
+        hits = [
+            el
+            for el in self._rendered
+            if el.role == role
+            and (
+                name is None
+                or (el.text.strip() == name if exact else el.text.strip().lower() == name.lower())
+            )
+        ]
+        return self._loc(hits, f"a {role} named {name!r}")
+
+    def locator(self, selector: str) -> _FakeElementList:
+        hits = [el for el in self._rendered if el.tag == selector]
+        return self._loc(hits, f"the element {selector!r}")
+
+    def get_by_placeholder(self, text: str, exact: bool = False) -> _FakeElementList:
+        return self._loc([], f"a placeholder {text!r}")
+
+
+class _FakeElementList:
+    def __init__(self, console: _FakeConsole, matches: list[_El], label: str) -> None:
+        self._console = console
+        self._matches = matches
+        self._label = label
+
+    @property
+    def first(self) -> _FakeElementList:
+        return self
+
+    def nth(self, index: int) -> _FakeElementList:
+        chosen = self._matches[index : index + 1]
+        return _FakeElementList(self._console, chosen, f"{self._label} at {index}")
+
+    def count(self) -> int:
+        return len(self._matches)
+
+    def wait_for(self, **_kwargs: object) -> None:
+        if not self._matches:
+            raise _Timeout(f"waiting for {self._label} never resolved")
+
+    def fill(self, _value: str) -> None:
+        self.wait_for()
+
+    def click(self) -> None:
+        self.wait_for()
+        self._console.submit()
+
+    def locator(self, selector: str) -> _FakeElementList:
+        if selector != "xpath=../div/b":
+            raise AssertionError(f"the fake console does not model {selector!r}")
+        named = [_El(el.rule_id) for el in self._matches if el.rule_id]
+        return _FakeElementList(self._console, named, "the rule the failing finding names")
+
+
+def _run_step(action: Any, console: _FakeConsole) -> None:
+    """Drive one walkthrough step against a fake console, with its profile check stubbed."""
+    from unittest import mock
+
+    with (
+        mock.patch.object(walkthrough, "_require_profile", lambda *a, **k: None),
+        mock.patch.object(walkthrough, "_select_journey_tab", lambda *a, **k: console),
+    ):
+        action(_FakePage(profile="local"))
+
+
+class StepAssertionTests(unittest.TestCase):
+    """Every step that narrates an outcome must fail when the outcome is the other one.
+
+    These are the demonstration's negative controls, and each of them was once satisfied by
+    text the console renders either way, so the run could not fail. The pairs below render the
+    screens the real components produce and require the step to pass on one and raise on the
+    other; a step that cannot raise here cannot fail in the room.
+    """
+
+    def test_the_marketing_gate_step_fails_when_the_gate_approves(self) -> None:
+        composer = [_El("", tag="textarea"), _El("Run compliance review", role="button")]
+        shared = [
+            _El("Compliance review", role="heading"),
+            _El("Findings (deterministic rule engine)", role="heading"),
+            _El("Cited rules", role="heading"),
+            _El("Risk-warning requirement (SG)"),
+            _El("An investment promotion must carry an approved risk-warning field."),
+        ]
+        refusal = [
+            *shared,
+            _El("Non-compliant"),
+            _El("FAIL", rule_id="SG-BANK-NO-GUARANTEE"),
+            _El("SG-BANK-NO-GUARANTEE"),
+        ]
+        approval = [
+            *shared,
+            _El("Compliant"),
+            _El("PASS", rule_id="SG-BANK-NO-GUARANTEE"),
+            _El("SG-BANK-NO-GUARANTEE"),
+        ]
+
+        # The refusal the step is written for.
+        _run_step(walkthrough._mkt_gate_refused, _FakeConsole(composer, refusal))
+
+        # The screen a wrongly-approving gate renders still satisfies BOTH of the waits this
+        # step used to make, which is exactly why they were replaced.
+        rendered_approval = _FakeConsole(approval, approval)
+        self.assertTrue(rendered_approval.get_by_text("Cited rules", exact=False).count())
+        self.assertTrue(rendered_approval.get_by_text("risk-warning", exact=False).count())
+        with self.assertRaises(_Timeout) as raised:
+            _run_step(walkthrough._mkt_gate_refused, _FakeConsole(composer, approval))
+        self.assertIn("Non-compliant", str(raised.exception))
+
+    def test_the_marketing_gate_step_fails_when_no_finding_names_its_rule(self) -> None:
+        # A refusal that names no rule is the case the org run sheet promises will fail.
+        unnamed = _FakeConsole(
+            [_El("", tag="textarea"), _El("Run compliance review", role="button")],
+            [_El("Non-compliant"), _El("FAIL"), _El("Cited rules", role="heading")],
+        )
+        with self.assertRaises(_Timeout) as raised:
+            _run_step(walkthrough._mkt_gate_refused, unnamed)
+        self.assertIn("rule the failing finding names", str(raised.exception))
+
+    def test_the_creative_step_fails_on_a_warned_variant(self) -> None:
+        inputs = [
+            _El("", tag="input"),
+            _El("", tag="input"),
+            _El("Generate brand-safe creative", role="button"),
+        ]
+        summary = _El("3/3 variant(s) passed every deterministic check.")
+        clean = _FakeConsole(inputs, [summary, _El("PASS"), _El("PASS"), _El("PASS")])
+
+        _run_step(walkthrough._mkt_creative, clean)
+
+        warned = _FakeConsole(inputs, [summary, _El("PASS"), _El("WARN"), _El("PASS")])
+        with self.assertRaisesRegex(RuntimeError, "brand warning"):
+            _run_step(walkthrough._mkt_creative, warned)
+
+    def test_the_performance_step_fails_when_no_report_is_built(self) -> None:
+        # The sidebar lists what the console can report, on every page load and forever.
+        sidebar = _El(
+            "Cited performance reports (attribution, ROAS / CAC, budget plan, A/B "
+            "significance, anomalies), generic across banking and online retail."
+        )
+        before = [sidebar, _El("", tag="input"), _El("Build cited report", role="button")]
+        built = _FakeConsole(
+            before,
+            [
+                sidebar,
+                _El("A/B significance", role="heading"),
+                _El("Anomalies", role="heading"),
+            ],
+        )
+
+        _run_step(walkthrough._mkt_performance, built)
+
+        nothing = _FakeConsole(before, [sidebar])
+        # The sidebar alone satisfied both of the waits this step used to make.
+        self.assertTrue(nothing.get_by_text("A/B significance", exact=False).count())
+        self.assertTrue(nothing.get_by_text("Anomalies", exact=False).count())
+        with self.assertRaises(_Timeout) as raised:
+            _run_step(walkthrough._mkt_performance, nothing)
+        self.assertIn("A/B significance", str(raised.exception))
+
+    def test_the_architecture_step_fails_when_validation_returns_nothing(self) -> None:
+        waiting = _El(
+            "Submit a project on the left to validate it against the 12 General Principles."
+        )
+        before = [waiting, _El("Validate at intake", role="button")]
+        validated = _FakeConsole(
+            before, [_El("Principle findings", role="heading"), _El("P-06"), _El("FAIL")]
+        )
+
+        _run_step(walkthrough._gov_architecture, validated)
+
+        nothing = _FakeConsole(before, [waiting])
+        # The waiting message alone satisfied the wait this step used to make.
+        self.assertTrue(nothing.get_by_text("General Principle", exact=False).count())
+        with self.assertRaises(_Timeout) as raised:
+            _run_step(walkthrough._gov_architecture, nothing)
+        self.assertIn("Principle findings", str(raised.exception))
+
+    def test_the_promotion_gate_step_fails_when_no_probe_was_blocked(self) -> None:
+        before = [_El("Run promotion gate", role="button")]
+        verdict = [
+            _El("RED-TEAM REPORT"),
+            _El("PROMOTION GATE VERDICT"),
+            _El("eval passed but this is not attested promotion evidence"),
+        ]
+        blocked = _FakeConsole(before, [*verdict, _El("blocked"), _El("not blocked")])
+
+        _run_step(walkthrough._gov_promotion_gate, blocked)
+
+        nothing_blocked = [*verdict, _El("not blocked"), _El("not blocked")]
+        # A report in which nothing was blocked satisfied the wait this step used to make.
+        rendered = _FakeConsole(nothing_blocked, nothing_blocked)
+        self.assertTrue(rendered.get_by_text("BLOCKED", exact=False).count())
+        with self.assertRaises(_Timeout) as raised:
+            _run_step(walkthrough._gov_promotion_gate, _FakeConsole(before, nothing_blocked))
+        self.assertIn("'blocked'", str(raised.exception))
 
 
 class WalkthroughSelectionTests(unittest.TestCase):

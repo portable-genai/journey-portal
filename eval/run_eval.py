@@ -4,7 +4,7 @@
 Two named layers via ``--mode`` (the scaffold is ``agent_eval_kit.eval_main``):
 
 * **smoke** (default) - the offline pre-merge check CI runs on every change. It scores the pure,
-  deterministic portal core against one golden set with SDK-free code, in four metrics:
+  deterministic portal core against one golden set with SDK-free code, in five metrics:
     - ``journey_integrity``: the catalog builder ACCEPTS every well-formed config and REJECTS
       every malformed one (unknown app ref, non-http upstream, bad id, duplicate). Safety-ish
       config correctness; threshold 0.99.
@@ -21,11 +21,15 @@ Two named layers via ``--mode`` (the scaffold is ``agent_eval_kit.eval_main``):
   profile), via ``agent_eval_kit.PromotionGateClient``.
 
 Exit is ``0`` iff every metric meets its threshold (and, in gate mode, the authority agrees).
+Each metric selects its cases by the dataset ``kind`` named in ``METRIC_KINDS``, and both ends of
+that join fail closed: a row whose kind names no metric is refused by ``_load``, and a metric
+whose kind selects no row scores 0.0 rather than a vacuous 1.0.
 """
 
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -51,12 +55,38 @@ THRESHOLDS: dict[str, float] = {
     "hrz5_audit_isolation": 1.0,
 }
 
+#: The dataset ``kind`` each metric scores. ``smoke()`` selects a metric's cases by exact kind
+#: string, so this table is the only place the two vocabularies meet, and it is what makes the
+#: two fail-closed checks below possible: a row whose kind names no metric is rejected by
+#: ``_load``, and a metric whose kind selects no row scores 0.0 in ``_fraction``.
+METRIC_KINDS: dict[str, str] = {
+    "journey_integrity": "config",
+    "identity_isolation": "identity",
+    "routing_correctness": "routing",
+    "tenant_policy_isolation": "tenant-policy",
+    "hrz5_audit_isolation": "hrz5-audit",
+}
+
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_DATASET = _REPO_ROOT / "eval" / "datasets" / "golden_journeys.jsonl"
 
 
 def _load(dataset: Path) -> list[dict[str, Any]]:
-    return [json.loads(line) for line in dataset.read_text().splitlines() if line.strip()]
+    """Read the golden cases, refusing any row whose ``kind`` is scored by no metric.
+
+    An unrecognised kind (a rename, a typo) is the quiet half of the E4 failure: the row still
+    counts toward ``n_examples``, so the report looks evidenced, while the metric that should
+    have scored it selects nothing. Refuse the dataset instead of scoring a lie.
+    """
+    cases = [json.loads(line) for line in dataset.read_text().splitlines() if line.strip()]
+    known = set(METRIC_KINDS.values())
+    unknown = sorted({str(case.get("kind")) for case in cases} - known)
+    if unknown:
+        raise ValueError(
+            f"{dataset}: case kind(s) {unknown} are scored by no metric; "
+            f"the kinds this evaluator scores are {sorted(known)}"
+        )
+    return cases
 
 
 # --------------------------------------------------------------------------- #
@@ -161,11 +191,32 @@ def hrz5_case_ok(case: dict[str, Any]) -> bool:
 # Smoke evaluator + gate runner
 # --------------------------------------------------------------------------- #
 def _fraction(flags: list[bool]) -> float:
-    return sum(flags) / len(flags) if flags else 1.0
+    """Fraction of cases that passed. An empty selection scores 0.0, never 1.0.
+
+    A metric whose kind selected no rows measured nothing, and nothing is not evidence of
+    safety (common-base-practices E4). Scoring it 0.0 puts it below every threshold here, so
+    the named metric reports FAIL and the gate exits non-zero.
+    """
+    if not flags:
+        return 0.0
+    return sum(flags) / len(flags)
+
+
+def _warn_unmeasured(cases: list[dict[str, Any]]) -> None:
+    """Name, on stderr, every metric whose kind selected no case, so the 0.000 explains itself."""
+    present = {case["kind"] for case in cases}
+    for metric, kind in METRIC_KINDS.items():
+        if kind not in present:
+            print(
+                f"error: no '{kind}' case in the dataset, so {metric} evaluated nothing "
+                "and scores 0.0",
+                file=sys.stderr,
+            )
 
 
 def smoke(dataset: Path) -> EvalReport:
     cases = _load(dataset)
+    _warn_unmeasured(cases)
     config = [config_case_ok(c) for c in cases if c["kind"] == "config"]
     identity = [
         identity_case_ok(identity_forwarded(c), c) for c in cases if c["kind"] == "identity"

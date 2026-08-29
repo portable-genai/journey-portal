@@ -22,7 +22,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from pairing import EXEMPT, PairingError, compare, load_dossier  # noqa: E402
+from pairing import EXEMPT, PairingError, compare, load_run  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent
 OUT = ROOT / "out"
@@ -30,20 +30,23 @@ OUT = ROOT / "out"
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--left", default="local", help="the first target's out/ directory")
-    parser.add_argument("--right", default="gcp", help="the second target's out/ directory")
+    parser.add_argument(
+        "--left",
+        default="local",
+        help="the REDUCED target's out/ directory. One-directional tolerances are tolerated "
+        "in this direction only, so this is the laptop",
+    )
+    parser.add_argument("--right", default="gcp", help="the managed target's out/ directory")
     args = parser.parse_args()
 
-    left_path = OUT / args.left / "dossier.json"
-    right_path = OUT / args.right / "dossier.json"
-
     try:
-        left = load_dossier(left_path)
-        right = load_dossier(right_path)
+        left, left_provenance = load_run(OUT / args.left, args.left)
+        right, right_provenance = load_run(OUT / args.right, args.right)
         report = compare(left, right, args.left, args.right)
     except PairingError as exc:
         print(f"FAIL {exc}", file=sys.stderr)
         return 2
+    report.provenance = {args.left: left_provenance, args.right: right_provenance}
 
     out_dir = OUT / "pair"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -52,10 +55,25 @@ def main() -> int:
     )
 
     print(f"paired comparison: {args.left} vs {args.right}")
+    # Which two runs this is a pair OF. Without it a pairing of two stale files reads exactly
+    # like a pairing of two fresh ones, and on 2026-08-29 one of those files described a
+    # deployment that had been deleted.
+    for target, provenance in report.provenance.items():
+        print(f"  {target}: {provenance['base_url']}")
+        print(
+            f"    dossier generated {provenance['dossier_generated_at']}, "
+            f"run captured {provenance['captured_at']}"
+        )
     print(f"  compared {len(report.compared)} deterministic fields")
     for name in report.compared:
         print(f"    {name}")
     print(f"  declared reductions, each with its reason: {len(EXEMPT)}")
+    for tolerated in report.tolerated:
+        print(
+            f"  TOLERATED {tolerated.field}: {args.left}={tolerated.left!r} "
+            f"{args.right}={tolerated.right!r}"
+        )
+        print(f"    {tolerated.reason}")
 
     if report.agreed:
         print("\nPASS the two profiles agree on every consequential figure, check, escalation")

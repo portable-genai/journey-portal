@@ -66,17 +66,30 @@ blank frame.
 With the launcher still running, prove the full composition through the portal BFF origin only:
 
 ```bash
-python scripts/smoke_journeys.py
+python scripts/smoke_journeys.py                 # after an unscoped launch
+python scripts/smoke_journeys.py --journey mkt   # after `run_journeys.py --journey mkt`
 ```
 
 The smoke discovers every configured mount from `/v1/journeys`, checks
 `/apps/<id>/api/healthz` for each one, and requires `profile: local` (the offline demo) or
-`profile: live`; any other profile fails. It then selects the
-`approver` through `/v1/session/persona` and sends a real Hrz7 review request through
-`/apps/hrz7/api/v1/reviews`. The request intentionally carries a conflicting browser persona;
-the returned review maker must be the portal-selected approver, proving the portal stripped the
-spoof and injected its verified identity. The command exits non-zero on any failed assertion.
-This is deliberately a separate portal-identity check; it is not the Doc1 CDD handoff.
+`profile: live`; any other profile fails. Pass the same `--journey` the launcher was given: the
+portal serves its whole static catalog whatever was started, so an unscoped smoke after a scoped
+launch checks apps that are not running.
+
+It then selects the `analyst` through `/v1/session/persona` and sends a real Hrz7 review request
+through `/apps/hrz7/api/v1/reviews`. The request intentionally carries a conflicting browser
+persona; the returned review maker must be the portal-selected analyst, proving the portal
+stripped the spoof and injected its verified identity. It then selects the `approver` and
+withdraws that item, which does two things at once: it leaves the review queue exactly as it was
+found, because the demonstration presents that queue and says out loud what is in it, and the
+withdrawal is itself a second identity proof, accepted only because the portal injected a
+different verified principal that the console checked against the item's maker. The two personas
+have to differ, because the console refuses a self-approval. The command exits non-zero on any
+failed assertion, the undisposed item included. This is deliberately a separate portal-identity
+check; it is not the Doc1 CDD handoff.
+
+On a journey that does not mount Hrz7 (`rm`), the identity proof is unavailable rather than
+failed: the smoke says it is skipping it and why.
 
 For the CDD review step, the launcher supplies a matching, synthetic local S2S credential only to
 the Doc1 and Hrz7 backend processes. Doc1 writes the CDD escalation to its local durable outbox

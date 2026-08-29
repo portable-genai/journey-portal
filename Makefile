@@ -63,7 +63,11 @@ demo-browser-selftest: ## Assert both production-built shells in headless Chromi
 e2e-local: ## Drive the RM journey in a real browser on this machine (needs `make journeys`).
 	PORTAL_E2E_TARGET=local $(PY) e2e/rm_journey.py
 
-e2e-gcp: ## Drive the SAME journey against the deployment (needs gcloud + the .env inputs).
+e2e-gcp: ## Drive the SAME journey against the deployment (needs gcloud and the three PORTAL_E2E_* inputs; see e2e/README.md).
+	@# The three are read from the environment and from no .env file: none of them is recorded in
+	@# .env, .env.example or .env.secrets, and this help text used to send an operator there to
+	@# look. Each names one specific live deployment, so a default would be the wrong deployment
+	@# the moment one is rebuilt. e2e/README.md says where each value comes from.
 	PORTAL_E2E_TARGET=gcp \
 	PORTAL_E2E_BASE_URL=$${PORTAL_E2E_BASE_URL:?name the deployed RM origin} \
 	PORTAL_E2E_IAP_AUDIENCE=$${PORTAL_E2E_IAP_AUDIENCE:?name the IAP OAuth client id} \

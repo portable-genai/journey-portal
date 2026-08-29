@@ -188,6 +188,9 @@ _LIVE_STEP_TIMEOUT_MS = 300_000
 # anchor also keeps the two selects apart: a loose "Type" would also hit "Document type".
 _TYPE_LABEL = re.compile(r"^Type")
 _DOC_TYPE_LABEL = re.compile(r"^Document type")
+# One row of the intake gate's findings table, which names the principle it judged. Anchored
+# so it matches the finding's own cell and not the prose that mentions a principle in passing.
+_PRINCIPLE_ID = re.compile(r"^\s*P-\d{2}\s*$")
 
 
 def _case_slug(name: str) -> str:
@@ -412,10 +415,12 @@ class Step:
     # A preflight checks them once before the run so a non-live stack fails at the
     # outset instead of part-way through the browser demo.
     requires_live: tuple[str, ...] = ()
-    # Apps whose only demo profile is `local`, because the system ships no live profile.
-    # Named separately from requires_live rather than folded into it: the two say different
-    # things to a presenter, and blurring them is how a fixture run gets narrated as real
-    # data. A step may not appear in both.
+    # Apps this step demonstrates on their own bundled corpus, so the preflight requires the
+    # `local` profile and refuses anything else. For most of them that is the only demo
+    # profile they have; the compliance assistant also ships a live one, which is why this is
+    # named separately from requires_live rather than folded into it. The two say different
+    # things to a presenter, and blurring them is how a bundled-corpus run gets narrated as
+    # real data. A step may not appear in both.
     requires_fixture: tuple[str, ...] = ()
     # True when the step can also drive the deployed portal. Hosted runs are the RM
     # journey subset that exists on the deployment; persona-picker steps and apps the
@@ -650,10 +655,12 @@ def _rm_doc1_blocked(page: Any) -> None:
 # --------------------------------------------------------------------------------------
 # The persona workbenches: marketing, governance and service.
 #
-# These systems ship no live profile, so every step below runs against each system's own
-# bundled corpus. That is stated in the narration rather than left for the room to assume,
-# and the preflight refuses anything else. What they demonstrate is the half that does not
-# change with the data: where the judgement is made, what it cites, and what escalates.
+# Every step below runs against the system's own bundled corpus, and the preflight refuses
+# anything else. Most of these systems ship no other profile; the compliance assistant is the
+# exception, and the step that mounts it here still answers from the bundled corpus, which its
+# narration says out loud. That disclosure is spoken rather than left for the room to assume.
+# What these steps demonstrate is the half that does not change with the data: where the
+# judgement is made, what it cites, and what escalates.
 #
 # Fields are located by position within each form and named here, because these consoles
 # label their controls with adjacent text rather than a bound label element.
@@ -769,6 +776,11 @@ def _mkt_creative(page: Any) -> None:
     )
     if frame.get_by_text("FAIL", exact=True).count():
         raise RuntimeError("a variant failed its brand checks on the clean offer")
+    # A warned variant still counts as approved, so the summary line above reads "3 of 3
+    # passed" with amber badges on screen. The narration says every variant passes, and only
+    # a screen with no failure and no warning on it earns that sentence.
+    if frame.get_by_text("WARN", exact=True).count():
+        raise RuntimeError("a variant carried a brand warning on the clean offer")
 
 
 def _mkt_gate_refused(page: Any) -> None:
@@ -782,9 +794,16 @@ def _mkt_gate_refused(page: Any) -> None:
     frame.locator("textarea").first.fill(_MKT_NONCOMPLIANT_COPY)
     _inputs_ready("marketing copy that promises a guaranteed return")
     frame.get_by_role("button", name="Run compliance review", exact=True).click()
-    # The refusal has to name the governing rule, not merely decline.
-    frame.get_by_text("Cited rules", exact=False).first.wait_for(timeout=_LIVE_STEP_TIMEOUT_MS)
-    frame.get_by_text("risk-warning", exact=False).first.wait_for()
+    # The verdict badge, and nothing weaker. The panel of cited rules and the text of the
+    # risk-warning rule render on an APPROVAL too, so waiting for either of those passed a
+    # gate that had just cleared a guaranteed-returns promise: the negative control asserted
+    # only that some review had rendered.
+    frame.get_by_text("Non-compliant", exact=True).first.wait_for(timeout=_LIVE_STEP_TIMEOUT_MS)
+    # The refusal has to name the governing rule, not merely decline, so a finding must carry
+    # the deterministic engine's own failure badge, and that finding must name its rule.
+    failed = frame.get_by_text("FAIL", exact=True).first
+    failed.wait_for()
+    failed.locator("xpath=../div/b").first.wait_for()
 
 
 def _mkt_performance(page: Any) -> None:
@@ -794,8 +813,14 @@ def _mkt_performance(page: Any) -> None:
     frame.locator("input").nth(0).fill(_MKT_ACCOUNT)
     _inputs_ready("the advertising account to report on")
     frame.get_by_role("button", name="Build cited report", exact=True).click()
-    frame.get_by_text("A/B significance", exact=False).first.wait_for(timeout=_LIVE_STEP_TIMEOUT_MS)
-    frame.get_by_text("Anomalies", exact=False).first.wait_for()
+    # The panel headings, not the words. This console's sidebar lists what it can report
+    # ("A/B significance, anomalies") on every page load, so waiting for that text proved
+    # nothing: the step passed whether or not a report was ever built. Only the report itself
+    # renders these as headings, and only when it has results to put under them.
+    frame.get_by_role("heading", name="A/B significance").first.wait_for(
+        timeout=_LIVE_STEP_TIMEOUT_MS
+    )
+    frame.get_by_role("heading", name="Anomalies").first.wait_for()
 
 
 def _mkt_next_best_action(page: Any) -> None:
@@ -820,10 +845,14 @@ def _gov_architecture(page: Any) -> None:
     frame = _select_journey_tab(page, "gov", "Architecture Validator", "rsk3")
     _inputs_ready("the proposed system, its region and the controls it declares")
     frame.get_by_role("button", name="Validate at intake", exact=True).click()
-    # Each finding names the principle it comes from and what would close it.
-    frame.get_by_text("General Principle", exact=False).first.wait_for(
+    # The findings panel exists only once a report has come back. The console's own waiting
+    # message says "validate it against the 12 General Principles", so the wait this replaces
+    # was satisfied by the empty screen before the click and could never fail.
+    frame.get_by_role("heading", name="Principle findings").first.wait_for(
         timeout=_LIVE_STEP_TIMEOUT_MS
     )
+    # And the panel has findings in it: each one names the principle it was judged against.
+    frame.get_by_text(_PRINCIPLE_ID).first.wait_for()
 
 
 def _gov_promotion_gate(page: Any) -> None:
@@ -833,8 +862,10 @@ def _gov_promotion_gate(page: Any) -> None:
     _inputs_ready("the model, the prompt version and the golden dataset to judge")
     frame.get_by_role("button", name="Run promotion gate", exact=True).click()
     frame.get_by_text("RED-TEAM REPORT", exact=False).first.wait_for(timeout=_LIVE_STEP_TIMEOUT_MS)
-    # A gate that reported nothing blocked would be a gate that ran no probes.
-    frame.get_by_text("BLOCKED", exact=False).first.wait_for()
+    # At least one probe was actually stopped. The badge on a probe that got through reads
+    # "not blocked", so a loose match on "blocked" was satisfied by the failures as well as
+    # the blocks, and proved only that some probe row had rendered.
+    frame.get_by_text("blocked", exact=True).first.wait_for()
     # The verdict is the point of the step: quality passed and promotion is still refused,
     # for a governance reason the gate names. Asserting it keeps the narration honest if the
     # fixture ever changes to one that passes.
@@ -869,7 +900,7 @@ def _svc_complaint(page: Any) -> None:
 
 
 def _svc_rules(page: Any) -> None:
-    """The handler's own question, answered from the regulators' published instruments."""
+    """The handler's own question, answered from the instruments this assistant ships with."""
     _require_profile(page, "rsk1", _PORTAL_FIXTURE_PROFILE)
     frame = _select_journey_tab(page, "svc", "Compliance Assistant & Control Mapper", "rsk1")
     frame.get_by_role("button", name="MAS", exact=False).first.click()
@@ -1502,10 +1533,13 @@ STEPS: tuple[Step, ...] = (
         "svc-rules",
         "Ask what the rules actually require",
         "Before signing that reply the handler asks what the regulator expects of a firm in this "
-        "position. The answer is assembled from the regulators' own published instruments and "
-        "cited to the document and the page, so the handler can open the source and read it "
-        "rather than trusting a summary. This is the same assistant the operations workbench "
-        "carries, answering a different person's question, with one corpus behind both.",
+        "position. Watch what comes back with the answer: every part of it is tied to a passage "
+        "in the material the assistant was given, named down to the document and the page, so "
+        "what a reviewer checks is the citation rather than the prose. Here it is answering from "
+        "the small set of instruments it carries out of the box rather than from an "
+        "institution's own regulatory library, so what this shows is the shape of a grounded "
+        "answer and where it stops. This is the same assistant the operations workbench carries, "
+        "mounted for a second person's question rather than deployed a second time.",
         frozenset({"svc"}),
         _svc_rules,
         requires_fixture=("rsk1",),
