@@ -14,9 +14,18 @@ install: ## Editable install with the SDK-free dev toolchain.
 	pip install -r requirements-dev.lock
 	pip install --no-deps -e .
 
+# `scripts` as a DIRECTORY, not an enumerated list. The list named eight of the fifteen files
+# in it, so seven were unlinted, and the default for a newly added script was to be unchecked
+# forever. That is the wrong default for a gate: a file should have to be excluded on purpose,
+# never included on purpose. The gap was found on 2026-08-29 the expensive way, when a
+# stray restore reverted `scripts/demo_walkthrough.py` to an unformatted snapshot and
+# `make lint` reported success, because that file was one of the seven. All seven passed
+# unchanged the moment they were covered, which is what made the list look harmless.
+LINT_PATHS = src tests eval scripts ui-rm/static_server.py ui-ops/static_server.py
+
 lint: ## ruff check + format check.
-	ruff check src tests eval scripts/deployment_config.py scripts/live_profile_check.py scripts/verify_gcp_control_plane.py scripts/demo_selftest.py scripts/demo_browser_selftest.py scripts/portability_demo.py scripts/journey_ui_smoke.py scripts/rename_fork.py ui-rm/static_server.py ui-ops/static_server.py
-	ruff format --check src tests eval scripts/deployment_config.py scripts/live_profile_check.py scripts/verify_gcp_control_plane.py scripts/demo_selftest.py scripts/demo_browser_selftest.py scripts/portability_demo.py scripts/journey_ui_smoke.py scripts/rename_fork.py ui-rm/static_server.py ui-ops/static_server.py
+	ruff check $(LINT_PATHS)
+	ruff format --check $(LINT_PATHS)
 
 format: ## Auto-format and fix.
 	ruff format src tests eval
