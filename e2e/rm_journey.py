@@ -9,7 +9,8 @@ What it asserts, in order, is what a reviewer would ask to see:
 
 1. the RM shell renders its journey, from the BFF's own catalog rather than a hardcoded list;
 2. the portal names a VERIFIED identity, and it is the one the target's identity layer produced;
-3. Doc1 is embedded same-origin under the portal's own origin, not framed from a third party;
+3. the CDD agent is embedded same-origin under the portal's own origin, not framed
+   from a third party;
 4. a real CDD dossier is built inside that frame, and comes back with a source-of-wealth
    narrative, a risk rating and citations rather than a spinner.
 
@@ -94,7 +95,7 @@ def _capture_dossier(response: Any, sink: list[dict[str, Any]]) -> None:
 
 
 def _embedded_frame(page: Page) -> Frame:
-    """The Doc1 frame, resolved through the iframe ELEMENT rather than by URL matching.
+    """The CDD agent frame, resolved through the iframe ELEMENT rather than by URL matching.
 
     Matching on url= would silently pick the shell itself if the embed never loaded, and the
     whole point of this step is that the embed did.
@@ -150,7 +151,9 @@ def run(target: Target, out_dir: Path) -> Evidence:
             ]
             _shot(page, out_dir, "01-journey")
             evidence.record("journey rendered from the BFF catalog", label=label, apps=app_ids)
-            assert "doc1" in app_ids, f"the RM journey must compose Doc1, got {app_ids}"
+            assert "cdd-sow-research" in app_ids, (
+                f"the RM journey must compose the CDD agent, got {app_ids}"
+            )
 
             # 2. The portal-verified identity. This is the identity the portal INJECTS into every
             #    embedded app, so a demo that never shows it has not shown the trust boundary.
@@ -161,7 +164,7 @@ def run(target: Target, out_dir: Path) -> Evidence:
             evidence.record("portal names a verified identity", identity=who)
 
             # 3. Same-origin embedding: the frame's URL must be on the PORTAL's own origin.
-            page.locator('[data-demo="app-tab-doc1"]').click()
+            page.locator('[data-demo="app-tab-cdd-sow-research"]').click()
             frame = _embedded_frame(page)
             frame.wait_for_load_state("domcontentloaded", timeout=STEP_TIMEOUT_MS)
             frame_url = frame.url
@@ -169,15 +172,15 @@ def run(target: Target, out_dir: Path) -> Evidence:
                 f"the embedded app is not same-origin with the portal: {frame_url} is not under "
                 f"{target.base_url}. Mode-1 embedding is the claim under test here."
             )
-            _shot(page, out_dir, "02-doc1-embedded")
-            evidence.record("Doc1 embedded same-origin", frame_url=frame_url)
+            _shot(page, out_dir, "02-agent-embedded")
+            evidence.record("CDD agent embedded same-origin", frame_url=frame_url)
 
             # 4. A real dossier, built inside that frame. Wait for the console to finish its
             #    own bootstrap first: it probes the API before enabling anything, and asserting
             #    against a half-booted console reports a demo failure for a demo that is merely
             #    still starting.
             frame.locator('[data-demo="panel-assess-a-subject"]').wait_for(timeout=STEP_TIMEOUT_MS)
-            frame.get_by_text("Connecting to Doc1").wait_for(
+            frame.get_by_text("Connecting to the CDD agent").wait_for(
                 state="detached", timeout=STEP_TIMEOUT_MS
             )
             _shot(page, out_dir, "03-console-ready")

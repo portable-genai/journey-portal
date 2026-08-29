@@ -52,8 +52,17 @@ def test_backend_interpreter_warns_before_falling_back(
 def test_journey_subset_uses_only_its_configured_apps(launcher_module: ModuleType) -> None:
     catalog = JourneyCatalog.from_mapping(load_journeys_mapping(Settings.load().journeys_path))
 
-    assert launcher_module._selected_app_ids(catalog, ("rm",)) == ("cdd-sow-research", "loan-document-intelligence", "cio-advisory")
-    assert launcher_module._selected_app_ids(catalog, ("ops",)) == ("credit-memo-drafting", "trade-finance-checker", "compliance-advisory", "human-review-console")
+    assert launcher_module._selected_app_ids(catalog, ("rm",)) == (
+        "cdd-sow-research",
+        "loan-document-intelligence",
+        "cio-advisory",
+    )
+    assert launcher_module._selected_app_ids(catalog, ("ops",)) == (
+        "credit-memo-drafting",
+        "trade-finance-checker",
+        "compliance-advisory",
+        "human-review-console",
+    )
 
 
 def test_hrz7_ui_uses_the_portal_relative_review_api(launcher_module: ModuleType) -> None:

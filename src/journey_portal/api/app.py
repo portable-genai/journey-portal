@@ -2,7 +2,8 @@
 
 Import-safe (the Container is built at request time, never at import). The portal is a same-origin
 reverse proxy in front of the built P1 apps: most use ``/apps/<id>/*`` while fixed portable
-artifact mounts such as the CDD agent's ``/agent/*`` retain ``/apps/<id>`` compatibility entries. On every
+artifact mounts such as the CDD agent's ``/agent/*`` retain ``/apps/<id>`` compatibility
+entries. On every
 proxied API request it rewrites identity so the embedded app sees the portal-verified
 :class:`Principal` and never a browser-asserted one
 (``journey_portal.domain.identity_injection``). Its own endpoints feed the shells the journey
