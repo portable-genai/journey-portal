@@ -69,7 +69,7 @@ demo-selftest: ## Assert the live BFF route and identity evidence offline.
 demo-browser-selftest: ## Assert both production-built shells in headless Chromium.
 	$(PY) scripts/demo_browser_selftest.py
 
-e2e-local: ## Drive the RM journey in a real browser on this machine (needs `make journeys`).
+e2e-local: ## Drive the RM journey in a real browser on this machine (needs run_journeys.py --built; see e2e/README.md).
 	PORTAL_E2E_TARGET=local $(PY) e2e/rm_journey.py
 
 e2e-gcp: ## Drive the SAME journey against the deployment (needs gcloud and the three PORTAL_E2E_* inputs; see e2e/README.md).
