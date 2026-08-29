@@ -16,5 +16,5 @@
 {"kind": "tenant-policy", "name": "exact-cross-origin", "host": "journey.fictional-bank.test", "tenant": "fictional-bank", "origin": "https://host.fictional-bank.test", "expect_decision": "allowed", "expect_cors": true, "expect_frame_ancestors": ["'self'", "https://host.fictional-bank.test"]}
 {"kind": "tenant-policy", "name": "cross-tenant-denied", "host": "journey.fictional-bank.test", "tenant": "other-bank", "origin": "", "expect_decision": "denied", "expect_cors": false, "expect_frame_ancestors": ["'none'"]}
 {"kind": "tenant-policy", "name": "unknown-origin-denied", "host": "journey.fictional-bank.test", "tenant": "fictional-bank", "origin": "https://attacker.test", "expect_decision": "denied", "expect_cors": false, "expect_frame_ancestors": ["'none'"]}
-{"kind": "hrz5-audit", "name": "allowed-forward", "action": "forward:api", "expect_decision": "allowed"}
-{"kind": "hrz5-audit", "name": "blocked-policy", "action": "embed-policy:denied", "app_id": "portal:fictional-bank-primary", "expect_decision": "blocked", "forbidden": "fictional-bank"}
+{"kind": "observability-audit", "name": "allowed-forward", "action": "forward:api", "expect_decision": "allowed"}
+{"kind": "observability-audit", "name": "blocked-policy", "action": "embed-policy:denied", "app_id": "portal:fictional-bank-primary", "expect_decision": "blocked", "forbidden": "fictional-bank"}

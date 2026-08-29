@@ -7,7 +7,7 @@ filtered dataset, removes every case a metric scores while the surviving rows ke
 above the kit's non-empty guard. The old ``_fraction`` returned ``1.0`` for that empty selection,
 which is common-base-practices E4 applied per metric: an evaluation that measured nothing
 certifying a pass, here for the two security metrics (``identity_isolation``,
-``hrz5_audit_isolation``).
+``observability_audit_isolation``).
 
 Every assertion below was run against the pre-fix shape first and failed there; see the test
 docstrings for what the vacuous form returned.
@@ -73,13 +73,13 @@ def test_load_refuses_a_case_kind_no_metric_scores(tmp_path: Path) -> None:
     """A renamed kind must be refused, not counted toward n_examples and scored by nothing."""
     rows = DEFAULT_DATASET.read_text().splitlines()
     renamed = [
-        json.dumps({**json.loads(line), "kind": "hrz5-audit-v2"})
-        if json.loads(line)["kind"] == "hrz5-audit"
+        json.dumps({**json.loads(line), "kind": "observability-audit-v2"})
+        if json.loads(line)["kind"] == "observability-audit"
         else line
         for line in rows
         if line.strip()
     ]
     dataset = tmp_path / "renamed.jsonl"
     dataset.write_text("\n".join(renamed) + "\n")
-    with pytest.raises(ValueError, match="hrz5-audit-v2"):
+    with pytest.raises(ValueError, match="observability-audit-v2"):
         _load(dataset)

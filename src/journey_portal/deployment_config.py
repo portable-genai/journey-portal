@@ -137,8 +137,8 @@ REQUIRED_NONSECRET_KEYS = frozenset(
         "DEPLOY_OPS_DOMAIN",
         "DEPLOY_TENANT_ID",
         "DEPLOY_TENANT_IDENTITY_DOMAINS_JSON",
-        "DEPLOY_HRZ5_URL",
-        "DEPLOY_HRZ5_AUDIENCE",
+        "DEPLOY_OBSERVABILITY_URL",
+        "DEPLOY_OBSERVABILITY_AUDIENCE",
         "DEPLOY_DNS_MANAGED_ZONE",
         "DEPLOY_TLS_MODE",
         "DEPLOY_IAP_OAUTH_CLIENT_ID",
@@ -558,27 +558,29 @@ def load_deployment_config(env_file: Path, secrets_file: Path) -> DeploymentConf
             raise DeploymentConfigError(f"DEPLOY_TENANT_IDENTITY_DOMAINS_JSON repeats {domain!r}")
         seen_domains.add(domain.strip().lower())
     identity_domains = sorted(seen_domains)
-    hrz5_url = values["DEPLOY_HRZ5_URL"].rstrip("/")
-    hrz5_parsed = urlparse(hrz5_url)
+    observability_url = values["DEPLOY_OBSERVABILITY_URL"].rstrip("/")
+    observability_parsed = urlparse(observability_url)
     if not (
-        hrz5_url == hrz5_url.lower()
-        and hrz5_parsed.scheme == "https"
-        and bool(hrz5_parsed.hostname)
-        and bool(_DOMAIN_RE.fullmatch(hrz5_parsed.hostname or ""))
-        and ".." not in (hrz5_parsed.hostname or "")
-        and hrz5_parsed.port is None
-        and hrz5_parsed.username is None
-        and hrz5_parsed.password is None
-        and hrz5_parsed.path == ""
-        and not hrz5_parsed.params
-        and not hrz5_parsed.query
-        and not hrz5_parsed.fragment
+        observability_url == observability_url.lower()
+        and observability_parsed.scheme == "https"
+        and bool(observability_parsed.hostname)
+        and bool(_DOMAIN_RE.fullmatch(observability_parsed.hostname or ""))
+        and ".." not in (observability_parsed.hostname or "")
+        and observability_parsed.port is None
+        and observability_parsed.username is None
+        and observability_parsed.password is None
+        and observability_parsed.path == ""
+        and not observability_parsed.params
+        and not observability_parsed.query
+        and not observability_parsed.fragment
     ):
-        raise DeploymentConfigError("DEPLOY_HRZ5_URL must be an exact lowercase HTTPS origin")
-    hrz5_audience = values["DEPLOY_HRZ5_AUDIENCE"].rstrip("/")
-    audience_parsed = urlparse(hrz5_audience)
+        raise DeploymentConfigError(
+            "DEPLOY_OBSERVABILITY_URL must be an exact lowercase HTTPS origin"
+        )
+    observability_audience = values["DEPLOY_OBSERVABILITY_AUDIENCE"].rstrip("/")
+    audience_parsed = urlparse(observability_audience)
     if not (
-        hrz5_audience == hrz5_audience.lower()
+        observability_audience == observability_audience.lower()
         and audience_parsed.scheme == "https"
         and bool(audience_parsed.hostname)
         and bool(_DOMAIN_RE.fullmatch(audience_parsed.hostname or ""))
@@ -591,7 +593,9 @@ def load_deployment_config(env_file: Path, secrets_file: Path) -> DeploymentConf
         and not audience_parsed.query
         and not audience_parsed.fragment
     ):
-        raise DeploymentConfigError("DEPLOY_HRZ5_AUDIENCE must be an exact lowercase HTTPS origin")
+        raise DeploymentConfigError(
+            "DEPLOY_OBSERVABILITY_AUDIENCE must be an exact lowercase HTTPS origin"
+        )
     if values["DEPLOY_TLS_MODE"] != "google-managed":
         raise DeploymentConfigError("DEPLOY_TLS_MODE must be google-managed")
     audit_hmac_secret = values["DEPLOY_PORTAL_AUDIT_HMAC_SECRET"]
@@ -778,8 +782,8 @@ def load_deployment_config(env_file: Path, secrets_file: Path) -> DeploymentConf
                 "cors_origins": cors_origins,
             }
         },
-        "observability_url": hrz5_url,
-        "observability_audience": hrz5_audience,
+        "observability_url": observability_url,
+        "observability_audience": observability_audience,
         "notification_channels": channels,
         "apply_org_policies": _boolean(values, "DEPLOY_APPLY_ORG_POLICIES"),
         "vpc_sc_access_policy_id": ("" if access_policy_id == "none" else access_policy_id),

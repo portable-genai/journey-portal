@@ -201,7 +201,7 @@ def test_the_signing_port_binds_in_every_profile(profile: str, tmp_path: Path) -
             profile=profile,
             bff_signing_key_file=str(tmp_path / "key.json"),
             observability_url="http://localhost:8085",
-            observability_audience="https://hrz5-audience.example.test",
+            observability_audience="https://observability-audience.example.test",
         )
     )
     assert container.bff_signing_key is not None

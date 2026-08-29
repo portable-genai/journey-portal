@@ -60,8 +60,8 @@ def _valid_values() -> dict[str, str]:
         "DEPLOY_OPS_DOMAIN": "ops-journey.bank.internal",
         "DEPLOY_TENANT_ID": "bank-sg",
         "DEPLOY_TENANT_IDENTITY_DOMAINS_JSON": '["bank.internal"]',
-        "DEPLOY_HRZ5_URL": "https://hrz5.bank.internal",
-        "DEPLOY_HRZ5_AUDIENCE": "https://hrz5-audience.bank.internal",
+        "DEPLOY_OBSERVABILITY_URL": "https://observability.bank.internal",
+        "DEPLOY_OBSERVABILITY_AUDIENCE": "https://observability-audience.bank.internal",
         "DEPLOY_DNS_MANAGED_ZONE": "bank-journeys",
         "DEPLOY_TLS_MODE": "google-managed",
         "DEPLOY_IAP_OAUTH_CLIENT_ID": "123-prod.apps.googleusercontent.com",
@@ -118,9 +118,9 @@ def test_loads_complete_named_config_and_keeps_secret_out_of_tfvars(tmp_path: Pa
     assert config.terraform_inputs["tenant_embed_policies"]["bank-sg-primary"]["tenant"] == (
         "bank-sg"
     )
-    assert config.terraform_inputs["observability_url"] == "https://hrz5.bank.internal"
+    assert config.terraform_inputs["observability_url"] == "https://observability.bank.internal"
     assert config.terraform_inputs["observability_audience"] == (
-        "https://hrz5-audience.bank.internal"
+        "https://observability-audience.bank.internal"
     )
     assert "iap_oauth2_client_secret" not in config.terraform_inputs
 
@@ -147,8 +147,16 @@ def test_loads_complete_named_config_and_keeps_secret_out_of_tfvars(tmp_path: Pa
             "CORS origins",
         ),
         ("DEPLOY_TENANT_ID", "Upper Case", "stable lowercase"),
-        ("DEPLOY_HRZ5_URL", "http://hrz5.bank.internal", "lowercase HTTPS origin"),
-        ("DEPLOY_HRZ5_AUDIENCE", "https://hrz5.bank.internal/path", "lowercase HTTPS origin"),
+        (
+            "DEPLOY_OBSERVABILITY_URL",
+            "http://observability.bank.internal",
+            "lowercase HTTPS origin",
+        ),
+        (
+            "DEPLOY_OBSERVABILITY_AUDIENCE",
+            "https://observability.bank.internal/path",
+            "lowercase HTTPS origin",
+        ),
         ("DEPLOY_VPC_SC_ACCESS_POLICY_ID", "policy-id", "numeric"),
     ],
 )

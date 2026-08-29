@@ -10,8 +10,8 @@ import httpx
 from hex_service_kit.s2s import validate_base_url
 
 from ...config import Settings
-from ...domain.hrz5_audit import to_hrz5_audit_event
 from ...domain.models import PortalAccessEvent
+from ...domain.observability_audit import to_observability_audit_event
 from ...ports.access_audit import AuditUnavailable
 from ..gcp.access_audit import GcpAccessAuditAdapter
 
@@ -84,7 +84,7 @@ class PlatformAccessAuditAdapter(GcpAccessAuditAdapter):
             raise AuditUnavailable(f"Hrz5 access audit returned HTTP {response.status_code}")
 
     def append(self, event: PortalAccessEvent) -> None:
-        payload = to_hrz5_audit_event(event)
+        payload = to_observability_audit_event(event)
         url = f"{self._base_url}/v1/audit"
         parsed = urlsplit(self._base_url)
         try:

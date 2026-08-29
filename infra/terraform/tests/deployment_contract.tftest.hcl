@@ -34,8 +34,8 @@ variables {
   iap_oauth2_client_secret         = "synthetic-test-value"
   portal_audit_hmac_secret         = "hrz9-test-portal-audit-hmac"
   portal_audit_hmac_secret_version = "1"
-  observability_url                = "https://hrz5.hrz9.example.test"
-  observability_audience           = "https://hrz5-audience.hrz9.example.test"
+  observability_url                = "https://observability.hrz9.example.test"
+  observability_audience           = "https://observability-audience.hrz9.example.test"
   iap_jwt_audience                 = "/projects/000000000000/global/backendServices/1"
   iap_members                      = ["group:journey-users@example.test"]
   notification_channels            = ["projects/hrz9-test-00001/notificationChannels/1"]
@@ -587,7 +587,7 @@ run "reject_uppercase_tenant_policy_origin" {
 run "reject_non_https_observability_url" {
   command = plan
   variables {
-    observability_url = "http://hrz5.hrz9.example.test"
+    observability_url = "http://observability.hrz9.example.test"
   }
   expect_failures = [var.observability_url]
 }
@@ -595,7 +595,7 @@ run "reject_non_https_observability_url" {
 run "reject_observability_audience_path" {
   command = plan
   variables {
-    observability_audience = "https://hrz5.hrz9.example.test/path"
+    observability_audience = "https://observability.hrz9.example.test/path"
   }
   expect_failures = [var.observability_audience]
 }

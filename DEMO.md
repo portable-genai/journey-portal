@@ -29,7 +29,7 @@ It renders, from the real domain code:
   hash without request bodies, queries, credentials or identity assertions.
 
 The command also writes `scripts/out/portal_audit_integrity.json`,
-`scripts/out/portal_embed_policy.json`, and `scripts/out/portal_hrz5_event.json`, the
+`scripts/out/portal_embed_policy.json`, and `scripts/out/portal_observability_event.json`, the
 dependency-free reviewer views consumed by the HTML panels.
 
 This is the security story on one page, and it needs none of the embedded apps running.
@@ -77,7 +77,7 @@ portal serves its whole static catalog whatever was started, so an unscoped smok
 launch checks apps that are not running.
 
 It then selects the `analyst` through `/v1/session/persona` and sends a real Hrz7 review request
-through `/apps/hrz7/api/v1/reviews`. The request intentionally carries a conflicting browser
+through `/apps/human-review-console/api/v1/reviews`. The request intentionally carries a conflicting browser
 persona; the returned review maker must be the portal-selected analyst, proving the portal
 stripped the spoof and injected its verified identity. It then selects the `approver` and
 withdraws that item, which does two things at once: it leaves the review queue exactly as it was
