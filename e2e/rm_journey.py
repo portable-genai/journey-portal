@@ -18,9 +18,11 @@ Every step writes a screenshot, and the run writes ``evidence.json`` naming what
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -29,7 +31,7 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from pairing import comparable  # noqa: E402
+from pairing import CAPTURE_STEP, comparable  # noqa: E402
 from targets import Target, TargetError, resolve  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent
@@ -108,6 +110,13 @@ def _embedded_frame(page: Page) -> Frame:
 
 def run(target: Target, out_dir: Path) -> Evidence:
     out_dir.mkdir(parents=True, exist_ok=True)
+    # A failed run must leave nothing PAIRABLE behind. Until 2026-08-29 it left the previous
+    # run's dossier.json and evidence.json exactly where they were, so `make e2e-pair` in the
+    # window after a failure compared the last run that worked and printed PASS for a run that
+    # never happened -- against, that day, a deployment that had already been deleted. The
+    # screenshots and the failure capture stay; they are diagnostics, not evidence of a dossier.
+    for pairable in ("dossier.json", "evidence.json"):
+        (out_dir / pairable).unlink(missing_ok=True)
     evidence = Evidence(target=target.name, base_url=target.base_url)
     console_errors: list[str] = []
     #: The dossier as it came off the wire. Captured from the console's OWN request rather than
@@ -247,18 +256,24 @@ def run(target: Target, out_dir: Path) -> Evidence:
                 "nothing to pair. The journey passed; the paired claim cannot be made from it."
             )
             artifact = dossiers[-1]
-            (out_dir / "dossier.json").write_text(
-                json.dumps(artifact, indent=2) + "\n", encoding="utf-8"
-            )
+            payload = json.dumps(artifact, indent=2) + "\n"
+            (out_dir / "dossier.json").write_text(payload, encoding="utf-8")
             summary = comparable(artifact)
             evidence.record(
-                "deterministic artifact captured",
-                band=summary.get("rating.band"),
-                score=summary.get("rating.score"),
-                requires_human_review=summary.get("requires_human_review"),
-                citations=len(summary.get("rating.citations", []))
-                + len(summary.get("sow.citations", [])),
+                CAPTURE_STEP,
+                band=summary["rating.band"],
+                score=summary["rating.score"],
+                requires_human_review=summary["requires_human_review"],
+                # Distinct cited DOCUMENTS, which is what _citations counts. This used to take
+                # len() of those two entries, and both are dicts of four keys, so it recorded a
+                # constant 8 on every run of either target and called it a citation count.
+                cited_documents=summary["rating.citations"]["count"]
+                + summary["sow.citations"]["count"],
                 comparable_fields=len(summary),
+                generated_at=artifact.get("generated_at"),
+                # What makes this dossier and this evidence provably one run. pair_report
+                # refuses a dossier whose digest the run beside it does not vouch for.
+                dossier_sha256=hashlib.sha256(payload.encode("utf-8")).hexdigest(),
             )
         except BaseException:
             # Make the failure self-describing. A timeout on a selector says which selector and
@@ -299,7 +314,14 @@ def main() -> int:
         return 1
     (out_dir / "evidence.json").write_text(
         json.dumps(
-            {"target": evidence.target, "base_url": evidence.base_url, "steps": evidence.steps},
+            {
+                "target": evidence.target,
+                "base_url": evidence.base_url,
+                # When the run happened, so a reader of a paired comparison can see whether it
+                # is a pair of runs or a pair of files that have been sitting there.
+                "captured_at": datetime.now(UTC).isoformat(timespec="seconds"),
+                "steps": evidence.steps,
+            },
             indent=2,
         )
         + "\n",

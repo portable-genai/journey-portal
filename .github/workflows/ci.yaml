@@ -43,8 +43,12 @@ jobs:
       - name: Mypy (strict)
         run: mypy src
 
-      - name: Pytest (must pass with no Google Cloud SDKs installed)
-        run: pytest -m 'not integration' -q
+      # `make test`, not a bare `pytest`: the presenter runners' suites (scripts/test_demo_walkthrough.py,
+      # scripts/test_run_journeys.py) sit outside `testpaths`, so a bare invocation collects `tests`
+      # only and the step-order, hosted-subset and confirm-inputs contracts never reach the merge gate.
+      # The Makefile target is the one home for that argument list; this gate runs it verbatim.
+      - name: Pytest via the repo's own gate command (no Google Cloud SDKs installed)
+        run: make test
 
       - name: Eval gate (offline smoke, exit non-zero on fail)
         run: python eval/run_eval.py

@@ -5,8 +5,16 @@ Run this after ``scripts/run_journeys.py`` has declared the stack ready.  The sm
 the mounted apps from the portal's journey feed, checks each proxied health endpoint reports an
 offline ``local`` or a real ``live`` profile (nothing else passes), then uses
 the real Human Review Console API to prove portal-selected identity injection.  It intentionally
-sends a conflicting browser persona header on that final call; the returned review maker must
+sends a conflicting browser persona header on that call; the returned review maker must
 still be the principal selected by the portal cookie.
+
+The smoke then withdraws the item it raised, under a second, independent persona, so the review
+queue is left exactly as it was found.  The demonstration presents that queue and says out loud
+what is in it, so a smoke run must not add a row to it.
+
+The feed is the whole static catalog, so after ``run_journeys.py --journey <key>`` (which starts
+one journey's apps only) pass the same ``--journey <key>`` here.  Without it the smoke would walk
+apps that were never launched and fail on their proxied health checks.
 
 The script uses only the Python standard library so it remains a convenient live-demo check and
 does not add a runtime dependency to the portal service.
@@ -25,7 +33,13 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin, urlparse
 from urllib.request import HTTPCookieProcessor, Request, build_opener
 
-_PERSONA_ID = "approver"
+# The persona that raises the smoke's review item, and the independent one that withdraws it
+# again. They have to differ: the console refuses a self-approval, so an item raised by the
+# only persona holding the approver entitlement could never be disposed of, and every smoke run
+# left a permanent smoke row in the very queue the demonstration presents. Because they differ,
+# the withdrawal below is also a real four-eyes disposition rather than only a tidy-up.
+_MAKER_PERSONA_ID = "analyst"
+_CHECKER_PERSONA_ID = "approver"
 _SPOOFED_PERSONA_ID = "other-tenant"
 # The profiles an embedded app may report through the portal: ``local`` is the offline demo
 # stack, ``live`` is a real run (Doc1 under ``run_journeys.py --live``). Anything else, such as a
@@ -121,6 +135,29 @@ def _expect_status(response: JsonResponse, expected: int, context: str) -> dict[
     return response.body
 
 
+def _select_journeys(feed: dict[str, Any], selected: tuple[str, ...]) -> dict[str, Any]:
+    """The journey feed narrowed to the named keys (unchanged when none are named).
+
+    The portal serves its whole static catalog whatever the launcher started, so a
+    single-journey launch has to say which journey it launched.  A key the feed does not
+    carry is a failure, not an empty selection: silently checking nothing would pass.
+    """
+    if not selected:
+        return feed
+    raw_journeys = feed.get("journeys")
+    if not isinstance(raw_journeys, list):
+        raise SmokeFailure("GET /v1/journeys: missing journeys list")
+    kept = [
+        journey
+        for journey in raw_journeys
+        if isinstance(journey, dict) and journey.get("key") in selected
+    ]
+    missing = sorted(set(selected) - {journey.get("key") for journey in kept})
+    if missing:
+        raise SmokeFailure(f"GET /v1/journeys: no journey named {', '.join(missing)}")
+    return {"journeys": kept}
+
+
 def _mounted_apps(journeys: dict[str, Any]) -> tuple[tuple[str, str], ...]:
     raw_journeys = journeys.get("journeys")
     if not isinstance(raw_journeys, list):
@@ -160,15 +197,63 @@ def _check_mounted_app_health(client: JsonRequester, apps: tuple[tuple[str, str]
         print(f"PASS {path} profile={profile}")
 
 
-def _prove_injected_identity(client: JsonRequester) -> None:
+def _select_persona(client: JsonRequester, persona_id: str) -> str:
+    """Select one demo persona at the portal and return the principal it verified."""
     selected = _expect_status(
-        client.request_json("POST", "/v1/session/persona", payload={"id": _PERSONA_ID}),
+        client.request_json("POST", "/v1/session/persona", payload={"id": persona_id}),
         200,
         "POST /v1/session/persona",
     )
     subject = selected.get("subject")
-    if selected.get("persona") != _PERSONA_ID or not isinstance(subject, str) or not subject:
-        raise SmokeFailure("POST /v1/session/persona: portal did not return the selected principal")
+    if selected.get("persona") != persona_id or not isinstance(subject, str) or not subject:
+        raise SmokeFailure(
+            f"POST /v1/session/persona: portal did not select the principal {persona_id!r} "
+            f"(received {selected.get('persona')!r})"
+        )
+    return subject
+
+
+def _withdraw_smoke_review(client: JsonRequester, review: dict[str, Any]) -> None:
+    """Reject the smoke's own item, so the queue is left exactly as the smoke found it.
+
+    The console lists PENDING items, so a rejected item leaves the queue the demo shows. That
+    matters because the run sheet tells the room the queue holds exactly the escalations the
+    demonstration itself produced, and an undisposed smoke item made that untrue on every run.
+
+    The withdrawal is also a second proof rather than only a tidy-up: it is accepted only
+    because the portal injected a different verified principal on this call, and the console
+    checked that principal against the item's maker.
+    """
+    review_id = review.get("review_id")
+    if not isinstance(review_id, str) or not review_id:
+        raise SmokeFailure("POST /apps/hrz7/api/v1/reviews: the created item carried no id")
+    checker = _select_persona(client, _CHECKER_PERSONA_ID)
+    path = f"/apps/hrz7/api/v1/reviews/{review_id}/decision"
+    outcome = _expect_status(
+        client.request_json(
+            "POST",
+            path,
+            payload={
+                "disposition": "reject",
+                "reason": "Portal smoke item withdrawn by the smoke run that raised it.",
+            },
+        ),
+        200,
+        f"POST {path}",
+    )
+    item = outcome.get("item")
+    state = item.get("state") if isinstance(item, dict) else None
+    if outcome.get("decision") != "allowed" or state != "rejected":
+        raise SmokeFailure(
+            f"POST {path}: the smoke item was not withdrawn and would stay in the demo queue "
+            f"(decision {outcome.get('decision')!r}, state {state!r}, "
+            f"findings {outcome.get('findings')!r})"
+        )
+    print(f"PASS {path} withdrawn by {checker} (review queue left as it was found)")
+
+
+def _prove_injected_identity(client: JsonRequester) -> None:
+    subject = _select_persona(client, _MAKER_PERSONA_ID)
 
     review = _expect_status(
         client.request_json(
@@ -177,11 +262,12 @@ def _prove_injected_identity(client: JsonRequester) -> None:
             payload={
                 "action": "journey_portal_smoke",
                 "subject": f"smoke-{uuid.uuid4().hex[:12]}",
-                "summary": "Fictional portal smoke-review item.",
+                "summary": "Fictional portal smoke-review item, withdrawn once it has proved it.",
                 "severity": "low",
                 "required_approvals": 1,
             },
-            # This is a browser-spoofed identity. The portal must strip it and inject approver.
+            # This is a browser-spoofed identity. The portal must strip it and inject the
+            # principal it verified for the selected persona instead.
             headers={"X-Dev-Persona": _SPOOFED_PERSONA_ID},
         ),
         201,
@@ -196,15 +282,29 @@ def _prove_injected_identity(client: JsonRequester) -> None:
         "PASS /apps/hrz7/api/v1/reviews "
         f"maker={subject} (spoofed persona {_SPOOFED_PERSONA_ID!r} was not accepted)"
     )
+    _withdraw_smoke_review(client, review)
 
 
-def run_smoke(client: JsonRequester) -> None:
-    """Run the end-to-end checks using only portal-relative paths."""
-    journeys = _expect_status(client.request_json("GET", "/v1/journeys"), 200, "GET /v1/journeys")
-    apps = _mounted_apps(journeys)
+def run_smoke(client: JsonRequester, selected: tuple[str, ...] = ()) -> None:
+    """Run the end-to-end checks using only portal-relative paths.
+
+    ``selected`` names the journeys that were launched; empty means the whole catalog.
+    """
+    feed = _expect_status(client.request_json("GET", "/v1/journeys"), 200, "GET /v1/journeys")
+    apps = _mounted_apps(_select_journeys(feed, selected))
     _check_mounted_app_health(client, apps)
     if "hrz7" not in {app_id for app_id, _api_base in apps}:
-        raise SmokeFailure("GET /v1/journeys: hrz7 is required for the real identity proof")
+        # The identity proof runs against the real Human Review Console, so it is only
+        # available where that console is mounted. On a full run its absence is a broken
+        # catalog; on a single-journey run it is simply a journey that does not embed it
+        # (`rm`), and saying so is honest where claiming a pass would not be.
+        if not selected:
+            raise SmokeFailure("GET /v1/journeys: hrz7 is required for the real identity proof")
+        print(
+            f"SKIP identity proof: journey {', '.join(selected)} does not mount hrz7; "
+            "run the smoke against a journey that does to prove injected identity"
+        )
+        return
     _prove_injected_identity(client)
 
 
@@ -221,6 +321,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=10.0,
         help="per-request timeout in seconds (default: 10)",
     )
+    parser.add_argument(
+        "--journey",
+        action="append",
+        metavar="KEY",
+        dest="journeys",
+        help=(
+            "check only this journey's apps (repeatable); pass the same key the launcher "
+            "was given. Default: every app in the portal's catalog."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -230,7 +340,10 @@ def main(argv: list[str] | None = None) -> int:
         print("FAIL --timeout must be greater than zero", file=sys.stderr)
         return 2
     try:
-        run_smoke(PortalClient(args.base_url, timeout=args.timeout))
+        run_smoke(
+            PortalClient(args.base_url, timeout=args.timeout),
+            tuple(args.journeys or ()),
+        )
     except (SmokeFailure, ValueError) as exc:
         print(f"FAIL {exc}", file=sys.stderr)
         return 1
