@@ -104,33 +104,33 @@ resource "terraform_data" "vpc_sc_contract" {
 resource "google_service_account" "portal" {
   project      = var.project_id
   account_id   = "${var.name_prefix}-portal"
-  display_name = "Hrz9 portal BFF runtime"
+  display_name = "Journey portal BFF runtime"
 }
 
 resource "google_service_account" "rm_shell" {
   project      = var.project_id
   account_id   = "${var.name_prefix}-rm"
-  display_name = "Hrz9 RM shell runtime"
+  display_name = "Journey portal RM shell runtime"
 }
 
 resource "google_service_account" "ops_shell" {
   project      = var.project_id
   account_id   = "${var.name_prefix}-ops"
-  display_name = "Hrz9 Ops shell runtime"
+  display_name = "Journey portal Ops shell runtime"
 }
 
 resource "google_service_account" "embedded_ui" {
   for_each     = var.embedded_apps
   project      = var.project_id
   account_id   = "${substr(var.name_prefix, 0, 14)}-u-${substr(each.key, 0, 6)}-${substr(sha256(each.key), 0, 6)}"
-  display_name = "Hrz9 ${each.key} embedded UI runtime"
+  display_name = "Journey portal ${each.key} embedded UI runtime"
 }
 
 resource "google_service_account" "embedded_api" {
   for_each     = var.embedded_apps
   project      = var.project_id
   account_id   = "${substr(var.name_prefix, 0, 14)}-a-${substr(each.key, 0, 6)}-${substr(sha256(each.key), 0, 6)}"
-  display_name = "Hrz9 ${each.key} embedded API runtime"
+  display_name = "Journey portal ${each.key} embedded API runtime"
 }
 
 resource "google_project_service_identity" "iap" {

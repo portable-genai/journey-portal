@@ -127,7 +127,7 @@ def test_terraform_requires_all_apps_managed_profiles_and_alert_delivery() -> No
     # coupled seven independently-released repositories into one atomic deployment. What must
     # still hold is that the set is non-empty and that every id in it is one the portal knows.
     assert "length(var.embedded_apps) > 0" in variables
-    for app_id in ("doc1", "doc2", "doc3", "doc4", "doc5", "rsk1", "hrz7"):
+    for app_id in ("cdd-sow-research", "credit-memo-drafting", "cio-advisory", "trade-finance-checker", "loan-document-intelligence", "compliance-advisory", "human-review-console"):
         assert f'"{app_id}"' in variables
     for profile_env in (
         "CDD_PROFILE",
@@ -141,7 +141,7 @@ def test_terraform_requires_all_apps_managed_profiles_and_alert_delivery() -> No
         assert profile_env in variables
     assert "length(var.notification_channels) > 0" in variables
     assert "every embedded UI/API" in main
-    assert 'id == "doc1" ? "/agent" : "/apps/${id}"' in variables
+    assert 'id == "cdd-sow-research" ? "/agent" : "/apps/${id}"' in variables
     assert "setintersection" in variables
     assert "K_SERVICE" in variables
     assert "CDD_IAP_AUDIENCE" in variables

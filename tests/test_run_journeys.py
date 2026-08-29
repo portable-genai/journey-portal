@@ -52,28 +52,28 @@ def test_backend_interpreter_warns_before_falling_back(
 def test_journey_subset_uses_only_its_configured_apps(launcher_module: ModuleType) -> None:
     catalog = JourneyCatalog.from_mapping(load_journeys_mapping(Settings.load().journeys_path))
 
-    assert launcher_module._selected_app_ids(catalog, ("rm",)) == ("doc1", "doc5", "doc3")
-    assert launcher_module._selected_app_ids(catalog, ("ops",)) == ("doc2", "doc4", "rsk1", "hrz7")
+    assert launcher_module._selected_app_ids(catalog, ("rm",)) == ("cdd-sow-research", "loan-document-intelligence", "cio-advisory")
+    assert launcher_module._selected_app_ids(catalog, ("ops",)) == ("credit-memo-drafting", "trade-finance-checker", "compliance-advisory", "human-review-console")
 
 
 def test_hrz7_ui_uses_the_portal_relative_review_api(launcher_module: ModuleType) -> None:
-    environment = launcher_module._ui_environment("hrz7")
+    environment = launcher_module._ui_environment("human-review-console")
 
-    assert environment["NEXT_PUBLIC_REVIEW_API_URL"] == "/apps/hrz7/api"
-    assert environment["NEXT_PUBLIC_API_BASE"] == "/apps/hrz7/api"
+    assert environment["NEXT_PUBLIC_REVIEW_API_URL"] == "/apps/human-review-console/api"
+    assert environment["NEXT_PUBLIC_API_BASE"] == "/apps/human-review-console/api"
     assert all("localhost" not in value for value in environment.values())
 
 
 def test_other_uis_do_not_receive_the_hrz7_specific_variable(
     launcher_module: ModuleType,
 ) -> None:
-    assert "NEXT_PUBLIC_REVIEW_API_URL" not in launcher_module._ui_environment("doc1")
+    assert "NEXT_PUBLIC_REVIEW_API_URL" not in launcher_module._ui_environment("cdd-sow-research")
 
 
 def test_doc1_ui_uses_the_canonical_agent_artifact_path(
     launcher_module: ModuleType,
 ) -> None:
-    environment = launcher_module._ui_environment("doc1")
+    environment = launcher_module._ui_environment("cdd-sow-research")
 
     assert environment["NEXT_PUBLIC_BASE_PATH"] == "/agent"
     assert environment["NEXT_PUBLIC_API_BASE"] == "/agent/api"
@@ -94,14 +94,14 @@ def test_launcher_wires_doc1_to_hrz7_as_a_loopback_service_producer(
     monkeypatch.setattr(
         launcher_module,
         "_APP_REPOS",
-        {"doc1": "cdd-sow-research", "hrz7": "human-review-console"},
+        {"cdd-sow-research": "cdd-sow-research", "human-review-console": "human-review-console"},
     )
     monkeypatch.setenv("JOURNEY_DEMO_S2S_TOKEN", "synthetic-test-token")
     launcher = launcher_module.Launcher(with_shells=False)
     launcher._spawn = Mock()
 
-    launcher.launch_app("doc1", api_port=8090, ui_port=3001)
-    launcher.launch_app("hrz7", api_port=8087, ui_port=3007)
+    launcher.launch_app("cdd-sow-research", api_port=8090, ui_port=3001)
+    launcher.launch_app("human-review-console", api_port=8087, ui_port=3007)
 
     doc1_backend = launcher._spawn.call_args_list[0]
     hrz7_backend = launcher._spawn.call_args_list[1]
@@ -113,7 +113,7 @@ def test_launcher_wires_doc1_to_hrz7_as_a_loopback_service_producer(
         "CDD_IDENTITY_PROFILE": "local-persona",
         "CDD_ALLOW_INSECURE_DEMO": "1",
         "CDD_HRZ7_URL": "http://127.0.0.1:8087",
-        "CDD_LOCAL_REVIEW_OUTBOX": str(launcher_module._DOC1_REVIEW_OUTBOX),
+        "CDD_LOCAL_REVIEW_OUTBOX": str(launcher_module._CDD_REVIEW_OUTBOX),
         "CDD_S2S_TOKEN": "synthetic-test-token",
     }
     assert "CDD_LOCAL_REVIEW_URL" not in doc1_backend.kwargs["env"]
@@ -123,7 +123,7 @@ def test_launcher_wires_doc1_to_hrz7_as_a_loopback_service_producer(
         # given, and it refuses it on the write path while healthz still reads green, so a
         # launcher that omits this produces a queue that lists and disposes of nothing.
         "REVIEW_PROFILE": launcher_module._PORTAL_LOCAL_PROFILE,
-        "REVIEW_DB_PATH": str(launcher_module._HRZ7_REVIEW_DB),
+        "REVIEW_DB_PATH": str(launcher_module._REVIEW_CONSOLE_DB),
         "REVIEW_S2S_TOKEN": "synthetic-test-token",
     }
 
@@ -135,7 +135,7 @@ def test_live_flag_adds_only_doc1_live_overrides(
     (workspace / "cdd-sow-research" / "src" / "cdd_sow_research" / "api").mkdir(parents=True)
     (workspace / "cdd-sow-research" / "src" / "cdd_sow_research" / "api" / "app.py").touch()
     monkeypatch.setattr(launcher_module, "_WORKSPACE", workspace)
-    monkeypatch.setattr(launcher_module, "_APP_REPOS", {"doc1": "cdd-sow-research"})
+    monkeypatch.setattr(launcher_module, "_APP_REPOS", {"cdd-sow-research": "cdd-sow-research"})
     monkeypatch.setenv("JOURNEY_DEMO_S2S_TOKEN", "synthetic-test-token")
     monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "fictional-demo-project")
     monkeypatch.delenv("CDD_TRIAGE_MODEL", raising=False)
@@ -143,7 +143,7 @@ def test_live_flag_adds_only_doc1_live_overrides(
     launcher = launcher_module.Launcher(with_shells=False, live=True)
     launcher._spawn = Mock()
 
-    launcher.launch_app("doc1", api_port=8090, ui_port=3001)
+    launcher.launch_app("cdd-sow-research", api_port=8090, ui_port=3001)
 
     assert launcher._spawn.call_args_list[0].kwargs["env"] == {
         "PYTHONPATH": "src",
@@ -151,7 +151,7 @@ def test_live_flag_adds_only_doc1_live_overrides(
         "CDD_IDENTITY_PROFILE": "local-persona",
         "CDD_ALLOW_INSECURE_DEMO": "1",
         "CDD_HRZ7_URL": "http://127.0.0.1:8087",
-        "CDD_LOCAL_REVIEW_OUTBOX": str(launcher_module._DOC1_REVIEW_OUTBOX),
+        "CDD_LOCAL_REVIEW_OUTBOX": str(launcher_module._CDD_REVIEW_OUTBOX),
         "CDD_S2S_TOKEN": "synthetic-test-token",
         "CDD_PROFILE": "live",
         "CDD_TRIAGE_MODEL": "gemini-3.5-flash",
@@ -350,8 +350,8 @@ def test_fresh_state_removes_only_launcher_owned_review_databases(
         Path(f"{database}-shm").write_text("shm", encoding="utf-8")
     unrelated.write_text("unrelated", encoding="utf-8")
     monkeypatch.setattr(launcher_module, "_PRESENTER_STATE_DIR", state_dir)
-    monkeypatch.setattr(launcher_module, "_DOC1_REVIEW_OUTBOX", doc1)
-    monkeypatch.setattr(launcher_module, "_HRZ7_REVIEW_DB", hrz7)
+    monkeypatch.setattr(launcher_module, "_CDD_REVIEW_OUTBOX", doc1)
+    monkeypatch.setattr(launcher_module, "_REVIEW_CONSOLE_DB", hrz7)
 
     removed = launcher_module._reset_presenter_state()
 
@@ -383,8 +383,8 @@ def test_fresh_state_refuses_a_database_outside_its_owned_directory(
     state_dir = tmp_path / "presenter-state"
     state_dir.mkdir()
     monkeypatch.setattr(launcher_module, "_PRESENTER_STATE_DIR", state_dir)
-    monkeypatch.setattr(launcher_module, "_DOC1_REVIEW_OUTBOX", tmp_path / "outside.sqlite3")
-    monkeypatch.setattr(launcher_module, "_HRZ7_REVIEW_DB", state_dir / "hrz7.sqlite3")
+    monkeypatch.setattr(launcher_module, "_CDD_REVIEW_OUTBOX", tmp_path / "outside.sqlite3")
+    monkeypatch.setattr(launcher_module, "_REVIEW_CONSOLE_DB", state_dir / "hrz7.sqlite3")
 
     with pytest.raises(RuntimeError, match="escaped"):
         launcher_module._reset_presenter_state()

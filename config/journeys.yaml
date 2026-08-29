@@ -2,7 +2,7 @@
 #
 # A "journey" is a persona-scoped set of embedded apps composed into one UI. An "app" is a built
 # catalog vertical mounted same-origin under the portal. Most artifacts use /apps/<id>; Doc1 keeps
-# /apps/doc1 as a compatibility entry while its fixed, portable artifact is served at /agent.
+# /agent as its canonical mount, because that artifact is fixed and portable.
 # Each app declares its Next.js UI and FastAPI backend. The portal reverse-proxies:
 #   <canonical_mount>/*       -> ui_upstream  (canonical path forwarded unchanged)
 #   <canonical_mount>/api/*   -> api_upstream (the public prefix is stripped)
@@ -14,89 +14,89 @@ journeys:
   rm:
     label: "RM Journeys"
     blurb: "Relationship-Manager Workbench: Onboarding & Advisory"
-    apps: [doc1, doc5, doc3]
+    apps: [cdd-sow-research, loan-document-intelligence, cio-advisory]
   ops:
     label: "Ops Journeys"
     blurb: "Operations Workbench: Underwriting, Trade Docs, Compliance & Review Queue"
-    apps: [doc2, doc4, rsk1, hrz7]
+    apps: [credit-memo-drafting, trade-finance-checker, compliance-advisory, human-review-console]
   mkt:
     label: "Marketing Journeys"
     blurb: "Campaign Manager Workbench: Research, Plan, Create, Clear, Optimise & Personalise"
-    apps: [mkt1, mkt2, mkt3, mkt6, mkt4, mkt5, hrz7]
+    apps: [market-intelligence, campaign-planner, creative-studio, marketing-compliance-gate, performance-marketing-optimisation, next-best-action, human-review-console]
   gov:
     label: "AI Governance Journeys"
     blurb: "Model-Risk Workbench: Architecture Conformance, Promotion Gate & Sign-off"
-    apps: [rsk3, hrz4, hrz7]
+    apps: [architecture-validator, model-quality-gate, human-review-console]
   svc:
     label: "Service Journeys"
     blurb: "Complaints Handler Workbench: Intake, Outcome Assessment & Review"
-    apps: [doc6, rsk1, hrz7]
+    apps: [complaints-review, compliance-advisory, human-review-console]
 
 apps:
-  doc1:
+  cdd-sow-research:
     label: "CDD + Source of Wealth"
     canonical_mount_path: "/agent"
-    ui_upstream: "${PORTAL_DOC1_UI:-http://127.0.0.1:3101}"
-    api_upstream: "${PORTAL_DOC1_API:-http://127.0.0.1:8090}"
-  doc2:
+    ui_upstream: "${PORTAL_CDD_SOW_RESEARCH_UI:-http://127.0.0.1:3101}"
+    api_upstream: "${PORTAL_CDD_SOW_RESEARCH_API:-http://127.0.0.1:8090}"
+  credit-memo-drafting:
     label: "Credit Memo / Underwriting"
-    ui_upstream: "${PORTAL_DOC2_UI:-http://127.0.0.1:3102}"
-    api_upstream: "${PORTAL_DOC2_API:-http://127.0.0.1:8093}"
-  doc5:
+    ui_upstream: "${PORTAL_CREDIT_MEMO_DRAFTING_UI:-http://127.0.0.1:3102}"
+    api_upstream: "${PORTAL_CREDIT_MEMO_DRAFTING_API:-http://127.0.0.1:8093}"
+  loan-document-intelligence:
     label: "Loan / Mortgage Document Intelligence"
-    ui_upstream: "${PORTAL_DOC5_UI:-http://127.0.0.1:3106}"
-    api_upstream: "${PORTAL_DOC5_API:-http://127.0.0.1:8092}"
-  doc3:
+    ui_upstream: "${PORTAL_LOAN_DOCUMENT_INTELLIGENCE_UI:-http://127.0.0.1:3106}"
+    api_upstream: "${PORTAL_LOAN_DOCUMENT_INTELLIGENCE_API:-http://127.0.0.1:8092}"
+  cio-advisory:
     label: "CIO Advisory Assistant"
-    ui_upstream: "${PORTAL_DOC3_UI:-http://127.0.0.1:3103}"
-    api_upstream: "${PORTAL_DOC3_API:-http://127.0.0.1:8091}"
-  doc4:
+    ui_upstream: "${PORTAL_CIO_ADVISORY_UI:-http://127.0.0.1:3103}"
+    api_upstream: "${PORTAL_CIO_ADVISORY_API:-http://127.0.0.1:8091}"
+  trade-finance-checker:
     label: "Trade-Finance Checker (UCP600)"
-    ui_upstream: "${PORTAL_DOC4_UI:-http://127.0.0.1:3104}"
-    api_upstream: "${PORTAL_DOC4_API:-http://127.0.0.1:8094}"
-  rsk1:
+    ui_upstream: "${PORTAL_TRADE_FINANCE_CHECKER_UI:-http://127.0.0.1:3104}"
+    api_upstream: "${PORTAL_TRADE_FINANCE_CHECKER_API:-http://127.0.0.1:8094}"
+  compliance-advisory:
     label: "Compliance Assistant & Control Mapper"
-    ui_upstream: "${PORTAL_RSK1_UI:-http://127.0.0.1:3105}"
-    api_upstream: "${PORTAL_RSK1_API:-http://127.0.0.1:8080}"
-  hrz7:
+    ui_upstream: "${PORTAL_COMPLIANCE_ADVISORY_UI:-http://127.0.0.1:3105}"
+    api_upstream: "${PORTAL_COMPLIANCE_ADVISORY_API:-http://127.0.0.1:8080}"
+  human-review-console:
     label: "Human-Review Console"
-    ui_upstream: "${PORTAL_HRZ7_UI:-http://127.0.0.1:3107}"
-    api_upstream: "${PORTAL_HRZ7_API:-http://127.0.0.1:8087}"
+    ui_upstream: "${PORTAL_HUMAN_REVIEW_CONSOLE_UI:-http://127.0.0.1:3107}"
+    api_upstream: "${PORTAL_HUMAN_REVIEW_CONSOLE_API:-http://127.0.0.1:8087}"
   # The marketing family keeps the consecutive API ports its repositories already assign
   # (8100 to 8105), so a port here matches the port that repo's own Makefile serves on.
-  mkt1:
+  market-intelligence:
     label: "Market Intelligence"
-    ui_upstream: "${PORTAL_MKT1_UI:-http://127.0.0.1:3110}"
-    api_upstream: "${PORTAL_MKT1_API:-http://127.0.0.1:8100}"
-  mkt2:
+    ui_upstream: "${PORTAL_MARKET_INTELLIGENCE_UI:-http://127.0.0.1:3110}"
+    api_upstream: "${PORTAL_MARKET_INTELLIGENCE_API:-http://127.0.0.1:8100}"
+  campaign-planner:
     label: "Campaign Planner"
-    ui_upstream: "${PORTAL_MKT2_UI:-http://127.0.0.1:3111}"
-    api_upstream: "${PORTAL_MKT2_API:-http://127.0.0.1:8101}"
-  mkt3:
+    ui_upstream: "${PORTAL_CAMPAIGN_PLANNER_UI:-http://127.0.0.1:3111}"
+    api_upstream: "${PORTAL_CAMPAIGN_PLANNER_API:-http://127.0.0.1:8101}"
+  creative-studio:
     label: "Creative Studio"
-    ui_upstream: "${PORTAL_MKT3_UI:-http://127.0.0.1:3112}"
-    api_upstream: "${PORTAL_MKT3_API:-http://127.0.0.1:8102}"
-  mkt4:
+    ui_upstream: "${PORTAL_CREATIVE_STUDIO_UI:-http://127.0.0.1:3112}"
+    api_upstream: "${PORTAL_CREATIVE_STUDIO_API:-http://127.0.0.1:8102}"
+  performance-marketing-optimisation:
     label: "Performance Marketing"
-    ui_upstream: "${PORTAL_MKT4_UI:-http://127.0.0.1:3113}"
-    api_upstream: "${PORTAL_MKT4_API:-http://127.0.0.1:8103}"
-  mkt5:
+    ui_upstream: "${PORTAL_PERFORMANCE_MARKETING_OPTIMISATION_UI:-http://127.0.0.1:3113}"
+    api_upstream: "${PORTAL_PERFORMANCE_MARKETING_OPTIMISATION_API:-http://127.0.0.1:8103}"
+  next-best-action:
     label: "Next Best Action"
-    ui_upstream: "${PORTAL_MKT5_UI:-http://127.0.0.1:3114}"
-    api_upstream: "${PORTAL_MKT5_API:-http://127.0.0.1:8104}"
-  mkt6:
+    ui_upstream: "${PORTAL_NEXT_BEST_ACTION_UI:-http://127.0.0.1:3114}"
+    api_upstream: "${PORTAL_NEXT_BEST_ACTION_API:-http://127.0.0.1:8104}"
+  marketing-compliance-gate:
     label: "Marketing Compliance Gate"
-    ui_upstream: "${PORTAL_MKT6_UI:-http://127.0.0.1:3115}"
-    api_upstream: "${PORTAL_MKT6_API:-http://127.0.0.1:8105}"
-  rsk3:
+    ui_upstream: "${PORTAL_MARKETING_COMPLIANCE_GATE_UI:-http://127.0.0.1:3115}"
+    api_upstream: "${PORTAL_MARKETING_COMPLIANCE_GATE_API:-http://127.0.0.1:8105}"
+  architecture-validator:
     label: "Architecture Validator"
-    ui_upstream: "${PORTAL_RSK3_UI:-http://127.0.0.1:3116}"
-    api_upstream: "${PORTAL_RSK3_API:-http://127.0.0.1:8088}"
-  hrz4:
+    ui_upstream: "${PORTAL_ARCHITECTURE_VALIDATOR_UI:-http://127.0.0.1:3116}"
+    api_upstream: "${PORTAL_ARCHITECTURE_VALIDATOR_API:-http://127.0.0.1:8088}"
+  model-quality-gate:
     label: "AI Quality & Promotion Gate"
-    ui_upstream: "${PORTAL_HRZ4_UI:-http://127.0.0.1:3117}"
-    api_upstream: "${PORTAL_HRZ4_API:-http://127.0.0.1:8084}"
-  doc6:
+    ui_upstream: "${PORTAL_MODEL_QUALITY_GATE_UI:-http://127.0.0.1:3117}"
+    api_upstream: "${PORTAL_MODEL_QUALITY_GATE_API:-http://127.0.0.1:8084}"
+  complaints-review:
     label: "Complaints Review"
-    ui_upstream: "${PORTAL_DOC6_UI:-http://127.0.0.1:3118}"
-    api_upstream: "${PORTAL_DOC6_API:-http://127.0.0.1:8095}"
+    ui_upstream: "${PORTAL_COMPLAINTS_REVIEW_UI:-http://127.0.0.1:3118}"
+    api_upstream: "${PORTAL_COMPLAINTS_REVIEW_API:-http://127.0.0.1:8095}"

@@ -119,16 +119,16 @@ _DEFAULT_MODEL_SERVER_URL = "http://127.0.0.1:8001/chat/completions"
 # endpoint into each app's URL variable so a non-default port set once via
 # CDD_LIVE_LLM_URL reaches every app.
 _LIVE_APP_PROFILES: dict[str, tuple[str, str]] = {
-    "doc2": ("CREDIT_MEMO_PROFILE", "CREDIT_MEMO_LIVE_LLM_URL"),
-    "doc3": ("CIO_PROFILE", "CIO_LIVE_LLM_URL"),
-    "doc4": ("TRADE_FINANCE_PROFILE", "TRADE_FINANCE_LIVE_LLM_URL"),
-    "rsk1": ("COMPLIANCE_PROFILE", "COMPLIANCE_LIVE_LLM_URL"),
+    "credit-memo-drafting": ("CREDIT_MEMO_PROFILE", "CREDIT_MEMO_LIVE_LLM_URL"),
+    "cio-advisory": ("CIO_PROFILE", "CIO_LIVE_LLM_URL"),
+    "trade-finance-checker": ("TRADE_FINANCE_PROFILE", "TRADE_FINANCE_LIVE_LLM_URL"),
+    "compliance-advisory": ("COMPLIANCE_PROFILE", "COMPLIANCE_LIVE_LLM_URL"),
 }
 # Doc2's EDGAR traffic must be declared with a contact (SEC fair-access policy).
 _EDGAR_CONTACT_ENV = "SEC_EDGAR_CONTACT"
 _PRESENTER_STATE_DIR = _REPO_ROOT / "scripts" / "out" / "presenter-state"
-_DOC1_REVIEW_OUTBOX = _PRESENTER_STATE_DIR / "doc1-review-outbox.sqlite3"
-_HRZ7_REVIEW_DB = _PRESENTER_STATE_DIR / "hrz7-reviews.sqlite3"
+_CDD_REVIEW_OUTBOX = _PRESENTER_STATE_DIR / "cdd-sow-research-review-outbox.sqlite3"
+_REVIEW_CONSOLE_DB = _PRESENTER_STATE_DIR / "human-review-console-reviews.sqlite3"
 _SQLITE_SIDECAR_SUFFIXES = ("", "-wal", "-shm")
 
 
@@ -153,22 +153,22 @@ def _defaulted_setting(name: str, default: str) -> str:
 
 # app id -> sibling repo folder in the workspace.
 _APP_REPOS: dict[str, str] = {
-    "doc1": "cdd-sow-research",
-    "doc2": "credit-memo-drafting",
-    "doc5": "loan-document-intelligence",
-    "doc3": "cio-advisory",
-    "doc4": "trade-finance-checker",
-    "rsk1": "compliance-advisory",
-    "hrz7": "human-review-console",
-    "mkt1": "market-intelligence",
-    "mkt2": "campaign-planner",
-    "mkt3": "creative-studio",
-    "mkt4": "performance-marketing-optimisation",
-    "mkt5": "next-best-action",
-    "mkt6": "marketing-compliance-gate",
-    "rsk3": "architecture-validator",
-    "hrz4": "model-quality-gate",
-    "doc6": "complaints-review",
+    "cdd-sow-research": "cdd-sow-research",
+    "credit-memo-drafting": "credit-memo-drafting",
+    "loan-document-intelligence": "loan-document-intelligence",
+    "cio-advisory": "cio-advisory",
+    "trade-finance-checker": "trade-finance-checker",
+    "compliance-advisory": "compliance-advisory",
+    "human-review-console": "human-review-console",
+    "market-intelligence": "market-intelligence",
+    "campaign-planner": "campaign-planner",
+    "creative-studio": "creative-studio",
+    "performance-marketing-optimisation": "performance-marketing-optimisation",
+    "next-best-action": "next-best-action",
+    "marketing-compliance-gate": "marketing-compliance-gate",
+    "architecture-validator": "architecture-validator",
+    "model-quality-gate": "model-quality-gate",
+    "complaints-review": "complaints-review",
 }
 
 # app id -> the environment variable that app reads its profile from.
@@ -179,22 +179,22 @@ _APP_REPOS: dict[str, str] = {
 # tries to do something. Naming the profile for all of them costs one line each and removes
 # the whole class.
 _APP_PROFILE_ENVS: dict[str, str] = {
-    "doc1": "CDD_PROFILE",
-    "doc2": "CREDIT_MEMO_PROFILE",
-    "doc3": "CIO_PROFILE",
-    "doc4": "TRADE_FINANCE_PROFILE",
-    "doc5": "LOAN_DOC_PROFILE",
-    "doc6": "COMPLAINTS_PROFILE",
-    "rsk1": "COMPLIANCE_PROFILE",
-    "rsk3": "ARCH_VALIDATOR_PROFILE",
-    "hrz4": "AI_QUALITY_PROFILE",
-    "hrz7": "REVIEW_PROFILE",
-    "mkt1": "MKT_INTEL_PROFILE",
-    "mkt2": "MKT_CAMPAIGN_PROFILE",
-    "mkt3": "MKT_CREATIVE_PROFILE",
-    "mkt4": "MKT_PERF_PROFILE",
-    "mkt5": "MKT_NBA_PROFILE",
-    "mkt6": "MKT_GOV_PROFILE",
+    "cdd-sow-research": "CDD_PROFILE",
+    "credit-memo-drafting": "CREDIT_MEMO_PROFILE",
+    "cio-advisory": "CIO_PROFILE",
+    "trade-finance-checker": "TRADE_FINANCE_PROFILE",
+    "loan-document-intelligence": "LOAN_DOC_PROFILE",
+    "complaints-review": "COMPLAINTS_PROFILE",
+    "compliance-advisory": "COMPLIANCE_PROFILE",
+    "architecture-validator": "ARCH_VALIDATOR_PROFILE",
+    "model-quality-gate": "AI_QUALITY_PROFILE",
+    "human-review-console": "REVIEW_PROFILE",
+    "market-intelligence": "MKT_INTEL_PROFILE",
+    "campaign-planner": "MKT_CAMPAIGN_PROFILE",
+    "creative-studio": "MKT_CREATIVE_PROFILE",
+    "performance-marketing-optimisation": "MKT_PERF_PROFILE",
+    "next-best-action": "MKT_NBA_PROFILE",
+    "marketing-compliance-gate": "MKT_GOV_PROFILE",
 }
 
 
@@ -229,7 +229,7 @@ def _selected_app_ids(catalog: JourneyCatalog, journeys: tuple[str, ...]) -> tup
 def _reset_presenter_state() -> tuple[Path, ...]:
     """Remove only launcher-owned synthetic review databases and their SQLite sidecars."""
     state_dir = _PRESENTER_STATE_DIR.resolve()
-    databases = (_DOC1_REVIEW_OUTBOX, _HRZ7_REVIEW_DB)
+    databases = (_CDD_REVIEW_OUTBOX, _REVIEW_CONSOLE_DB)
     if any(database.resolve().parent != state_dir for database in databases):
         raise RuntimeError("presenter database path escaped the launcher-owned state directory")
 
@@ -250,7 +250,7 @@ def _prepare_presenter_state() -> None:
 
 def _ui_environment(app_id: str) -> dict[str, str]:
     """Return the same-origin environment expected by an embedded app UI."""
-    base_path = "/agent" if app_id == "doc1" else f"/apps/{app_id}"
+    base_path = "/agent" if app_id == "cdd-sow-research" else f"/apps/{app_id}"
     environment = {
         "NEXT_PUBLIC_BASE_PATH": base_path,
         "NEXT_PUBLIC_API_BASE": f"{base_path}/api",
@@ -259,7 +259,7 @@ def _ui_environment(app_id: str) -> dict[str, str]:
     }
     # Hrz7 predates the shared API variable and still consumes its specific name. Keep the
     # generic variable too so it can migrate without changing the production-shaped launcher.
-    if app_id == "hrz7":
+    if app_id == "human-review-console":
         environment["NEXT_PUBLIC_REVIEW_API_URL"] = f"/apps/{app_id}/api"
     return environment
 
@@ -349,7 +349,7 @@ class Launcher:
         # export wins). Never pointed at the bundled fictional fixture: absence is
         # reported in the launch plan instead of silently degrading a live screen.
         exported = _optional_setting(_LIVE_SANCTIONS_ENV)
-        snapshot = _WORKSPACE / _APP_REPOS["doc1"] / _LIVE_SANCTIONS_SNAPSHOT
+        snapshot = _WORKSPACE / _APP_REPOS["cdd-sow-research"] / _LIVE_SANCTIONS_SNAPSHOT
         if exported:
             environment[_LIVE_SANCTIONS_ENV] = exported
         elif snapshot.is_file():
@@ -359,7 +359,7 @@ class Launcher:
     @staticmethod
     def _live_app_environment(app_id: str) -> dict[str, str]:
         """The ``--live`` overrides for a non-Doc1 journey app (operator exports win)."""
-        if app_id == "doc5":
+        if app_id == "loan-document-intelligence":
             # Doc5 has no hybrid live profile. Its managed extraction path is the
             # production-shaped real-data path; its local path stays credential-free.
             return {"LOAN_DOC_PROFILE": "gcp"}
@@ -369,11 +369,11 @@ class Launcher:
         # own URL variable unless the operator already pinned that app elsewhere.
         model_url = _defaulted_setting(_MODEL_SERVER_URL_ENV, _DEFAULT_MODEL_SERVER_URL)
         environment[llm_url_env] = _defaulted_setting(llm_url_env, model_url)
-        if app_id == "doc2":
+        if app_id == "credit-memo-drafting":
             contact = _optional_setting(_EDGAR_CONTACT_ENV)
             if contact:
                 environment[_EDGAR_CONTACT_ENV] = contact
-        if app_id == "doc3":
+        if app_id == "cio-advisory":
             # Grounded house-view research needs the project (like Doc1's research).
             project = _optional_setting(_GOOGLE_PROJECT_ENV)
             if project:
@@ -389,7 +389,7 @@ class Launcher:
         sources always fail headless fetch (they have a documented manual drop-box)
         while every directly fetchable instrument still ingests.
         """
-        repo = _WORKSPACE / _APP_REPOS["rsk1"]
+        repo = _WORKSPACE / _APP_REPOS["compliance-advisory"]
         if not repo.is_dir():
             self._unavailable("rsk1-corpus", f"repo {repo.name} not found in the workspace")
             return
@@ -620,12 +620,12 @@ class Launcher:
         # The CDD assessment must reach Hrz7 as a service producer, never by borrowing the
         # browser's portal identity.  This remains entirely local: both endpoints bind loopback
         # and the shared synthetic token is present only in their backend process environments.
-        if app_id == "doc1":
+        if app_id == "cdd-sow-research":
             backend_env.update(
                 {
                     **self._doc1_security_environment(),
                     "CDD_HRZ7_URL": "http://127.0.0.1:8087",
-                    "CDD_LOCAL_REVIEW_OUTBOX": str(_DOC1_REVIEW_OUTBOX),
+                    "CDD_LOCAL_REVIEW_OUTBOX": str(_CDD_REVIEW_OUTBOX),
                     "CDD_S2S_TOKEN": self._local_demo_s2s_token(),
                 }
             )
@@ -633,10 +633,10 @@ class Launcher:
                 backend_env.update(self._live_doc1_environment())
         elif app_id in _LIVE_APP_PROFILES and self.live:
             backend_env.update(self._live_app_environment(app_id))
-        elif app_id == "hrz7":
+        elif app_id == "human-review-console":
             backend_env.update(
                 {
-                    "REVIEW_DB_PATH": str(_HRZ7_REVIEW_DB),
+                    "REVIEW_DB_PATH": str(_REVIEW_CONSOLE_DB),
                     "REVIEW_S2S_TOKEN": self._local_demo_s2s_token(),
                 }
             )
@@ -884,7 +884,7 @@ def _print_live_plan() -> None:
     else:
         print(
             f"  warning no real watchlist snapshot: screening would use Doc1's bundled "
-            f"FICTIONAL fixture. Run scripts/sync_sanctions.py in {_APP_REPOS['doc1']} "
+            f"FICTIONAL fixture. Run scripts/sync_sanctions.py in {_APP_REPOS['cdd-sow-research']} "
             f"(writes {_LIVE_SANCTIONS_SNAPSHOT}) before a live run."
         )
     # Every other journey app runs its live profile too: real data in, no fictional seeds.
@@ -988,7 +988,7 @@ def main() -> int:
         # The model server (live only) starts first so a cold model load overlaps app startup.
         if args.live:
             launcher.launch_model_server()
-            if "rsk1" in plan:
+            if "compliance-advisory" in plan:
                 launcher.refresh_live_corpus()
         for app_id, (api_port, ui_port) in plan.items():
             launcher.launch_app(app_id, api_port, ui_port)

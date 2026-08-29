@@ -363,7 +363,7 @@ resource "google_cloud_run_v2_service" "embedded_api" {
       }
       # Every embedded app runs IN this project, so it should never have to be told which one
       # by hand. Left unset, an app that defaults its project id to a documented placeholder
-      # carries that placeholder all the way into a live API call: the deployed Doc1 answered
+      # carries that placeholder all the way into a live API call: the deployed CDD agent answered
       # 500 with "projects/your-gcp-project does not exist" on the first dossier build, which
       # reads as a broken app rather than a missing environment variable. Declared BEFORE
       # api_env, so a deployment that needs a different project can still say so.
