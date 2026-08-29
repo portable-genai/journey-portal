@@ -550,7 +550,7 @@ def _rm_doc1(page: Any) -> None:
 def _rm_doc1_flagged(page: Any) -> None:
     """A real designated subject: the same pipeline raises a real watchlist alert.
 
-    Paired with ``rm-doc1-cdd``: same screen, same synced lists, opposite verdict. The
+    Paired with ``rm-cdd-sow-research-cdd``: same screen, same synced lists, opposite verdict. The
     alert is PENDING, not a block, because disposition belongs to a human checker.
     """
     _require_live_doc1(page)
@@ -936,7 +936,8 @@ def _persona_close(page: Any) -> None:
 def _ops_hrz7_self_approval(page: Any) -> None:
     """The negative control for maker-checker: the maker cannot approve their own work.
 
-    Paired with ``ops-hrz7-review``, where an independent approver can. Runs first because
+    Paired with ``ops-human-review-console-review``, where an independent approver can.
+    Runs first because
     a refused disposition leaves the item pending, so the genuine approval still follows.
     """
 
@@ -1102,7 +1103,7 @@ def _ops_rsk1(page: Any) -> None:
     fresh = int(status.get("fresh") or 0)
     if fresh == 0:
         raise RuntimeError(
-            "rsk1's regulatory corpus is empty: run "
+            "compliance-advisory's regulatory corpus is empty: run "
             "'python -m compliance_advisory.pipelines.refresh_job --full' in "
             "compliance-advisory (the launcher does this under --live)"
         )
@@ -1134,7 +1135,8 @@ def _ops_rsk1(page: Any) -> None:
 
 
 def _ops_hrz7(page: Any) -> None:
-    # Re-establish the checker identity here so --from ops-hrz7-review is genuinely resumable.
+    # Re-establish the checker identity here so --from ops-human-review-console-review is
+    # genuinely resumable.
     _open_shell(page, OPS_ORIGIN, "Ops Journey")
     page.locator("select").select_option("approver")
     page.locator(".who").get_by_text("demo.approver@bank.example", exact=False).wait_for()
@@ -1142,7 +1144,8 @@ def _ops_hrz7(page: Any) -> None:
     frame = page.frame_locator('iframe[title="Human-Review Console"]')
     frame.locator("body").wait_for()
     # Doc1 delivers this CDD escalation directly to Hrz7's trusted service intake.  The runner
-    # deliberately refuses to invent a queue item: start from rm-doc1-cdd after a fresh launch.
+    # deliberately refuses to invent a queue item: start from rm-cdd-sow-research-cdd after
+    # a fresh launch.
     # Query the authoritative API before interpreting the UI. The UI initially renders an empty
     # queue while its asynchronous health, persona, and queue requests are still in flight.
     reviews = page.evaluate("""async () => {
@@ -1154,7 +1157,7 @@ def _ops_hrz7(page: Any) -> None:
         item
         for item in reviews
         if str(item.get("action", "")).startswith("cdd_dossier")
-        and str(item.get("source_key", "")).startswith("doc1:")
+        and str(item.get("source_key", "")).startswith("cdd-sow-research:")
         and item.get("state") not in ("approved", "rejected")
     ]
     # Two escalations are expected here: the clean subject's dossier (approved now) and
@@ -1165,7 +1168,7 @@ def _ops_hrz7(page: Any) -> None:
     if not clean_items:
         raise RuntimeError(
             f"no pending Doc1 cdd_dossier for the clean subject (case {clean_slug!r}); "
-            f"run the rm-doc1-cdd step first. Pending: {pending!r}"
+            f"run the rm-cdd-sow-research-cdd step first. Pending: {pending!r}"
         )
     target = clean_items[0]
     review_buttons = frame.get_by_role("button").filter(has_text="cdd_dossier")
@@ -1260,7 +1263,7 @@ STEPS: tuple[Step, ...] = (
         pair_with=("rm-whoami",),
     ),
     Step(
-        "rm-doc1-cdd",
+        "rm-cdd-sow-research-cdd",
         "Assess a real clean subject",
         "The manager uploads the customer's actual filings and asks for a due diligence and "
         "source of wealth assessment. The system reads those documents here on this machine, "
@@ -1287,7 +1290,7 @@ STEPS: tuple[Step, ...] = (
         ),
     ),
     Step(
-        "rm-doc1-flagged",
+        "rm-cdd-sow-research-flagged",
         "Raise a real watchlist alert",
         "The same assessment now names a party that really does appear on a published sanctions "
         "list. Identical code, identical lists, opposite outcome: an open alert naming the "
@@ -1298,10 +1301,10 @@ STEPS: tuple[Step, ...] = (
         frozenset({"rm"}),
         _rm_doc1_flagged,
         requires_live=("cdd-sow-research",),
-        pair_with=("rm-doc1-cdd",),
+        pair_with=("rm-cdd-sow-research-cdd",),
     ),
     Step(
-        "rm-doc1-blocked",
+        "rm-cdd-sow-research-blocked",
         "Refuse a manipulated CDD request",
         "This request carries text written to redirect the assistant rather than to describe a "
         "customer. It is refused before it reaches any model, any index or any registry, and no "
@@ -1314,12 +1317,12 @@ STEPS: tuple[Step, ...] = (
         _rm_doc1_blocked,
         requires_live=("cdd-sow-research",),
         pair_with=(
-            "rm-doc1-cdd",
-            "rm-doc1-flagged",
+            "rm-cdd-sow-research-cdd",
+            "rm-cdd-sow-research-flagged",
         ),
     ),
     Step(
-        "rm-doc3-briefing",
+        "rm-cio-advisory-briefing",
         "Brief a registered client on real research",
         "Here the manager registers a client portfolio and asks for a briefing ahead of the next "
         "conversation. The investment themes come from current market commentary published by "
@@ -1355,7 +1358,7 @@ STEPS: tuple[Step, ...] = (
         _ops_open,
     ),
     Step(
-        "ops-doc2-credit-memo",
+        "ops-credit-memo-drafting-credit-memo",
         "Draft a credit memo on a real public record",
         "A credit analyst names a real listed borrower and asks for a first credit memo. The "
         "system pulls that company's actual regulatory filings and reported figures, compares "
@@ -1369,7 +1372,7 @@ STEPS: tuple[Step, ...] = (
         requires_live=("credit-memo-drafting",),
     ),
     Step(
-        "ops-doc4-ucp600",
+        "ops-trade-finance-checker-ucp600",
         "Check the audience's own UCP600 presentation",
         "A trade operations analyst brings their own letter of credit and its documents, "
         "registers that credit to their institution, and asks for the presentation to be "
@@ -1383,7 +1386,7 @@ STEPS: tuple[Step, ...] = (
         requires_live=("trade-finance-checker",),
     ),
     Step(
-        "ops-rsk1-compliance",
+        "ops-compliance-advisory-compliance",
         "Ask a real regulatory control question",
         "A compliance user asks a question spanning what two different regulators expect of a "
         "service like this one. The answer is assembled from those regulators' own published "
@@ -1581,7 +1584,7 @@ STEPS: tuple[Step, ...] = (
         _persona_close,
     ),
     Step(
-        "ops-hrz7-self-approval",
+        "ops-human-review-console-self-approval",
         "Refuse the maker's own approval",
         "The person who produced the assessment now tries to sign it off themselves, which is "
         "exactly what happens under deadline pressure. The system refuses it as a four-eyes "
@@ -1590,10 +1593,10 @@ STEPS: tuple[Step, ...] = (
         "a gate, so watch this refusal and the approval that follows it as one pair.",
         frozenset({"ops"}),
         _ops_hrz7_self_approval,
-        pair_with=("ops-hrz7-review",),
+        pair_with=("ops-human-review-console-review",),
     ),
     Step(
-        "ops-hrz7-review",
+        "ops-human-review-console-review",
         "Approve the CDD escalation",
         "An independent approver opens the escalated case, inspects the evidence behind it, and "
         "records a reasoned decision, and the system binds the approval, the reviewer, the reason "

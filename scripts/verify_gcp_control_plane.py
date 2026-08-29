@@ -11,7 +11,15 @@ import sys
 from typing import Any, Protocol
 
 _EXPECTED_SERVICE_COUNT = 17
-_APP_IDS = ("doc1", "doc2", "doc3", "doc4", "doc5", "rsk1", "hrz7")
+_APP_IDS = (
+    "cdd-sow-research",
+    "credit-memo-drafting",
+    "cio-advisory",
+    "trade-finance-checker",
+    "loan-document-intelligence",
+    "compliance-advisory",
+    "human-review-console",
+)
 _NAME_PREFIX_RE = re.compile(r"^[a-z][a-z0-9-]{1,18}[a-z0-9]$")
 _DIGEST_IMAGE_RE = re.compile(r"^[^@\s]+@sha256:[0-9a-f]{64}$")
 

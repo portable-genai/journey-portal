@@ -28,7 +28,7 @@ def _event(event_id: str = "event-001") -> PortalAccessEvent:
         pseudonym_key_id="fictional-key-id",
         method="POST",
         action="forward:api",
-        app_id="doc1",
+        app_id="cdd-sow-research",
     )
 
 

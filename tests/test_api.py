@@ -89,9 +89,9 @@ def test_journeys_feed(client: TestClient) -> None:
     # An app appearing in two journeys is mounted once, so its route cannot diverge.
     assert journeys["ops"]["apps"][3]["api_base"] == journeys["gov"]["apps"][2]["api_base"]
     # the shells embed the same-origin ui_base and call the same-origin api_base
-    doc1 = journeys["rm"]["apps"][0]
-    assert doc1["ui_base"] == "/apps/cdd-sow-research/"
-    assert doc1["api_base"] == "/agent/api"
+    cdd_sow = journeys["rm"]["apps"][0]
+    assert cdd_sow["ui_base"] == "/apps/cdd-sow-research/"
+    assert cdd_sow["api_base"] == "/agent/api"
 
 
 def test_personas_listed_in_local(client: TestClient) -> None:

@@ -684,7 +684,7 @@ by `--list`:
 
 ```bash
 python scripts/demo_walkthrough.py --journey rm
-python scripts/demo_walkthrough.py --journey ops --from ops-doc4-ucp600
+python scripts/demo_walkthrough.py --journey ops --from ops-trade-finance-checker-ucp600
 ```
 
 For an unattended capture run, disable the Enter pauses and write one image per completed step:
@@ -741,9 +741,9 @@ evidence rather than decoration. The pairs are:
 | Control | The true negative (clears / allows) | The true positive (flags / refuses) |
 |---|---|---|
 | Portal identity boundary | `rm-whoami`: the portal reports the identity it verified | `rm-spoof-rejected`: the browser asserts `approver` on the same call and the answer does not change |
-| Doc1 sanctions screening | `rm-doc1-cdd`: a genuinely clear listed company screens CLEAR against the current OFAC and UN lists | `rm-doc1-flagged`: a genuinely OFAC-designated entity raises an open `PENDING` alert naming the matched list entry |
-| Doc1 safety guardrail | `rm-doc1-cdd` / `rm-doc1-flagged`: legitimate subjects produce full cited dossiers | `rm-doc1-blocked`: a prompt-injection subject is screened out before any model, index or registry call, and no dossier is produced |
-| Hrz7 maker-checker (P-06) | `ops-hrz7-review`: an independent approver records the decision | `ops-hrz7-self-approval`: the maker's own approval is refused as a four-eyes breach, naming `self_approval` |
+| Doc1 sanctions screening | `rm-cdd-sow-research-cdd`: a genuinely clear listed company screens CLEAR against the current OFAC and UN lists | `rm-cdd-sow-research-flagged`: a genuinely OFAC-designated entity raises an open `PENDING` alert naming the matched list entry |
+| Doc1 safety guardrail | `rm-cdd-sow-research-cdd` / `rm-cdd-sow-research-flagged`: legitimate subjects produce full cited dossiers | `rm-cdd-sow-research-blocked`: a prompt-injection subject is screened out before any model, index or registry call, and no dossier is produced |
+| Hrz7 maker-checker (P-06) | `ops-human-review-console-review`: an independent approver records the decision | `ops-human-review-console-self-approval`: the maker's own approval is refused as a four-eyes breach, naming `self_approval` |
 
 Both screening outcomes are real: the same code path and the same synced point-in-time
 snapshot produce CLEAR for one real name and an alert for the other, and the walkthrough
@@ -767,21 +767,21 @@ next full `--live` rehearsal.
 
 The RM shell hosts the live Doc1 CDD dossier, including citations and the human-review gate:
 
-![RM shell with the live Doc1 CDD dossier](docs/images/walkthrough/03-rm-doc1-cdd.png)
+![RM shell with the live Doc1 CDD dossier](docs/images/walkthrough/03-rm-cdd-sow-research-cdd.png)
 
 The Ops shell hosts the live Doc4 UCP600 result from its canonical fictional presentation:
 
-![Ops shell with the live Doc4 UCP600 report](docs/images/walkthrough/08-ops-doc4-ucp600.png)
+![Ops shell with the live Doc4 UCP600 report](docs/images/walkthrough/08-ops-trade-finance-checker-ucp600.png)
 
 The same Ops shell renders Rsk1's complete grounded and cited answer:
 
-![Ops shell with the live Rsk1 compliance answer](docs/images/walkthrough/09-ops-rsk1-compliance.png)
+![Ops shell with the live Rsk1 compliance answer](docs/images/walkthrough/09-ops-compliance-advisory-compliance.png)
 
 Step 10 records the genuine Hrz7 approval and visibly retains the Doc1 producer key. The
-`doc1:demo-bank:...:cdd_dossier` value proves this was the tenant-scoped escalation created by
+`cdd-sow-research:demo-bank:...:cdd_dossier` value proves this was the tenant-scoped escalation created by
 Step 3, not a fixture inserted by the walkthrough:
 
-![Ops shell with the approved Doc1 review in Hrz7](docs/images/walkthrough/10-ops-hrz7-review.png)
+![Ops shell with the approved Doc1 review in Hrz7](docs/images/walkthrough/10-ops-human-review-console-review.png)
 
 What to show:
 

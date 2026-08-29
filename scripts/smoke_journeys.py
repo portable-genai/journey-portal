@@ -226,9 +226,11 @@ def _withdraw_smoke_review(client: JsonRequester, review: dict[str, Any]) -> Non
     """
     review_id = review.get("review_id")
     if not isinstance(review_id, str) or not review_id:
-        raise SmokeFailure("POST /apps/hrz7/api/v1/reviews: the created item carried no id")
+        raise SmokeFailure(
+            "POST /apps/human-review-console/api/v1/reviews: the created item carried no id"
+        )
     checker = _select_persona(client, _CHECKER_PERSONA_ID)
-    path = f"/apps/hrz7/api/v1/reviews/{review_id}/decision"
+    path = f"/apps/human-review-console/api/v1/reviews/{review_id}/decision"
     outcome = _expect_status(
         client.request_json(
             "POST",
@@ -258,7 +260,7 @@ def _prove_injected_identity(client: JsonRequester) -> None:
     review = _expect_status(
         client.request_json(
             "POST",
-            "/apps/hrz7/api/v1/reviews",
+            "/apps/human-review-console/api/v1/reviews",
             payload={
                 "action": "journey_portal_smoke",
                 "subject": f"smoke-{uuid.uuid4().hex[:12]}",
@@ -271,15 +273,15 @@ def _prove_injected_identity(client: JsonRequester) -> None:
             headers={"X-Dev-Persona": _SPOOFED_PERSONA_ID},
         ),
         201,
-        "POST /apps/hrz7/api/v1/reviews",
+        "POST /apps/human-review-console/api/v1/reviews",
     )
     if review.get("maker") != subject:
         raise SmokeFailure(
-            "POST /apps/hrz7/api/v1/reviews: injected identity proof failed "
+            "POST /apps/human-review-console/api/v1/reviews: injected identity proof failed "
             f"(expected maker {subject!r}, received {review.get('maker')!r})"
         )
     print(
-        "PASS /apps/hrz7/api/v1/reviews "
+        "PASS /apps/human-review-console/api/v1/reviews "
         f"maker={subject} (spoofed persona {_SPOOFED_PERSONA_ID!r} was not accepted)"
     )
     _withdraw_smoke_review(client, review)
@@ -293,15 +295,18 @@ def run_smoke(client: JsonRequester, selected: tuple[str, ...] = ()) -> None:
     feed = _expect_status(client.request_json("GET", "/v1/journeys"), 200, "GET /v1/journeys")
     apps = _mounted_apps(_select_journeys(feed, selected))
     _check_mounted_app_health(client, apps)
-    if "hrz7" not in {app_id for app_id, _api_base in apps}:
+    if "human-review-console" not in {app_id for app_id, _api_base in apps}:
         # The identity proof runs against the real Human Review Console, so it is only
         # available where that console is mounted. On a full run its absence is a broken
         # catalog; on a single-journey run it is simply a journey that does not embed it
         # (`rm`), and saying so is honest where claiming a pass would not be.
         if not selected:
-            raise SmokeFailure("GET /v1/journeys: hrz7 is required for the real identity proof")
+            raise SmokeFailure(
+                "GET /v1/journeys: human-review-console is required for the real identity proof"
+            )
         print(
-            f"SKIP identity proof: journey {', '.join(selected)} does not mount hrz7; "
+            f"SKIP identity proof: journey {', '.join(selected)} does not mount "
+            "human-review-console; "
             "run the smoke against a journey that does to prove injected identity"
         )
         return

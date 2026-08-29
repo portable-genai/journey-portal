@@ -27,7 +27,7 @@ from journey_portal.domain.bff_assertion import (
 from journey_portal.domain.jose import b64u_decode
 
 CLIENT_ID = "hrz9-journey-portal-bff-fixture"
-GRANT_ENDPOINT = "https://doc1.example/agent/api/v1/embed/grants"
+GRANT_ENDPOINT = "https://cdd-sow-research.example/agent/api/v1/embed/grants"
 NOW = datetime(2026, 8, 8, 12, 0, tzinfo=UTC)
 JTI = "A" * 22
 

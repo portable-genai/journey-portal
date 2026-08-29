@@ -26,7 +26,9 @@ _LOCAL_HEADERS = frozenset({"x-dev-persona"})
 #: ``/v1/healthz`` is listed for the same reason as ``/healthz`` and carries the identical body.
 #: It exists because the serverless frontend answers ``/healthz`` itself, so that path never
 #: reaches this container and a proxied probe against it reports healthy either way.
-UNAUTHENTICATED_PATHS = frozenset({"/healthz", "/v1/healthz", "/.well-known/doc1-bff-jwks.json"})
+UNAUTHENTICATED_PATHS = frozenset(
+    {"/healthz", "/v1/healthz", "/.well-known/cdd-sow-research-bff-jwks.json"}
+)
 
 
 def _error_response(exc: HTTPException) -> JSONResponse:

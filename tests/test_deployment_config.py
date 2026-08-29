@@ -16,24 +16,32 @@ def _image(name: str, character: str) -> str:
 
 def _valid_values() -> dict[str, str]:
     profile_envs = {
-        "doc1": "CDD_PROFILE",
-        "doc2": "CREDIT_MEMO_PROFILE",
-        "doc3": "CIO_PROFILE",
-        "doc4": "TRADE_FINANCE_PROFILE",
-        "doc5": "LOAN_DOC_PROFILE",
-        "rsk1": "COMPLIANCE_PROFILE",
-        "hrz7": "REVIEW_PROFILE",
+        "cdd-sow-research": "CDD_PROFILE",
+        "credit-memo-drafting": "CREDIT_MEMO_PROFILE",
+        "cio-advisory": "CIO_PROFILE",
+        "trade-finance-checker": "TRADE_FINANCE_PROFILE",
+        "loan-document-intelligence": "LOAN_DOC_PROFILE",
+        "compliance-advisory": "COMPLIANCE_PROFILE",
+        "human-review-console": "REVIEW_PROFILE",
     }
     embedded = {
         app_id: {
             "ui_image": _image(f"{app_id}-ui", "d"),
             "api_image": _image(f"{app_id}-api", "e"),
-            "ui_build_base_path": "/agent" if app_id == "doc1" else f"/apps/{app_id}",
+            "ui_build_base_path": "/agent" if app_id == "cdd-sow-research" else f"/apps/{app_id}",
             "ui_secret_env": {"UI_TOKEN": f"{app_id}-ui-token"},
             "api_secret_env": {"API_TOKEN": f"{app_id}-api-token"},
             "api_env": {profile_envs[app_id]: "gcp"},
         }
-        for app_id in ("doc1", "doc2", "doc3", "doc4", "doc5", "rsk1", "hrz7")
+        for app_id in (
+            "cdd-sow-research",
+            "credit-memo-drafting",
+            "cio-advisory",
+            "trade-finance-checker",
+            "loan-document-intelligence",
+            "compliance-advisory",
+            "human-review-console",
+        )
     }
     return {
         "GCP_PROJECT_ID": "bank-hrz9-prod-001",
@@ -51,7 +59,15 @@ def _valid_values() -> dict[str, str]:
                 "ops": _image("ops", "3"),
                 **{
                     f"{app_id}-{surface}": _image(f"{app_id}-{surface}", "4")
-                    for app_id in ("doc1", "doc2", "doc3", "doc4", "doc5", "rsk1", "hrz7")
+                    for app_id in (
+                        "cdd-sow-research",
+                        "credit-memo-drafting",
+                        "cio-advisory",
+                        "trade-finance-checker",
+                        "loan-document-intelligence",
+                        "compliance-advisory",
+                        "human-review-console",
+                    )
                     for surface in ("ui", "api")
                 },
             }
@@ -205,11 +221,11 @@ def test_rejects_an_app_id_the_portal_cannot_mount(tmp_path: Path) -> None:
     """
     values = _valid_values()
     apps = json.loads(values["DEPLOY_EMBEDDED_APPS_JSON"])
-    apps["other"] = json.loads(json.dumps(apps["doc1"]))
+    apps["other"] = json.loads(json.dumps(apps["cdd-sow-research"]))
     values["DEPLOY_EMBEDDED_APPS_JSON"] = json.dumps(apps)
     rollback = json.loads(values["DEPLOY_ROLLBACK_IMAGES_JSON"])
-    rollback["other-ui"] = rollback["doc1-ui"]
-    rollback["other-api"] = rollback["doc1-api"]
+    rollback["other-ui"] = rollback["cdd-sow-research-ui"]
+    rollback["other-api"] = rollback["cdd-sow-research-api"]
     values["DEPLOY_ROLLBACK_IMAGES_JSON"] = json.dumps(rollback)
 
     with pytest.raises(DeploymentConfigError, match="cannot mount"):
@@ -219,7 +235,7 @@ def test_rejects_an_app_id_the_portal_cannot_mount(tmp_path: Path) -> None:
 def test_rejects_unknown_embedded_app_key(tmp_path: Path) -> None:
     values = _valid_values()
     apps = json.loads(values["DEPLOY_EMBEDDED_APPS_JSON"])
-    apps["doc1"]["unsupported"] = "value"
+    apps["cdd-sow-research"]["unsupported"] = "value"
     values["DEPLOY_EMBEDDED_APPS_JSON"] = json.dumps(apps)
 
     with pytest.raises(DeploymentConfigError, match="unknown keys"):
@@ -236,7 +252,7 @@ def test_a_partial_journey_portfolio_is_deployable(tmp_path: Path) -> None:
     """
     values = _valid_values()
     apps = json.loads(values["DEPLOY_EMBEDDED_APPS_JSON"])
-    single = {"doc1": apps["doc1"]}
+    single = {"cdd-sow-research": apps["cdd-sow-research"]}
     values["DEPLOY_EMBEDDED_APPS_JSON"] = json.dumps(single)
     rollback = json.loads(values["DEPLOY_ROLLBACK_IMAGES_JSON"])
     values["DEPLOY_ROLLBACK_IMAGES_JSON"] = json.dumps(
@@ -244,19 +260,19 @@ def test_a_partial_journey_portfolio_is_deployable(tmp_path: Path) -> None:
             "bff": rollback["bff"],
             "rm": rollback["rm"],
             "ops": rollback["ops"],
-            "doc1-ui": rollback["doc1-ui"],
-            "doc1-api": rollback["doc1-api"],
+            "cdd-sow-research-ui": rollback["cdd-sow-research-ui"],
+            "cdd-sow-research-api": rollback["cdd-sow-research-api"],
         }
     )
     config = _load(tmp_path, values)
-    assert set(config.terraform_inputs["embedded_apps"]) == {"doc1"}
+    assert set(config.terraform_inputs["embedded_apps"]) == {"cdd-sow-research"}
 
 
 def test_rollback_must_cover_every_deployed_app(tmp_path: Path) -> None:
     """The guarantee kept from the old rule: nothing deploys without a way back."""
     values = _valid_values()
     apps = json.loads(values["DEPLOY_EMBEDDED_APPS_JSON"])
-    values["DEPLOY_EMBEDDED_APPS_JSON"] = json.dumps({"doc1": apps["doc1"]})
+    values["DEPLOY_EMBEDDED_APPS_JSON"] = json.dumps({"cdd-sow-research": apps["cdd-sow-research"]})
     rollback = json.loads(values["DEPLOY_ROLLBACK_IMAGES_JSON"])
     values["DEPLOY_ROLLBACK_IMAGES_JSON"] = json.dumps(
         {"bff": rollback["bff"], "rm": rollback["rm"], "ops": rollback["ops"]}
@@ -284,10 +300,10 @@ def test_an_empty_app_set_is_still_refused(tmp_path: Path) -> None:
 def test_rejects_wrong_ui_build_base_path(tmp_path: Path) -> None:
     values = _valid_values()
     apps = json.loads(values["DEPLOY_EMBEDDED_APPS_JSON"])
-    apps["doc2"]["ui_build_base_path"] = "/"
+    apps["credit-memo-drafting"]["ui_build_base_path"] = "/"
     values["DEPLOY_EMBEDDED_APPS_JSON"] = json.dumps(apps)
 
-    with pytest.raises(DeploymentConfigError, match="must be built for /apps/doc2"):
+    with pytest.raises(DeploymentConfigError, match="must be built for /apps/credit-memo-drafting"):
         _load(tmp_path, values)
 
 
@@ -361,7 +377,7 @@ def test_rejects_non_exact_origins(tmp_path: Path, origin: str) -> None:
 def test_rejects_secret_payload_in_embedded_nonsecret_env(tmp_path: Path) -> None:
     values = _valid_values()
     embedded = json.loads(values["DEPLOY_EMBEDDED_APPS_JSON"])
-    embedded["doc1"]["api_env"] = {"API_TOKEN": "secret-value"}
+    embedded["cdd-sow-research"]["api_env"] = {"API_TOKEN": "secret-value"}
     values["DEPLOY_EMBEDDED_APPS_JSON"] = json.dumps(embedded)
 
     with pytest.raises(DeploymentConfigError, match="api_secret_env"):
@@ -387,9 +403,9 @@ def test_rejects_managed_environment_names_on_every_surface(
     values = _valid_values()
     embedded = json.loads(values["DEPLOY_EMBEDDED_APPS_JSON"])
     if map_name.endswith("secret_env"):
-        embedded["doc1"].setdefault(map_name, {})[env_name] = "managed-collision"
+        embedded["cdd-sow-research"].setdefault(map_name, {})[env_name] = "managed-collision"
     else:
-        embedded["doc1"].setdefault(map_name, {})[env_name] = "value"
+        embedded["cdd-sow-research"].setdefault(map_name, {})[env_name] = "value"
     values["DEPLOY_EMBEDDED_APPS_JSON"] = json.dumps(embedded)
 
     with pytest.raises(DeploymentConfigError, match="collides with managed names"):
@@ -402,8 +418,10 @@ def test_rejects_plain_and_secret_environment_source_collision(
 ) -> None:
     values = _valid_values()
     embedded = json.loads(values["DEPLOY_EMBEDDED_APPS_JSON"])
-    embedded["doc1"].setdefault(f"{surface}_env", {})["DUPLICATE_SETTING"] = "plain"
-    embedded["doc1"].setdefault(f"{surface}_secret_env", {})["DUPLICATE_SETTING"] = "secret-name"
+    embedded["cdd-sow-research"].setdefault(f"{surface}_env", {})["DUPLICATE_SETTING"] = "plain"
+    embedded["cdd-sow-research"].setdefault(f"{surface}_secret_env", {})["DUPLICATE_SETTING"] = (
+        "secret-name"
+    )
     values["DEPLOY_EMBEDDED_APPS_JSON"] = json.dumps(embedded)
 
     with pytest.raises(DeploymentConfigError, match="plain and secret environment sources"):
@@ -425,7 +443,7 @@ def test_rejects_duplicate_keys_before_json_normalization(tmp_path: Path) -> Non
 def test_secret_like_env_key_detection_is_case_insensitive(tmp_path: Path) -> None:
     values = _valid_values()
     embedded = json.loads(values["DEPLOY_EMBEDDED_APPS_JSON"])
-    embedded["doc1"]["api_env"]["databasePassword"] = "not-allowed"
+    embedded["cdd-sow-research"]["api_env"]["databasePassword"] = "not-allowed"
     values["DEPLOY_EMBEDDED_APPS_JSON"] = json.dumps(embedded)
     with pytest.raises(DeploymentConfigError, match="api_secret_env"):
         _load(tmp_path, values)
@@ -434,13 +452,13 @@ def test_secret_like_env_key_detection_is_case_insensitive(tmp_path: Path) -> No
 def test_rejects_local_embedded_profile_and_manual_iap_audience(tmp_path: Path) -> None:
     values = _valid_values()
     embedded = json.loads(values["DEPLOY_EMBEDDED_APPS_JSON"])
-    embedded["doc2"]["api_env"]["CREDIT_MEMO_PROFILE"] = "local"
+    embedded["credit-memo-drafting"]["api_env"]["CREDIT_MEMO_PROFILE"] = "local"
     values["DEPLOY_EMBEDDED_APPS_JSON"] = json.dumps(embedded)
     with pytest.raises(DeploymentConfigError, match="CREDIT_MEMO_PROFILE"):
         _load(tmp_path, values)
 
-    embedded["doc2"]["api_env"]["CREDIT_MEMO_PROFILE"] = "gcp"
-    embedded["doc2"]["api_env"]["CREDIT_MEMO_IAP_AUDIENCE"] = "/guessed"
+    embedded["credit-memo-drafting"]["api_env"]["CREDIT_MEMO_PROFILE"] = "gcp"
+    embedded["credit-memo-drafting"]["api_env"]["CREDIT_MEMO_IAP_AUDIENCE"] = "/guessed"
     values["DEPLOY_EMBEDDED_APPS_JSON"] = json.dumps(embedded)
     with pytest.raises(DeploymentConfigError, match="must not override"):
         _load(tmp_path, values)
@@ -545,7 +563,7 @@ def test_bootstrap_requires_empty_members_when_audience_is_empty(tmp_path: Path)
 # --------------------------------------------------------------------------- Doc1 Mode 5
 _MODE5_VALUES = {
     "PORTAL_PUBLIC_ORIGIN": "https://portal.bank.internal",
-    "PORTAL_DOC1_GRANT_ENDPOINT": "https://doc1.bank.internal/agent/api/v1/embed/grants",
+    "PORTAL_DOC1_GRANT_ENDPOINT": "https://cdd-sow-research.bank.internal/agent/api/v1/embed/grants",
     "PORTAL_DOC1_INSTALLATION_ID": "inst_bank_sg",
     "PORTAL_DOC1_BFF_CLIENT_ID": "hrz9-journey-portal-bff",
     "PORTAL_BFF_SIGNING_KEY_VERSION": (
@@ -601,7 +619,7 @@ def test_a_mode5_registration_without_a_session_signing_key_is_refused(tmp_path:
     [
         ("PORTAL_PUBLIC_ORIGIN", "http://portal.bank.internal", "HTTPS"),
         ("PORTAL_PUBLIC_ORIGIN", "https://portal.bank.internal/", "trailing slash"),
-        ("PORTAL_DOC1_GRANT_ENDPOINT", "doc1.bank.internal/grants", "HTTPS"),
+        ("PORTAL_DOC1_GRANT_ENDPOINT", "cdd-sow-research.bank.internal/grants", "HTTPS"),
         ("PORTAL_DOC1_BFF_CLIENT_ID", "PENDING", "placeholder"),
         ("PORTAL_BFF_SIGNING_KID", "REPLACE_ME", "placeholder"),
         ("PORTAL_BFF_SIGNING_KEY_VERSION", "bff-signing-key", "key VERSION"),
@@ -648,28 +666,32 @@ def test_catalog_serves_only_the_deployed_apps() -> None:
 
     raw = {
         "apps": {
-            "doc1": {
+            "cdd-sow-research": {
                 "label": "One",
-                "ui_upstream": "https://doc1-ui.example.com",
-                "api_upstream": "https://doc1-api.example.com",
+                "ui_upstream": "https://cdd-sow-research-ui.example.com",
+                "api_upstream": "https://cdd-sow-research-api.example.com",
                 "canonical_mount_path": "/agent",
             },
-            "doc2": {
+            "credit-memo-drafting": {
                 "label": "Two",
                 "ui_upstream": "http://127.0.0.1:3102",
                 "api_upstream": "http://127.0.0.1:8093",
             },
         },
         "journeys": {
-            "rm": {"label": "RM", "blurb": "b", "apps": ["doc1", "doc2"]},
-            "ops": {"label": "Ops", "blurb": "b", "apps": ["doc2"]},
+            "rm": {
+                "label": "RM",
+                "blurb": "b",
+                "apps": ["cdd-sow-research", "credit-memo-drafting"],
+            },
+            "ops": {"label": "Ops", "blurb": "b", "apps": ["credit-memo-drafting"]},
         },
     }
 
-    catalog = JourneyCatalog.from_mapping(raw, only_apps=frozenset({"doc1"}))
-    assert set(catalog.apps) == {"doc1"}
+    catalog = JourneyCatalog.from_mapping(raw, only_apps=frozenset({"cdd-sow-research"}))
+    assert set(catalog.apps) == {"cdd-sow-research"}
     # The rm journey keeps its deployed app...
-    assert catalog.journeys["rm"].app_ids == ("doc1",)
+    assert catalog.journeys["rm"].app_ids == ("cdd-sow-research",)
     # ...and the ops journey, whose every app belongs to another installation, is dropped
     # rather than shown as an empty dead end.
     assert "ops" not in catalog.journeys
@@ -682,18 +704,18 @@ def test_an_app_named_by_the_deployment_but_absent_from_config_is_an_error() -> 
 
     raw = {
         "apps": {
-            "doc1": {
+            "cdd-sow-research": {
                 "label": "One",
-                "ui_upstream": "https://doc1-ui.example.com",
-                "api_upstream": "https://doc1-api.example.com",
+                "ui_upstream": "https://cdd-sow-research-ui.example.com",
+                "api_upstream": "https://cdd-sow-research-api.example.com",
                 "canonical_mount_path": "/agent",
             }
         },
-        "journeys": {"rm": {"label": "RM", "blurb": "b", "apps": ["doc1"]}},
+        "journeys": {"rm": {"label": "RM", "blurb": "b", "apps": ["cdd-sow-research"]}},
     }
 
     with pytest.raises(JourneyConfigError, match="not present in the journeys config"):
-        JourneyCatalog.from_mapping(raw, only_apps=frozenset({"doc1", "doc9"}))
+        JourneyCatalog.from_mapping(raw, only_apps=frozenset({"cdd-sow-research", "doc9"}))
 
 
 def test_a_deployment_with_no_serviceable_journey_is_an_error() -> None:
@@ -702,23 +724,23 @@ def test_a_deployment_with_no_serviceable_journey_is_an_error() -> None:
 
     raw = {
         "apps": {
-            "doc1": {
+            "cdd-sow-research": {
                 "label": "One",
-                "ui_upstream": "https://doc1-ui.example.com",
-                "api_upstream": "https://doc1-api.example.com",
+                "ui_upstream": "https://cdd-sow-research-ui.example.com",
+                "api_upstream": "https://cdd-sow-research-api.example.com",
                 "canonical_mount_path": "/agent",
             },
-            "doc2": {
+            "credit-memo-drafting": {
                 "label": "Two",
-                "ui_upstream": "https://doc2-ui.example.com",
-                "api_upstream": "https://doc2-api.example.com",
+                "ui_upstream": "https://credit-memo-drafting-ui.example.com",
+                "api_upstream": "https://credit-memo-drafting-api.example.com",
             },
         },
-        "journeys": {"ops": {"label": "Ops", "blurb": "b", "apps": ["doc2"]}},
+        "journeys": {"ops": {"label": "Ops", "blurb": "b", "apps": ["credit-memo-drafting"]}},
     }
 
     with pytest.raises(JourneyConfigError, match="no journey has any deployed app"):
-        JourneyCatalog.from_mapping(raw, only_apps=frozenset({"doc1"}))
+        JourneyCatalog.from_mapping(raw, only_apps=frozenset({"cdd-sow-research"}))
 
 
 def test_deletion_protection_is_a_reviewed_input_not_a_generated_file_edit(tmp_path: Path) -> None:

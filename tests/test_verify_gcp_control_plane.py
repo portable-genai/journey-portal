@@ -41,7 +41,15 @@ class _Runner:
         if arguments[:3] == ["run", "services", "list"]:
             names = [f"{prefix}-{name}" for name in ("portal", "rm", "ops")] + [
                 f"{prefix}-{app}-{surface}"
-                for app in ("doc1", "doc2", "doc3", "doc4", "doc5", "rsk1", "hrz7")
+                for app in (
+                    "cdd-sow-research",
+                    "credit-memo-drafting",
+                    "cio-advisory",
+                    "trade-finance-checker",
+                    "loan-document-intelligence",
+                    "compliance-advisory",
+                    "human-review-console",
+                )
                 for surface in ("ui", "api")
             ]
             if self.unexpected_service:
@@ -87,7 +95,15 @@ def _component(service_name: str) -> str:
 def _expected_images() -> dict[str, str]:
     components = ["bff", "rm", "ops"] + [
         f"{app}-{surface}"
-        for app in ("doc1", "doc2", "doc3", "doc4", "doc5", "rsk1", "hrz7")
+        for app in (
+            "cdd-sow-research",
+            "credit-memo-drafting",
+            "cio-advisory",
+            "trade-finance-checker",
+            "loan-document-intelligence",
+            "compliance-advisory",
+            "human-review-console",
+        )
         for surface in ("ui", "api")
     ]
     return {

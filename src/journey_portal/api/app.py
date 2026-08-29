@@ -109,7 +109,7 @@ _PROXY_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]
 #: Doc1 pins this portal's ``private_key_jwt`` client against the JWK set published here. The
 #: path is the one recorded in Doc1's named-deployment dossier, so changing it breaks a reviewed
 #: registration; treat it as part of the deployment contract, not an internal detail.
-BFF_JWKS_PATH = "/.well-known/doc1-bff-jwks.json"
+BFF_JWKS_PATH = "/.well-known/cdd-sow-research-bff-jwks.json"
 # On a UI (non-API) proxy hop no identity is injected, but the client-spoofable identity headers
 # are still stripped so nothing a browser set leaks to the app's origin.
 _UI_STRIP_PLAN = InjectionPlan(strip_headers=CLIENT_SPOOFABLE_IDENTITY)
@@ -239,7 +239,7 @@ async def _record_grant_decision(
                 pseudonym_key_id=access_audit.pseudonym_key_id,
                 method=request.method.upper(),
                 action=action,
-                app_id="doc1",
+                app_id="cdd-sow-research",
             )
         )
 

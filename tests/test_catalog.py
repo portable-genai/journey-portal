@@ -10,36 +10,40 @@ from journey_portal.domain.models import AppMount
 
 _VALID = {
     "apps": {
-        "doc1": {
+        "cdd-sow-research": {
             "label": "CDD",
             "ui_upstream": "http://127.0.0.1:3101",
             "api_upstream": "http://127.0.0.1:8090/",
         },
-        "doc3": {
+        "cio-advisory": {
             "label": "CIO",
             "ui_upstream": "http://127.0.0.1:3103",
             "api_upstream": "http://127.0.0.1:8091",
         },
     },
     "journeys": {
-        "rm": {"label": "RM Journey", "blurb": "onboard then advise", "apps": ["doc1", "doc3"]},
+        "rm": {
+            "label": "RM Journey",
+            "blurb": "onboard then advise",
+            "apps": ["cdd-sow-research", "cio-advisory"],
+        },
     },
 }
 
 
 def test_valid_config_builds() -> None:
     catalog = JourneyCatalog.from_mapping(_VALID)
-    assert set(catalog.apps) == {"doc1", "doc3"}
-    assert catalog.journey("rm").app_ids == ("doc1", "doc3")
-    assert [m.app_id for m in catalog.apps_for("rm")] == ["doc1", "doc3"]
+    assert set(catalog.apps) == {"cdd-sow-research", "cio-advisory"}
+    assert catalog.journey("rm").app_ids == ("cdd-sow-research", "cio-advisory")
+    assert [m.app_id for m in catalog.apps_for("rm")] == ["cdd-sow-research", "cio-advisory"]
     # trailing slash on an upstream is normalized away
-    assert catalog.app("doc1").api_upstream == "http://127.0.0.1:8090"
+    assert catalog.app("cdd-sow-research").api_upstream == "http://127.0.0.1:8090"
 
 
 def test_mount_paths() -> None:
-    mount = JourneyCatalog.from_mapping(_VALID).app("doc1")
-    assert mount.mount_path == "/apps/doc1"
-    assert mount.api_mount_path == "/apps/doc1/api"
+    mount = JourneyCatalog.from_mapping(_VALID).app("cdd-sow-research")
+    assert mount.mount_path == "/apps/cdd-sow-research"
+    assert mount.api_mount_path == "/apps/cdd-sow-research/api"
 
 
 @pytest.mark.parametrize(
@@ -48,19 +52,27 @@ def test_mount_paths() -> None:
         pytest.param(lambda c: c.update(apps={}), id="empty-apps"),
         pytest.param(lambda c: c["journeys"]["rm"].update(apps=["nope"]), id="unknown-app-ref"),
         pytest.param(
-            lambda c: c["apps"]["doc1"].update(ui_upstream="ftp://x"), id="non-http-upstream"
+            lambda c: c["apps"]["cdd-sow-research"].update(ui_upstream="ftp://x"),
+            id="non-http-upstream",
         ),
-        pytest.param(lambda c: c["apps"]["doc1"].update(api_upstream=""), id="empty-upstream"),
         pytest.param(
-            lambda c: c["apps"]["doc1"].update(api_upstream="https://user:pass@service/x"),
+            lambda c: c["apps"]["cdd-sow-research"].update(api_upstream=""), id="empty-upstream"
+        ),
+        pytest.param(
+            lambda c: c["apps"]["cdd-sow-research"].update(
+                api_upstream="https://user:pass@service/x"
+            ),
             id="credentialed-upstream",
         ),
         pytest.param(
-            lambda c: c["apps"]["doc1"].update(api_upstream="https://service/x?token=bad"),
+            lambda c: c["apps"]["cdd-sow-research"].update(
+                api_upstream="https://service/x?token=bad"
+            ),
             id="query-upstream",
         ),
         pytest.param(
-            lambda c: c["journeys"]["rm"].update(apps=["doc1", "doc1"]), id="duplicate-app"
+            lambda c: c["journeys"]["rm"].update(apps=["cdd-sow-research", "cdd-sow-research"]),
+            id="duplicate-app",
         ),
     ],
 )
@@ -110,7 +122,7 @@ def test_managed_profile_accepts_https_upstreams() -> None:
 
 def test_target_builders() -> None:
     mount = AppMount(
-        app_id="doc1",
+        app_id="cdd-sow-research",
         label="CDD",
         ui_upstream="http://127.0.0.1:3101",
         api_upstream="http://127.0.0.1:8090",
@@ -119,4 +131,7 @@ def test_target_builders() -> None:
     assert api_target(mount, "v1/cdd") == "http://127.0.0.1:8090/v1/cdd"
     assert api_target(mount, "/v1/cdd") == "http://127.0.0.1:8090/v1/cdd"
     # UI: the full path is forwarded unchanged (the app owns its basePath).
-    assert ui_target(mount, "/apps/doc1/_next/x.js") == "http://127.0.0.1:3101/apps/doc1/_next/x.js"
+    assert (
+        ui_target(mount, "/apps/cdd-sow-research/_next/x.js")
+        == "http://127.0.0.1:3101/apps/cdd-sow-research/_next/x.js"
+    )

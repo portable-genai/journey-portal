@@ -6,13 +6,13 @@ locals {
     }
   ]...)
   embedded_iap_audience_env = {
-    doc1 = "CDD_IAP_AUDIENCE"
-    doc2 = "CREDIT_MEMO_IAP_AUDIENCE"
-    doc3 = "CIO_IAP_AUDIENCE"
-    doc4 = "TRADE_FINANCE_IAP_AUDIENCE"
-    doc5 = "LOAN_DOC_IAP_AUDIENCE"
-    rsk1 = "COMPLIANCE_IAP_AUDIENCE"
-    hrz7 = "REVIEW_IAP_AUDIENCE"
+    cdd-sow-research           = "CDD_IAP_AUDIENCE"
+    credit-memo-drafting       = "CREDIT_MEMO_IAP_AUDIENCE"
+    cio-advisory               = "CIO_IAP_AUDIENCE"
+    trade-finance-checker      = "TRADE_FINANCE_IAP_AUDIENCE"
+    loan-document-intelligence = "LOAN_DOC_IAP_AUDIENCE"
+    compliance-advisory        = "COMPLIANCE_IAP_AUDIENCE"
+    human-review-console       = "REVIEW_IAP_AUDIENCE"
   }
 }
 

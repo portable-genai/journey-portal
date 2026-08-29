@@ -148,7 +148,7 @@ owner" and "Emergency revocation procedure" below. Filling them here fills them 
 
 ## 4. JWKS publication
 
-`GET /.well-known/doc1-bff-jwks.json` serves the public keys from the signing-key port. It is
+`GET /.well-known/cdd-sow-research-bff-jwks.json` serves the public keys from the signing-key port. It is
 unauthenticated and cacheable on purpose: a JWK set is public key material, it is what a relying
 party fetches BEFORE it holds any credential of ours, and a login wall in front of it would
 prevent the registration it exists for. The route is exempted from the tenant-policy and
@@ -203,7 +203,7 @@ portal can hand the broker one:
 | Portal-side OIDC session holding that client's ID token | `PENDING` (Authorization Code plus PKCE at `accounts.google.com` against that client, with the ID token held server-side for the session the portal already verified) | Server-side only; the browser never holds it |
 | Hosted domain pin | `PENDING` | Issuer-qualified links, never email |
 
-Until both land, `POST /v1/doc1/embed/grant` answers 503 under every managed profile, with a
+Until both land, `POST /v1/cdd-sow-research/embed/grant` answers 503 under every managed profile, with a
 message naming exactly these rows. That is the honest posture: a portal that guessed here would
 send a token from the wrong client, and the exchange would fail at Doc1 with a message pointing
 at the wrong side of the boundary.

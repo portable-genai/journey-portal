@@ -58,7 +58,7 @@ The runtime profiles are `local`, `gcp`, `platform` and the fail-fast `onprem` s
 ### Proxied API call (identity injected)
 
 ```
-browser ─▶ shell proxy ─▶ BFF  /apps/doc1/api/v1/cdd
+browser ─▶ shell proxy ─▶ BFF  /apps/cdd-sow-research/api/v1/cdd
   get_principal: resolve the portal principal (persona cookie in local; IAP assertion in secure);
                  the browser's X-Dev-Persona / Authorization are dropped before resolving
   TenantEmbedPolicyService: bind request host to exactly one reviewed tenant policy;
@@ -68,7 +68,7 @@ browser ─▶ shell proxy ─▶ BFF  /apps/doc1/api/v1/cdd
                  strip {x-dev-persona, x-goog-iap-jwt-assertion, authorization};
                  set the portal-verified identity (persona id in local; edge IAP in secure)
   sanitize_request_headers: drop hop-by-hop + stripped identity, then inject
-  api_target(mount, "v1/cdd") -> http://doc1-backend/v1/cdd   (the /apps/doc1/api prefix stripped)
+  api_target(mount, "v1/cdd") -> http://cdd-sow-research-backend/v1/cdd   (the /apps/cdd-sow-research/api prefix stripped)
   UpstreamClientPort.forward(...) -> UpstreamResponse
   rebuild response (framing headers recomputed; set-cookie preserved)
 ```
@@ -76,9 +76,9 @@ browser ─▶ shell proxy ─▶ BFF  /apps/doc1/api/v1/cdd
 ### Proxied UI asset (no identity)
 
 ```
-browser ─▶ shell proxy ─▶ BFF  /apps/doc1/_next/static/x.js
-  ui_target(mount, full_path) -> http://doc1-ui/apps/doc1/_next/static/x.js   (full path unchanged)
-  the app is basePath-aware (built with NEXT_PUBLIC_BASE_PATH=/apps/doc1), so its own URLs resolve
+browser ─▶ shell proxy ─▶ BFF  /apps/cdd-sow-research/_next/static/x.js
+  ui_target(mount, full_path) -> http://cdd-sow-research-ui/apps/cdd-sow-research/_next/static/x.js   (full path unchanged)
+  the app is basePath-aware (built with NEXT_PUBLIC_BASE_PATH=/apps/cdd-sow-research), so its own URLs resolve
 ```
 
 ## Why two proxy hops, all same-origin

@@ -113,7 +113,7 @@ closed with `frame-ancestors 'none'` if their Host does not resolve exactly once
    audience, and retain the matching Cloud NAT log entry for IAP public-key retrieval. Treat
    key-fetch timeout or verifier failure as a deployment blocker.
 12. Run every configured journey through the shell, BFF, embedded UI and API. Confirm Doc1 at
-   `/agent`, `/agent/api` and the `/apps/doc1` redirect.
+   `/agent`, `/agent/api` and the `/apps/cdd-sow-research` redirect.
 13. Record both plans/applies, computed audience, state serial, service revisions, image digests,
    backend-scoped IAP policy, VPC connectivity evidence, DNS and certificate status, browser
    evidence and approver sign-off.
@@ -176,7 +176,7 @@ Rotation, without a token outage:
 
 1. create the new KMS key version and note its `kid`;
 2. add the OUTGOING public JWK to `PORTAL_BFF_ACCEPTED_PUBLIC_JWKS` and deploy, so
-   `/.well-known/doc1-bff-jwks.json` publishes both keys;
+   `/.well-known/cdd-sow-research-bff-jwks.json` publishes both keys;
 3. wait at least the JWKS cache lifetime (`public, max-age=300`) so every relying party has
    refetched;
 4. switch `PORTAL_BFF_SIGNING_KEY_VERSION` and `PORTAL_BFF_SIGNING_KID` to the new version and

@@ -112,7 +112,7 @@ def test_onprem_access_audit_fails_fast() -> None:
         pseudonym_key_id="key-id",
         method="GET",
         action="forward:ui",
-        app_id="doc1",
+        app_id="cdd-sow-research",
     )
     with pytest.raises(AuditUnavailable):
         container.access_audit.append(event)
