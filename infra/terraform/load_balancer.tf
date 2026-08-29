@@ -117,11 +117,27 @@ resource "google_compute_url_map" "portal" {
   }
 }
 
+# A managed certificate is replaced whenever its domain set changes, and the old one
+# cannot be deleted while the HTTPS proxy still references it — so replacement must be
+# create-before-destroy, and create-before-destroy needs a fresh name per domain set.
+# Without this, the first domain rotation fails with resourceInUseByAnotherResource
+# (observed 2026-08-29 swapping the bootstrap domains for the minted LB address).
+resource "random_id" "certificate" {
+  byte_length = 3
+  keepers = {
+    domains = "${var.rm_domain}|${var.ops_domain}"
+  }
+}
+
 resource "google_compute_managed_ssl_certificate" "portal" {
   project = var.project_id
-  name    = "${var.name_prefix}-journeys"
+  name    = "${var.name_prefix}-journeys-${random_id.certificate.hex}"
   managed {
     domains = [var.rm_domain, var.ops_domain]
+  }
+
+  lifecycle {
+    create_before_destroy = true
   }
 }
 

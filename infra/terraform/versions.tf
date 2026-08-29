@@ -12,6 +12,12 @@ terraform {
       source  = "hashicorp/google-beta"
       version = "~> 6.0"
     }
+    # random_id keys the managed certificate's name to its domain set so a domain change
+    # can create-before-destroy (load_balancer.tf).
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
+    }
   }
 }
 
