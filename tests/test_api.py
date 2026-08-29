@@ -59,7 +59,12 @@ def test_journeys_feed(client: TestClient) -> None:
     rm_apps = [a["id"] for a in journeys["rm"]["apps"]]
     ops_apps = [a["id"] for a in journeys["ops"]["apps"]]
     assert rm_apps == ["cdd-sow-research", "loan-document-intelligence", "cio-advisory"]
-    assert ops_apps == ["credit-memo-drafting", "trade-finance-checker", "compliance-advisory", "human-review-console"]
+    assert ops_apps == [
+        "credit-memo-drafting",
+        "trade-finance-checker",
+        "compliance-advisory",
+        "human-review-console",
+    ]
     # Each persona workbench is one ordered journey through its own systems, and the
     # review console is shared by the three that end in a human decision.
     assert [a["id"] for a in journeys["mkt"]["apps"]] == [
@@ -71,8 +76,16 @@ def test_journeys_feed(client: TestClient) -> None:
         "next-best-action",
         "human-review-console",
     ]
-    assert [a["id"] for a in journeys["gov"]["apps"]] == ["architecture-validator", "model-quality-gate", "human-review-console"]
-    assert [a["id"] for a in journeys["svc"]["apps"]] == ["complaints-review", "compliance-advisory", "human-review-console"]
+    assert [a["id"] for a in journeys["gov"]["apps"]] == [
+        "architecture-validator",
+        "model-quality-gate",
+        "human-review-console",
+    ]
+    assert [a["id"] for a in journeys["svc"]["apps"]] == [
+        "complaints-review",
+        "compliance-advisory",
+        "human-review-console",
+    ]
     # An app appearing in two journeys is mounted once, so its route cannot diverge.
     assert journeys["ops"]["apps"][3]["api_base"] == journeys["gov"]["apps"][2]["api_base"]
     # the shells embed the same-origin ui_base and call the same-origin api_base
