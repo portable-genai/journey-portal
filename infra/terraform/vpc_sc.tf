@@ -2,7 +2,7 @@ resource "google_access_context_manager_service_perimeter" "portal" {
   count  = var.vpc_sc_access_policy_id == "" ? 0 : 1
   parent = "accessPolicies/${var.vpc_sc_access_policy_id}"
   name   = "accessPolicies/${var.vpc_sc_access_policy_id}/servicePerimeters/${replace(var.name_prefix, "-", "_")}"
-  title  = "${var.name_prefix} Hrz9 portal"
+  title  = "${var.name_prefix} journey portal"
 
   use_explicit_dry_run_spec = true
   spec {

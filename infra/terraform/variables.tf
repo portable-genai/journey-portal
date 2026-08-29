@@ -9,8 +9,15 @@ variable "project_id" {
 
 variable "name_prefix" {
   type        = string
-  default     = "hrz9"
-  description = "Short, stable prefix for deployed resources."
+  default     = "journey"
+  description = <<-EOT
+    Short, stable prefix for deployed resources.
+
+    Derived from what this repository IS, not from a catalog code. It was `hrz9`, which put
+    a code nobody outside the catalog can read into service names, service accounts, the
+    CMEK ring and the VPC-SC perimeter title — and a resource name is the one place a
+    rename costs a rebuild, because Cloud Run URLs and KMS ring names cannot be changed.
+  EOT
   validation {
     condition     = can(regex("^[a-z][a-z0-9-]{1,18}[a-z0-9]$", var.name_prefix))
     error_message = "name_prefix must be 3 to 20 lowercase letters, digits, or hyphens."
@@ -126,7 +133,7 @@ variable "portal_audit_hmac_secret_version" {
 
 variable "observability_url" {
   type        = string
-  description = "Exact HTTPS origin of the Hrz5 observability service."
+  description = "Exact HTTPS origin of the agent-observability service."
   validation {
     condition     = can(regex("^https://[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?$", var.observability_url)) && !strcontains(var.observability_url, "..")
     error_message = "observability_url must be an exact lowercase DNS HTTPS origin without a path or explicit port."
@@ -135,7 +142,7 @@ variable "observability_url" {
 
 variable "observability_audience" {
   type        = string
-  description = "Exact audience accepted by Hrz5 for the portal workload token."
+  description = "Exact audience accepted by agent-observability for the portal workload token."
   validation {
     condition     = can(regex("^https://[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?$", var.observability_audience)) && !strcontains(var.observability_audience, "..")
     error_message = "observability_audience must be an exact lowercase DNS HTTPS origin."
@@ -176,10 +183,15 @@ variable "embedded_apps" {
   validation {
     condition = length(var.embedded_apps) > 0 && alltrue([
       for id, app in var.embedded_apps :
-      contains(["doc1", "doc2", "doc3", "doc4", "doc5", "rsk1", "hrz7"], id) &&
+      contains(["cdd-sow-research", "credit-memo-drafting", "cio-advisory", "trade-finance-checker",
+        "loan-document-intelligence", "complaints-review", "compliance-advisory",
+        "architecture-validator", "model-quality-gate", "human-review-console",
+        "market-intelligence", "campaign-planner", "creative-studio",
+        "performance-marketing-optimisation", "next-best-action",
+      "marketing-compliance-gate"], id) &&
       can(regex("@sha256:[0-9a-f]{64}$", app.ui_image)) &&
       can(regex("@sha256:[0-9a-f]{64}$", app.api_image)) &&
-      app.ui_build_base_path == (id == "doc1" ? "/agent" : "/apps/${id}") &&
+      app.ui_build_base_path == (id == "cdd-sow-research" ? "/agent" : "/apps/${id}") &&
       app.ui_port >= 1 && app.ui_port <= 65535 &&
       app.api_port >= 1 && app.api_port <= 65535
     ])
@@ -501,7 +513,7 @@ variable "notification_channels" {
 variable "cmek_rotation_period" {
   type        = string
   default     = "7776000s"
-  description = "Automatic rotation period for the regional Hrz9 CMEK."
+  description = "Automatic rotation period for the regional journey-portal CMEK."
   validation {
     condition = (
       can(regex("^[0-9]+(\\.[0-9]{1,9})?s$", var.cmek_rotation_period)) &&
@@ -537,7 +549,7 @@ variable "vpc_sc_restricted_services" {
     "run.googleapis.com",
     "secretmanager.googleapis.com",
   ]
-  description = "Data-bearing services protected by the Hrz9 service perimeter."
+  description = "Data-bearing services protected by the journey-portal service perimeter."
   validation {
     condition     = length(var.vpc_sc_restricted_services) > 0
     error_message = "vpc_sc_restricted_services must not be empty."

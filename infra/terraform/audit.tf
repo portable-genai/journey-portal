@@ -4,7 +4,7 @@ resource "google_logging_project_bucket_config" "audit" {
   bucket_id      = "${var.name_prefix}-audit"
   retention_days = var.audit_retention_days
   locked         = var.lock_audit_bucket
-  description    = "Hrz9 load-balancer, IAP, and Cloud Run audit evidence."
+  description    = "Journey portal load-balancer, IAP, and Cloud Run audit evidence."
   cmek_settings {
     kms_key_name = google_kms_crypto_key.portal.id
   }

@@ -58,26 +58,26 @@ def test_journeys_feed(client: TestClient) -> None:
     assert set(journeys) == {"rm", "ops", "mkt", "gov", "svc"}
     rm_apps = [a["id"] for a in journeys["rm"]["apps"]]
     ops_apps = [a["id"] for a in journeys["ops"]["apps"]]
-    assert rm_apps == ["doc1", "doc5", "doc3"]
-    assert ops_apps == ["doc2", "doc4", "rsk1", "hrz7"]
+    assert rm_apps == ["cdd-sow-research", "loan-document-intelligence", "cio-advisory"]
+    assert ops_apps == ["credit-memo-drafting", "trade-finance-checker", "compliance-advisory", "human-review-console"]
     # Each persona workbench is one ordered journey through its own systems, and the
     # review console is shared by the three that end in a human decision.
     assert [a["id"] for a in journeys["mkt"]["apps"]] == [
-        "mkt1",
-        "mkt2",
-        "mkt3",
-        "mkt6",
-        "mkt4",
-        "mkt5",
-        "hrz7",
+        "market-intelligence",
+        "campaign-planner",
+        "creative-studio",
+        "marketing-compliance-gate",
+        "performance-marketing-optimisation",
+        "next-best-action",
+        "human-review-console",
     ]
-    assert [a["id"] for a in journeys["gov"]["apps"]] == ["rsk3", "hrz4", "hrz7"]
-    assert [a["id"] for a in journeys["svc"]["apps"]] == ["doc6", "rsk1", "hrz7"]
+    assert [a["id"] for a in journeys["gov"]["apps"]] == ["architecture-validator", "model-quality-gate", "human-review-console"]
+    assert [a["id"] for a in journeys["svc"]["apps"]] == ["complaints-review", "compliance-advisory", "human-review-console"]
     # An app appearing in two journeys is mounted once, so its route cannot diverge.
     assert journeys["ops"]["apps"][3]["api_base"] == journeys["gov"]["apps"][2]["api_base"]
     # the shells embed the same-origin ui_base and call the same-origin api_base
     doc1 = journeys["rm"]["apps"][0]
-    assert doc1["ui_base"] == "/apps/doc1/"
+    assert doc1["ui_base"] == "/apps/cdd-sow-research/"
     assert doc1["api_base"] == "/agent/api"
 
 
@@ -107,13 +107,13 @@ def test_proxy_injects_default_identity_and_strips_spoof(
     client: TestClient, recording_upstream: RecordingUpstream
 ) -> None:
     resp = client.post(
-        "/apps/doc1/api/v1/cdd",
+        "/apps/cdd-sow-research/api/v1/cdd",
         headers={"X-Dev-Persona": "approver"},  # a browser trying to escalate the embedded app
         content=b'{"q": 1}',
     )
     assert resp.status_code == 200
     call = recording_upstream.last
-    # forwarded to the app's BACKEND with the /apps/doc1/api prefix stripped
+    # forwarded to the app's BACKEND with the /apps/cdd-sow-research/api prefix stripped
     assert call["url"] == "http://127.0.0.1:8090/v1/cdd"
     headers = call["headers"]
     assert isinstance(headers, dict)
@@ -132,7 +132,7 @@ def test_proxy_uses_selected_persona(
     client: TestClient, recording_upstream: RecordingUpstream
 ) -> None:
     client.post("/v1/session/persona", json={"id": "auditor"})
-    client.post("/apps/doc1/api/v1/cdd", content=b"{}")
+    client.post("/apps/cdd-sow-research/api/v1/cdd", content=b"{}")
     headers = recording_upstream.last["headers"]
     assert isinstance(headers, dict)
     assert headers["x-dev-persona"] == "auditor"
@@ -141,10 +141,10 @@ def test_proxy_uses_selected_persona(
 def test_proxy_ui_forwards_full_path(
     client: TestClient, recording_upstream: RecordingUpstream
 ) -> None:
-    client.get("/apps/doc3/_next/static/chunk.js")
+    client.get("/apps/cio-advisory/_next/static/chunk.js")
     call = recording_upstream.last
     # the UI hop forwards the full path unchanged (the app is basePath-aware)
-    assert call["url"] == "http://127.0.0.1:3103/apps/doc3/_next/static/chunk.js"
+    assert call["url"] == "http://127.0.0.1:3103/apps/cio-advisory/_next/static/chunk.js"
     record = app_module._container().access_audit.records()[-1]
     assert record.event.actor_ref == app_module._container().access_audit.reference(
         "actor",
@@ -157,7 +157,7 @@ def test_proxy_ui_forwards_full_path(
 
 
 def test_doc1_compatibility_entry_redirects_to_canonical_agent(client: TestClient) -> None:
-    response = client.get("/apps/doc1/?case=abc", follow_redirects=False)
+    response = client.get("/apps/cdd-sow-research/?case=abc", follow_redirects=False)
     assert response.status_code == 307
     assert response.headers["location"] == "/agent/?case=abc"
 
@@ -165,7 +165,7 @@ def test_doc1_compatibility_entry_redirects_to_canonical_agent(client: TestClien
 def test_doc1_compatibility_asset_alias_redirects_to_canonical_agent(
     client: TestClient,
 ) -> None:
-    response = client.get("/apps/doc1/_next/static/chunk.js", follow_redirects=False)
+    response = client.get("/apps/cdd-sow-research/_next/static/chunk.js", follow_redirects=False)
     assert response.status_code == 307
     assert response.headers["location"] == "/agent/_next/static/chunk.js"
 
@@ -284,7 +284,7 @@ def test_disallowed_origin_is_denied_before_upstream_side_effect(
             client=LOOPBACK_PEER,
         ) as tenant_client:
             response = tenant_client.post(
-                "/apps/doc1/api/v1/cdd",
+                "/apps/cdd-sow-research/api/v1/cdd",
                 headers={"Origin": "https://attacker.test"},
                 content=b"fictional",
             )
@@ -343,7 +343,7 @@ def test_allowed_cors_preflight_is_exact_and_content_free(
             client=LOOPBACK_PEER,
         ) as tenant_client:
             response = tenant_client.options(
-                "/apps/doc1/api/v1/cdd",
+                "/apps/cdd-sow-research/api/v1/cdd",
                 headers={
                     "Origin": "https://host.test.example",
                     "Access-Control-Request-Method": "POST",
@@ -376,7 +376,7 @@ def test_unreviewed_cors_preflight_header_is_denied_and_evidenced(
             client=LOOPBACK_PEER,
         ) as tenant_client:
             response = tenant_client.options(
-                "/apps/doc1/api/v1/cdd",
+                "/apps/cdd-sow-research/api/v1/cdd",
                 headers={
                     "Origin": "https://host.test.example",
                     "Access-Control-Request-Method": "POST",
@@ -442,7 +442,7 @@ def test_corrupt_local_audit_store_fails_closed_with_503(
 
     monkeypatch.setattr(adapter, "_connect", unavailable_connection)
 
-    response = client.post("/apps/doc1/api/v1/cdd", content=b"fictional")
+    response = client.post("/apps/cdd-sow-research/api/v1/cdd", content=b"fictional")
 
     assert response.status_code == 503
     assert response.json()["detail"] == "portal access audit is unavailable"

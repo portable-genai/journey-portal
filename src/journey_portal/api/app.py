@@ -2,7 +2,7 @@
 
 Import-safe (the Container is built at request time, never at import). The portal is a same-origin
 reverse proxy in front of the built P1 apps: most use ``/apps/<id>/*`` while fixed portable
-artifact mounts such as Doc1's ``/agent/*`` retain ``/apps/<id>`` compatibility entries. On every
+artifact mounts such as the CDD agent's ``/agent/*`` retain ``/apps/<id>`` compatibility entries. On every
 proxied API request it rewrites identity so the embedded app sees the portal-verified
 :class:`Principal` and never a browser-asserted one
 (``journey_portal.domain.identity_injection``). Its own endpoints feed the shells the journey
@@ -557,47 +557,47 @@ def _compatibility_redirect(mount: AppMount, request: Request) -> RedirectRespon
     return RedirectResponse(target, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
 
 
-def _doc1_mount() -> AppMount:
-    mount = _resolve_app("doc1")
+def _canonical_agent_mount() -> AppMount:
+    mount = _resolve_app("cdd-sow-research")
     if mount.artifact_mount_path != "/agent":
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Doc1 canonical artifact mount is not configured",
+            detail="the canonical agent artifact mount is not configured",
         )
     return mount
 
 
 @app.api_route("/agent/api/{tail:path}", methods=_PROXY_METHODS, include_in_schema=False)
-async def proxy_doc1_canonical_api(
+async def proxy_canonical_agent_api(
     tail: str,
     request: Request,
     principal: Annotated[Principal, Depends(get_principal)],
     upstream: Annotated[UpstreamClientPort, Depends(_upstream)],
 ) -> Response:
-    """Expose the canonical Doc1 API path and strip /agent/api before forwarding."""
-    return await _proxy_api_request(_doc1_mount(), tail, request, principal, upstream)
+    """Expose the canonical agent API path and strip /agent/api before forwarding."""
+    return await _proxy_api_request(_canonical_agent_mount(), tail, request, principal, upstream)
 
 
 @app.api_route("/agent/", methods=_PROXY_METHODS, include_in_schema=False)
 @app.api_route("/agent", methods=_PROXY_METHODS, include_in_schema=False)
-async def proxy_doc1_canonical_ui_root(
+async def proxy_canonical_agent_ui_root(
     request: Request,
     principal: Annotated[Principal, Depends(get_principal)],
     upstream: Annotated[UpstreamClientPort, Depends(_upstream)],
 ) -> Response:
     """Expose the fixed Doc1 artifact root without rewriting its emitted paths."""
-    return await _proxy_ui_request(_doc1_mount(), "/agent", request, principal, upstream)
+    return await _proxy_ui_request(_canonical_agent_mount(), "/agent", request, principal, upstream)
 
 
 @app.api_route("/agent/{tail:path}", methods=_PROXY_METHODS, include_in_schema=False)
-async def proxy_doc1_canonical_ui(
+async def proxy_canonical_agent_ui(
     tail: str,
     request: Request,
     principal: Annotated[Principal, Depends(get_principal)],
     upstream: Annotated[UpstreamClientPort, Depends(_upstream)],
 ) -> Response:
     return await _proxy_ui_request(
-        _doc1_mount(),
+        _canonical_agent_mount(),
         f"/agent/{tail}",
         request,
         principal,
