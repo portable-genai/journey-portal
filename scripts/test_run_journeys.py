@@ -33,7 +33,9 @@ class BuiltModeTests(unittest.TestCase):
         (self.repo / "ui").mkdir()
         (self.repo / "ui" / "package.json").write_text("{}", encoding="utf-8")
         self.workspace_patch = patch.object(run_journeys, "_WORKSPACE", self.workspace)
-        self.repos_patch = patch.object(run_journeys, "_APP_REPOS", {"doc1": "demo-app"})
+        self.repos_patch = patch.object(
+            run_journeys, "_APP_REPOS", {"cdd-sow-research": "demo-app"}
+        )
         self.workspace_patch.start()
         self.repos_patch.start()
         self.addCleanup(self.workspace_patch.stop)
@@ -49,7 +51,7 @@ class BuiltModeTests(unittest.TestCase):
             patch.object(launcher, "_clear_stale_listener", return_value=True),
             patch.object(run_journeys.subprocess, "run", return_value=completed) as build,
         ):
-            launcher.launch_app("doc1", api_port=9001, ui_port=9002)
+            launcher.launch_app("cdd-sow-research", api_port=9001, ui_port=9002)
 
         expected_env = {
             "NEXT_PUBLIC_BASE_PATH": "/agent",
@@ -64,7 +66,9 @@ class BuiltModeTests(unittest.TestCase):
             check=False,
         )
         ui_call = launcher._spawn.call_args_list[1]  # type: ignore[union-attr]
-        self.assertEqual(ui_call.args, ("doc1-ui", ["npm", "run", "start", "--", "--port", "9002"]))
+        self.assertEqual(
+            ui_call.args, ("cdd-sow-research-ui", ["npm", "run", "start", "--", "--port", "9002"])
+        )
         self.assertEqual(ui_call.kwargs["env"], expected_env)
         self.assertEqual(ui_call.kwargs["readiness_url"], "http://127.0.0.1:9002/agent")
 
@@ -73,11 +77,13 @@ class BuiltModeTests(unittest.TestCase):
         launcher._spawn = Mock()  # type: ignore[method-assign]
 
         with patch.object(run_journeys.subprocess, "run") as build:
-            launcher.launch_app("doc1", api_port=9001, ui_port=9002)
+            launcher.launch_app("cdd-sow-research", api_port=9001, ui_port=9002)
 
         build.assert_not_called()
         ui_call = launcher._spawn.call_args_list[1]  # type: ignore[union-attr]
-        self.assertEqual(ui_call.args, ("doc1-ui", ["npm", "run", "dev", "--", "--port", "9002"]))
+        self.assertEqual(
+            ui_call.args, ("cdd-sow-research-ui", ["npm", "run", "dev", "--", "--port", "9002"])
+        )
         self.assertEqual(ui_call.kwargs["readiness_url"], "http://127.0.0.1:9002/agent")
 
     def test_failed_built_ui_is_not_started(self) -> None:
@@ -89,10 +95,12 @@ class BuiltModeTests(unittest.TestCase):
             patch.object(launcher, "_clear_stale_listener", return_value=True),
             patch.object(run_journeys.subprocess, "run", return_value=failed),
         ):
-            launcher.launch_app("doc1", api_port=9001, ui_port=9002)
+            launcher.launch_app("cdd-sow-research", api_port=9001, ui_port=9002)
 
         self.assertEqual(launcher._spawn.call_count, 1)  # type: ignore[union-attr]
-        self.assertEqual(launcher._startup_failures["doc1-ui"], "production build failed (exit 1)")
+        self.assertEqual(
+            launcher._startup_failures["cdd-sow-research-ui"], "production build failed (exit 1)"
+        )
 
     def test_built_mode_stops_a_stale_listener_from_the_expected_repo(self) -> None:
         launcher = run_journeys.Launcher(with_shells=False, built=True)
@@ -103,7 +111,7 @@ class BuiltModeTests(unittest.TestCase):
             patch.object(launcher, "_process_cwd", return_value=expected_cwd.resolve()),
             patch.object(run_journeys.os, "kill") as kill,
         ):
-            cleared = launcher._clear_stale_listener("doc1-ui", 9002, expected_cwd)
+            cleared = launcher._clear_stale_listener("cdd-sow-research-ui", 9002, expected_cwd)
 
         self.assertTrue(cleared)
         kill.assert_called_once_with(1234, run_journeys.signal.SIGTERM)
@@ -117,11 +125,11 @@ class BuiltModeTests(unittest.TestCase):
             patch.object(launcher, "_process_cwd", return_value=Path("/tmp/other-app")),
             patch.object(run_journeys.os, "kill") as kill,
         ):
-            cleared = launcher._clear_stale_listener("doc1-ui", 9002, self.repo / "ui")
+            cleared = launcher._clear_stale_listener("cdd-sow-research-ui", 9002, self.repo / "ui")
 
         self.assertFalse(cleared)
         kill.assert_not_called()
-        self.assertIn("doc1-ui", launcher._startup_failures)
+        self.assertIn("cdd-sow-research-ui", launcher._startup_failures)
 
 
 class BackendProfileTests(unittest.TestCase):
@@ -144,7 +152,7 @@ class BackendProfileTests(unittest.TestCase):
         (self.repo / "ui" / "package.json").write_text("{}", encoding="utf-8")
         for patcher in (
             patch.object(run_journeys, "_WORKSPACE", self.workspace),
-            patch.object(run_journeys, "_APP_REPOS", {"hrz7": "review-app"}),
+            patch.object(run_journeys, "_APP_REPOS", {"human-review-console": "review-app"}),
         ):
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -154,10 +162,10 @@ class BackendProfileTests(unittest.TestCase):
         launcher = run_journeys.Launcher(with_shells=False)
         launcher._spawn = Mock()  # type: ignore[method-assign]
 
-        launcher.launch_app("hrz7", api_port=9001, ui_port=9002)
+        launcher.launch_app("human-review-console", api_port=9001, ui_port=9002)
 
         backend_call = launcher._spawn.call_args_list[0]  # type: ignore[union-attr]
-        self.assertEqual(backend_call.args[0], "hrz7-backend")
+        self.assertEqual(backend_call.args[0], "human-review-console-backend")
         backend_env = backend_call.kwargs["env"]
         self.assertEqual(backend_env["REVIEW_PROFILE"], run_journeys._PORTAL_LOCAL_PROFILE)
         # The database and the service credential travel with it; a profile without them

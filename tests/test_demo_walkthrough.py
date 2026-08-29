@@ -29,7 +29,7 @@ def test_walkthrough_accepts_loopback_and_exact_https_origins() -> None:
 
     assert demo_walkthrough.RM_ORIGIN == "https://rm.fictional-bank.test"
     assert demo_walkthrough.OPS_ORIGIN == "https://ops.fictional-bank.test"
-    assert demo_walkthrough._APP_ORIGINS["doc1"][0] == demo_walkthrough.RM_ORIGIN
+    assert demo_walkthrough._APP_ORIGINS["cdd-sow-research"][0] == demo_walkthrough.RM_ORIGIN
 
     demo_walkthrough.configure_origins("http://localhost:3000", "http://127.0.0.1:4200")
 
