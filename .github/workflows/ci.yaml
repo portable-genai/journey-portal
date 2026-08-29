@@ -35,10 +35,12 @@ jobs:
           pip install -r requirements-dev.lock
           pip install --no-deps -e .
 
+      # `make lint`, not a copy of its arguments. This step used to carry its own path list,
+      # which had already drifted from the Makefile's: CI omitted scripts/journey_ui_smoke.py
+      # that `make lint` checked, so the two disagreed about what "lint passes" meant. One
+      # home for the list, and the Makefile is it.
       - name: Ruff (lint + format)
-        run: |
-          ruff check src tests eval scripts/deployment_config.py scripts/live_profile_check.py scripts/verify_gcp_control_plane.py scripts/demo_selftest.py scripts/demo_browser_selftest.py scripts/portability_demo.py scripts/rename_fork.py ui-rm/static_server.py ui-ops/static_server.py
-          ruff format --check src tests eval scripts/deployment_config.py scripts/live_profile_check.py scripts/verify_gcp_control_plane.py scripts/demo_selftest.py scripts/demo_browser_selftest.py scripts/portability_demo.py scripts/rename_fork.py ui-rm/static_server.py ui-ops/static_server.py
+        run: make lint
 
       - name: Mypy (strict)
         run: mypy src
