@@ -63,12 +63,12 @@ app. It is the catalog's first runnable proof of the embeddable-micro-frontend c
 - `ANY /apps/{id}/api/{path}` -> the app's backend, with identity injected and the `/apps/<id>/api`
   prefix stripped.
 - `ANY /apps/{id}/{path}` -> the app's basePath-aware UI, full path forwarded unchanged.
-- `GET /.well-known/doc1-bff-jwks.json` -> the portal's published public signing keys (RFC 7517).
+- `GET /.well-known/cdd-sow-research-bff-jwks.json` -> the portal's published public signing keys (RFC 7517).
   Unauthenticated and cacheable by design: it is public key material a relying party fetches
   before it holds any credential of ours. Only public JWK members are ever emitted.
-- `GET /v1/doc1/embed/csrf` -> one short-lived CSRF token bound to this session and to the exact
+- `GET /v1/cdd-sow-research/embed/csrf` -> one short-lived CSRF token bound to this session and to the exact
   grant action. Private, no-store.
-- `POST /v1/doc1/embed/grant {instance_id}` -> the Doc1 Mode 5 brokered grant. The client names
+- `POST /v1/cdd-sow-research/embed/grant {instance_id}` -> the Doc1 Mode 5 brokered grant. The client names
   the embed instance and nothing else; the client id, the scopes and the whole host authorization
   proof come from reviewed policy and the portal's verified session. Private, no-store.
 

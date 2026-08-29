@@ -195,7 +195,7 @@ variable "embedded_apps" {
       app.ui_port >= 1 && app.ui_port <= 65535 &&
       app.api_port >= 1 && app.api_port <= 65535
     ])
-    error_message = "embedded_apps must be a non-empty subset of doc1, doc2, doc3, doc4, doc5, rsk1, hrz7, each with a digest-pinned UI/API image, its canonical mount path, and valid ports."
+    error_message = "embedded_apps must be a non-empty subset of cdd-sow-research, credit-memo-drafting, cio-advisory, trade-finance-checker, loan-document-intelligence, compliance-advisory, human-review-console, each with a digest-pinned UI/API image, its canonical mount path, and valid ports."
   }
   # Each journey API reads its profile from its OWN env var, so the check is per-app and
   # applies only to the apps being deployed. Previously it dereferenced all seven directly,
@@ -204,13 +204,13 @@ variable "embedded_apps" {
     condition = alltrue([
       for id, app in var.embedded_apps :
       contains(["gcp", "platform"], try(app.api_env[{
-        doc1 = "CDD_PROFILE"
-        doc2 = "CREDIT_MEMO_PROFILE"
-        doc3 = "CIO_PROFILE"
-        doc4 = "TRADE_FINANCE_PROFILE"
-        doc5 = "LOAN_DOC_PROFILE"
-        rsk1 = "COMPLIANCE_PROFILE"
-        hrz7 = "REVIEW_PROFILE"
+        "cdd-sow-research"           = "CDD_PROFILE"
+        "credit-memo-drafting"       = "CREDIT_MEMO_PROFILE"
+        "cio-advisory"               = "CIO_PROFILE"
+        "trade-finance-checker"      = "TRADE_FINANCE_PROFILE"
+        "loan-document-intelligence" = "LOAN_DOC_PROFILE"
+        "compliance-advisory"        = "COMPLIANCE_PROFILE"
+        "human-review-console"       = "REVIEW_PROFILE"
       }[id]], ""))
     ])
     error_message = "Every DEPLOYED journey API must explicitly use the gcp or platform managed profile."
@@ -250,13 +250,13 @@ variable "embedded_apps" {
             "TRADE_FINANCE_IAP_AUDIENCE", "LOAN_DOC_IAP_AUDIENCE", "COMPLIANCE_IAP_AUDIENCE", "REVIEW_IAP_AUDIENCE",
           ]),
           toset([{
-            doc1 = "CDD_PROFILE"
-            doc2 = "CREDIT_MEMO_PROFILE"
-            doc3 = "CIO_PROFILE"
-            doc4 = "TRADE_FINANCE_PROFILE"
-            doc5 = "LOAN_DOC_PROFILE"
-            rsk1 = "COMPLIANCE_PROFILE"
-            hrz7 = "REVIEW_PROFILE"
+            "cdd-sow-research"           = "CDD_PROFILE"
+            "credit-memo-drafting"       = "CREDIT_MEMO_PROFILE"
+            "cio-advisory"               = "CIO_PROFILE"
+            "trade-finance-checker"      = "TRADE_FINANCE_PROFILE"
+            "loan-document-intelligence" = "LOAN_DOC_PROFILE"
+            "compliance-advisory"        = "COMPLIANCE_PROFILE"
+            "human-review-console"       = "REVIEW_PROFILE"
           }[id]])
         )
       )) == 0 &&

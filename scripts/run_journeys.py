@@ -391,9 +391,11 @@ class Launcher:
         """
         repo = _WORKSPACE / _APP_REPOS["compliance-advisory"]
         if not repo.is_dir():
-            self._unavailable("rsk1-corpus", f"repo {repo.name} not found in the workspace")
+            self._unavailable(
+                "compliance-advisory-corpus", f"repo {repo.name} not found in the workspace"
+            )
             return
-        print("  prep  rsk1-corpus            refreshing the real regulatory corpus")
+        print("  prep  compliance-advisory-corpus            refreshing the real regulatory corpus")
         result = subprocess.run(  # noqa: S603 - fixed argv, launcher-owned interpreter
             [
                 _backend_interpreter(repo),
@@ -412,7 +414,7 @@ class Launcher:
         if result.returncode != 0:
             tail = (result.stderr or result.stdout or "").strip().splitlines()[-3:]
             print(
-                "  warning rsk1-corpus: some sources failed to refresh "
+                "  warning compliance-advisory-corpus: some sources failed to refresh "
                 "(JS-gated publishers fail headless fetch by design):"
             )
             for line in tail:
@@ -478,7 +480,7 @@ class Launcher:
     def _spawn(
         self, label: str, cmd: list[str], *, cwd: Path, env: dict[str, str], readiness_url: str
     ) -> None:
-        print(f"  start {label:22} {' '.join(cmd)}  (cwd={cwd})")
+        print(f"  start {label:34} {' '.join(cmd)}  (cwd={cwd})")
         # Do not inherit an operator-provided demo credential into browser-facing processes.
         # Explicit backend environments below selectively restore only the side of the S2S token
         # that each service needs.
@@ -784,11 +786,11 @@ class Launcher:
         print("\nreadiness:")
         for check in self._readiness:
             if check.label in ready:
-                print(f"  {check.label:22} READY   {ready[check.label]}")
+                print(f"  {check.label:34} READY   {ready[check.label]}")
             else:
-                print(f"  {check.label:22} FAILED  {failed[check.label]}")
+                print(f"  {check.label:34} FAILED  {failed[check.label]}")
         for label, reason in self._startup_failures.items():
-            print(f"  {label:22} FAILED  {reason}")
+            print(f"  {label:34} FAILED  {reason}")
         return not failed
 
     @staticmethod
@@ -868,9 +870,12 @@ def _print_live_plan() -> None:
             f"{_MODEL_SERVER_CMD_ENV} so the launcher starts it (a cold model load needs a "
             "larger --readiness-timeout)."
         )
-    print(f"  doc1 profile      {doc1_env['CDD_PROFILE']} (local model + grounded research)")
-    print(f"  doc1 triage model {doc1_env['CDD_TRIAGE_MODEL']}")
-    print(f"  doc1 body cap     {doc1_env['CDD_MAX_BODY_BYTES']} bytes")
+    print(
+        f"  cdd-sow-research profile      {doc1_env['CDD_PROFILE']}"
+        " (local model + grounded research)"
+    )
+    print(f"  cdd-sow-research triage model {doc1_env['CDD_TRIAGE_MODEL']}")
+    print(f"  cdd-sow-research body cap     {doc1_env['CDD_MAX_BODY_BYTES']} bytes")
     print(f"  portal proxy      {_PORTAL_UPSTREAM_TIMEOUT_ENV}={portal_timeout}s")
     if _GOOGLE_PROJECT_ENV in doc1_env:
         print(f"  google project    {doc1_env[_GOOGLE_PROJECT_ENV]}")
@@ -880,7 +885,7 @@ def _print_live_plan() -> None:
             "registry grounding will fail. Export it before starting a live run."
         )
     if _LIVE_SANCTIONS_ENV in doc1_env:
-        print(f"  doc1 watchlist    {doc1_env[_LIVE_SANCTIONS_ENV]}")
+        print(f"  cdd-sow-research watchlist    {doc1_env[_LIVE_SANCTIONS_ENV]}")
     else:
         print(
             f"  warning no real watchlist snapshot: screening would use Doc1's bundled "
@@ -890,7 +895,10 @@ def _print_live_plan() -> None:
     # Every other journey app runs its live profile too: real data in, no fictional seeds.
     for app_id in sorted(_LIVE_APP_PROFILES):
         print(f"  {app_id} profile      live")
-    print("  rsk1 corpus       refreshed at startup (expired-only; real regulator sources)")
+    print(
+        "  compliance-advisory corpus       refreshed at startup"
+        " (expired-only; real regulator sources)"
+    )
     if not _optional_setting(_EDGAR_CONTACT_ENV):
         print(
             f"  warning {_EDGAR_CONTACT_ENV} is not set: the SEC fair-access policy wants "

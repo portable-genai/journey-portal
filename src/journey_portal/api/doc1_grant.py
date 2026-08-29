@@ -60,8 +60,8 @@ from ..ports.bff_credentials import SigningKeyUnavailable
 from ..ports.subject_token import SubjectTokenUnavailable
 from ..ports.upstream import UpstreamClientPort
 
-GRANT_PATH = "/v1/doc1/embed/grant"
-CSRF_PATH = "/v1/doc1/embed/csrf"
+GRANT_PATH = "/v1/cdd-sow-research/embed/grant"
+CSRF_PATH = "/v1/cdd-sow-research/embed/csrf"
 #: Doc1 answers a grant in well under a second; a longer body than this is not one.
 _MAX_BROKER_BODY = 8192
 
@@ -128,7 +128,7 @@ def create_doc1_grant_router(
     NO outbound call. Reading the container directly would make that assertion impossible to
     write, and "did it refuse before or after calling the broker" is the whole point.
     """
-    router = APIRouter(tags=["doc1-embed"], route_class=_NoStoreRoute)
+    router = APIRouter(tags=["cdd-sow-research-embed"], route_class=_NoStoreRoute)
 
     @router.get(CSRF_PATH, response_model=CsrfTokenResponse)
     def issue_csrf(request: Request) -> CsrfTokenResponse:
@@ -182,7 +182,7 @@ def create_doc1_grant_router(
                 fetch_dest=request.headers.get("sec-fetch-dest", ""),
             )
         except HostProofRejected as exc:
-            await audit_recorder(request, principal, "doc1-grant:denied-provenance")
+            await audit_recorder(request, principal, "cdd-sow-research-grant:denied-provenance")
             raise HTTPException(status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
 
         secret = _session_secret(settings.session_signing_key)
@@ -197,7 +197,7 @@ def create_doc1_grant_router(
                 now=int(datetime.now(UTC).timestamp()),
             )
         except CsrfError as exc:
-            await audit_recorder(request, principal, "doc1-grant:denied-csrf")
+            await audit_recorder(request, principal, "cdd-sow-research-grant:denied-csrf")
             raise HTTPException(status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
 
         # --- the request is authorized: now build the evidence and the credential --
@@ -236,7 +236,7 @@ def create_doc1_grant_router(
         except (AssertionPolicyError, BrokerPolicyError) as exc:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
-        await audit_recorder(request, principal, "doc1-grant:requested")
+        await audit_recorder(request, principal, "cdd-sow-research-grant:requested")
         broker = await upstream.forward(
             method="POST",
             url=policy.grant_endpoint,

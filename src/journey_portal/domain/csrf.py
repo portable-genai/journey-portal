@@ -33,7 +33,7 @@ TOKEN_TTL_SECONDS = 90
 _TOKEN_VERSION = 1
 _MIN_NONCE = 22
 UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
-_BINDING_LABEL = b"hrz9-doc1-grant-csrf\x00"
+_BINDING_LABEL = b"hrz9-cdd-sow-research-grant-csrf\x00"
 _SESSION_LABEL = b"hrz9-portal-session-binding\x00"
 
 

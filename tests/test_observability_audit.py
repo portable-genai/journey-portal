@@ -24,7 +24,7 @@ def _event(*, action: str = "forward:api") -> PortalAccessEvent:
         pseudonym_key_id="key-v1",
         method="POST",
         action=action,
-        app_id="doc1",
+        app_id="cdd-sow-research",
     )
 
 
@@ -50,7 +50,7 @@ def test_domain_mapping_is_content_free_deterministic_and_hrz5_compatible() -> N
     assert first["decision"] == "allowed"
     assert first["redacted_prompt"] == ""
     assert first["redacted_response"] == ""
-    assert first["resource"] == "hrz9-journey-portal/doc1"
+    assert first["resource"] == "hrz9-journey-portal/cdd-sow-research"
     assert first["metadata"] == {
         "event_id": "fictional-event",
         "method": "POST",

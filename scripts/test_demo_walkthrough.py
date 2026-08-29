@@ -303,10 +303,10 @@ class WalkthroughSelectionTests(unittest.TestCase):
                 "rm-open",
                 "rm-whoami",
                 "rm-spoof-rejected",
-                "rm-doc1-cdd",
-                "rm-doc1-flagged",
-                "rm-doc1-blocked",
-                "rm-doc3-briefing",
+                "rm-cdd-sow-research-cdd",
+                "rm-cdd-sow-research-flagged",
+                "rm-cdd-sow-research-blocked",
+                "rm-cio-advisory-briefing",
                 "rm-switch-approver",
                 "close",
             ],
@@ -314,12 +314,15 @@ class WalkthroughSelectionTests(unittest.TestCase):
 
     def test_resume_is_inclusive_and_rejects_another_journeys_step(self) -> None:
         self.assertEqual(
-            [step.id for step in walkthrough.selected_steps("ops", "ops-doc4-ucp600")],
             [
-                "ops-doc4-ucp600",
-                "ops-rsk1-compliance",
-                "ops-hrz7-self-approval",
-                "ops-hrz7-review",
+                step.id
+                for step in walkthrough.selected_steps("ops", "ops-trade-finance-checker-ucp600")
+            ],
+            [
+                "ops-trade-finance-checker-ucp600",
+                "ops-compliance-advisory-compliance",
+                "ops-human-review-console-self-approval",
+                "ops-human-review-console-review",
                 "close",
             ],
         )
@@ -352,13 +355,13 @@ class WalkthroughSelectionTests(unittest.TestCase):
         self.assertEqual(
             live,
             {
-                "rm-doc1-cdd": ("cdd-sow-research",),
-                "rm-doc1-flagged": ("cdd-sow-research",),
-                "rm-doc1-blocked": ("cdd-sow-research",),
-                "rm-doc3-briefing": ("cio-advisory",),
-                "ops-doc2-credit-memo": ("credit-memo-drafting",),
-                "ops-doc4-ucp600": ("trade-finance-checker",),
-                "ops-rsk1-compliance": ("compliance-advisory",),
+                "rm-cdd-sow-research-cdd": ("cdd-sow-research",),
+                "rm-cdd-sow-research-flagged": ("cdd-sow-research",),
+                "rm-cdd-sow-research-blocked": ("cdd-sow-research",),
+                "rm-cio-advisory-briefing": ("cio-advisory",),
+                "ops-credit-memo-drafting-credit-memo": ("credit-memo-drafting",),
+                "ops-trade-finance-checker-ucp600": ("trade-finance-checker",),
+                "ops-compliance-advisory-compliance": ("compliance-advisory",),
             },
         )
         for step in walkthrough.STEPS:
@@ -399,7 +402,7 @@ class WalkthroughSelectionTests(unittest.TestCase):
         # Resuming past every application step needs no live profile at all: the
         # preflight must return without consulting the page.
         page = _FakePage(profile="local")
-        steps = walkthrough.selected_steps("ops", "ops-hrz7-self-approval")
+        steps = walkthrough.selected_steps("ops", "ops-human-review-console-self-approval")
         walkthrough._preflight(page, steps)
         self.assertFalse(page.consulted, "a resume past the live steps must not be gated")
 
@@ -422,12 +425,12 @@ class WalkthroughSelectionTests(unittest.TestCase):
             ("rm-whoami", "rm-spoof-rejected"),
             # Screening: the same lists clear a genuinely clear name, then flag a
             # genuinely designated one, on adjacent steps.
-            ("rm-doc1-cdd", "rm-doc1-flagged"),
+            ("rm-cdd-sow-research-cdd", "rm-cdd-sow-research-flagged"),
             # Guardrail: the refusal directly follows the successful dossier builds.
-            ("rm-doc1-flagged", "rm-doc1-blocked"),
+            ("rm-cdd-sow-research-flagged", "rm-cdd-sow-research-blocked"),
             # The refusal must come FIRST here: a refused disposition leaves the item
             # pending, so the genuine approval still has something to approve.
-            ("ops-hrz7-self-approval", "ops-hrz7-review"),
+            ("ops-human-review-console-self-approval", "ops-human-review-console-review"),
         ):
             with self.subTest(pair=(positive, negative)):
                 self.assertEqual(script.index(negative), script.index(positive) + 1)
@@ -440,9 +443,9 @@ class WalkthroughSelectionTests(unittest.TestCase):
         """
         for step_id in (
             "rm-spoof-rejected",
-            "rm-doc1-flagged",
-            "rm-doc1-blocked",
-            "ops-hrz7-self-approval",
+            "rm-cdd-sow-research-flagged",
+            "rm-cdd-sow-research-blocked",
+            "ops-human-review-console-self-approval",
         ):
             step = next(s for s in walkthrough.STEPS if s.id == step_id)
             with self.subTest(step=step_id):
@@ -457,7 +460,7 @@ class WalkthroughSelectionTests(unittest.TestCase):
         with contextlib.redirect_stdout(output):
             code = walkthrough.main(["--journey", "rm", "--list"])
         self.assertEqual(code, 0)
-        self.assertIn("rm-doc1-cdd: Assess a real clean subject", output.getvalue())
+        self.assertIn("rm-cdd-sow-research-cdd: Assess a real clean subject", output.getvalue())
         # The rehearsal has to include the opening, or a presenter practises 15 steps
         # without the frame that makes them mean anything.
         self.assertIn("OPENING NOTES:", output.getvalue())
@@ -471,7 +474,7 @@ class WalkthroughSelectionTests(unittest.TestCase):
         self.assertEqual(code, 0)
         text = output.getvalue()
         self.assertIn("three separate places", text)  # the opening is included
-        self.assertNotIn("rm-doc1-cdd", text)
+        self.assertNotIn("rm-cdd-sow-research-cdd", text)
         self.assertNotIn("OPENING NOTES:", text)
         self.assertNotIn("01.", text)
 
@@ -540,14 +543,16 @@ class WalkthroughSelectionTests(unittest.TestCase):
         # Two host frameworks, one contract: the experience-layer claim made concrete.
         self.assertIn("share no user interface code", notes["ops-open"])
         # The model is replaceable only because the consequential part is not the model.
-        self.assertIn("replace and a model you cannot", notes["ops-doc4-ucp600"])
+        self.assertIn("replace and a model you cannot", notes["ops-trade-finance-checker-ucp600"])
         # Knowledge in exportable records rather than welded into weights.
-        self.assertIn("weights", notes["rm-doc3-briefing"])
-        self.assertIn("weights", notes["ops-rsk1-compliance"])
+        self.assertIn("weights", notes["rm-cio-advisory-briefing"])
+        self.assertIn("weights", notes["ops-compliance-advisory-compliance"])
         # The index is derived; the source record is what is authoritative.
-        self.assertIn("rebuilt on different search technology", notes["ops-doc2-credit-memo"])
+        self.assertIn(
+            "rebuilt on different search technology", notes["ops-credit-memo-drafting-credit-memo"]
+        )
         # The sign-off is a record held to the same standard as the rest of the evidence.
-        self.assertIn("tamper-evident", notes["ops-hrz7-review"])
+        self.assertIn("tamper-evident", notes["ops-human-review-console-review"])
         # The close returns to the four questions the whole demonstration answers.
         self.assertIn("four questions", notes["close"])
 
@@ -562,7 +567,7 @@ class HostedWalkthroughTests(unittest.TestCase):
     def test_hosted_rm_script_is_the_deployed_subset(self) -> None:
         self.assertEqual(
             [step.id for step in walkthrough.selected_steps("rm", hosted=True)],
-            ["rm-open", "rm-spoof-rejected", "rm-doc1-cdd", "close"],
+            ["rm-open", "rm-spoof-rejected", "rm-cdd-sow-research-cdd", "close"],
         )
 
     def test_hosted_selection_excludes_apps_the_deployment_does_not_embed(self) -> None:
@@ -572,7 +577,7 @@ class HostedWalkthroughTests(unittest.TestCase):
             ["close"],
         )
         with self.assertRaisesRegex(ValueError, "unknown or excluded step"):
-            walkthrough.selected_steps("rm", "rm-doc1-flagged", hosted=True)
+            walkthrough.selected_steps("rm", "rm-cdd-sow-research-flagged", hosted=True)
 
     def test_hosted_notes_exist_only_on_hosted_steps(self) -> None:
         for step in walkthrough.STEPS:
@@ -600,8 +605,8 @@ class HostedWalkthroughTests(unittest.TestCase):
             walkthrough._HOSTED = False
         self.assertEqual(code, 0)
         text = output.getvalue()
-        self.assertIn("rm-doc1-cdd", text)
-        self.assertNotIn("rm-doc1-flagged", text)
+        self.assertIn("rm-cdd-sow-research-cdd", text)
+        self.assertNotIn("rm-cdd-sow-research-flagged", text)
         self.assertIn("reference deployment", text)
 
     def test_hosted_preflight_expects_the_managed_profile(self) -> None:
@@ -632,14 +637,14 @@ class ConfirmInputsTests(unittest.TestCase):
         import inspect
 
         submitting = {
-            "rm-doc1-cdd",
-            "rm-doc1-flagged",
-            "rm-doc1-blocked",
-            "rm-doc3-briefing",
-            "ops-doc2-credit-memo",
-            "ops-doc4-ucp600",
-            "ops-rsk1-compliance",
-            "ops-hrz7-review",
+            "rm-cdd-sow-research-cdd",
+            "rm-cdd-sow-research-flagged",
+            "rm-cdd-sow-research-blocked",
+            "rm-cio-advisory-briefing",
+            "ops-credit-memo-drafting-credit-memo",
+            "ops-trade-finance-checker-ucp600",
+            "ops-compliance-advisory-compliance",
+            "ops-human-review-console-review",
         }
         for step in walkthrough.STEPS:
             if step.id not in submitting:

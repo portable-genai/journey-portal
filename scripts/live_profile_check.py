@@ -17,29 +17,57 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 _APP_HEALTH_ROUTES: dict[str, tuple[tuple[str, str, frozenset[str]], ...]] = {
     "rm": (
-        ("doc1", "/agent/api/healthz", frozenset({"live", "gcp", "platform"})),
-        ("doc5", "/apps/doc5/api/healthz", frozenset({"local", "gcp", "platform"})),
-        ("doc3", "/apps/doc3/api/healthz", frozenset({"live", "gcp", "platform"})),
+        ("cdd-sow-research", "/agent/api/healthz", frozenset({"live", "gcp", "platform"})),
+        (
+            "loan-document-intelligence",
+            "/apps/loan-document-intelligence/api/healthz",
+            frozenset({"local", "gcp", "platform"}),
+        ),
+        ("cio-advisory", "/apps/cio-advisory/api/healthz", frozenset({"live", "gcp", "platform"})),
     ),
     "ops": (
-        ("doc2", "/apps/doc2/api/healthz", frozenset({"live", "gcp", "platform"})),
-        ("doc4", "/apps/doc4/api/healthz", frozenset({"live", "gcp", "platform"})),
-        ("rsk1", "/apps/rsk1/api/healthz", frozenset({"live", "gcp", "platform"})),
-        ("hrz7", "/apps/hrz7/api/healthz", frozenset({"gcp", "platform"})),
+        (
+            "credit-memo-drafting",
+            "/apps/credit-memo-drafting/api/healthz",
+            frozenset({"live", "gcp", "platform"}),
+        ),
+        (
+            "trade-finance-checker",
+            "/apps/trade-finance-checker/api/healthz",
+            frozenset({"live", "gcp", "platform"}),
+        ),
+        (
+            "compliance-advisory",
+            "/apps/compliance-advisory/api/healthz",
+            frozenset({"live", "gcp", "platform"}),
+        ),
+        (
+            "human-review-console",
+            "/apps/human-review-console/api/healthz",
+            frozenset({"gcp", "platform"}),
+        ),
     ),
 }
 _EXPECTED_UI_BASES = {
-    "doc1": ("/apps/doc1/", "/agent"),
-    "doc2": ("/apps/doc2/", "/apps/doc2"),
-    "doc3": ("/apps/doc3/", "/apps/doc3"),
-    "doc4": ("/apps/doc4/", "/apps/doc4"),
-    "doc5": ("/apps/doc5/", "/apps/doc5"),
-    "rsk1": ("/apps/rsk1/", "/apps/rsk1"),
-    "hrz7": ("/apps/hrz7/", "/apps/hrz7"),
+    "cdd-sow-research": ("/apps/cdd-sow-research/", "/agent"),
+    "credit-memo-drafting": ("/apps/credit-memo-drafting/", "/apps/credit-memo-drafting"),
+    "cio-advisory": ("/apps/cio-advisory/", "/apps/cio-advisory"),
+    "trade-finance-checker": ("/apps/trade-finance-checker/", "/apps/trade-finance-checker"),
+    "loan-document-intelligence": (
+        "/apps/loan-document-intelligence/",
+        "/apps/loan-document-intelligence",
+    ),
+    "compliance-advisory": ("/apps/compliance-advisory/", "/apps/compliance-advisory"),
+    "human-review-console": ("/apps/human-review-console/", "/apps/human-review-console"),
 }
 _EXPECTED_JOURNEY_APPS = {
-    "rm": ("doc1", "doc5", "doc3"),
-    "ops": ("doc2", "doc4", "rsk1", "hrz7"),
+    "rm": ("cdd-sow-research", "loan-document-intelligence", "cio-advisory"),
+    "ops": (
+        "credit-memo-drafting",
+        "trade-finance-checker",
+        "compliance-advisory",
+        "human-review-console",
+    ),
 }
 
 
@@ -290,7 +318,9 @@ def run_check(
         raise LiveCheckError("the hosted feed must expose exactly the RM and Ops journeys")
     if journey_apps != _EXPECTED_JOURNEY_APPS:
         raise LiveCheckError(
-            "journey membership must be exactly RM doc1/doc5/doc3 and Ops doc2/doc4/rsk1/hrz7"
+            "journey membership must be exactly RM "
+            "cdd-sow-research/loan-document-intelligence/cio-advisory and Ops "
+            "credit-memo-drafting/trade-finance-checker/compliance-advisory/human-review-console"
         )
     if set(app_ui_bases) != set(_EXPECTED_UI_BASES):
         raise LiveCheckError("the hosted feed did not expose exactly all seven embedded UIs")

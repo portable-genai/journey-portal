@@ -262,7 +262,7 @@ def test_secure_doc1_child_does_not_inherit_local_demo_acknowledgement(
     launcher = launcher_module.Launcher(with_shells=False)
 
     launcher._spawn(
-        "doc1-backend",
+        "cdd-sow-research-backend",
         ["python", "-m", "uvicorn"],
         cwd=tmp_path,
         env=launcher._doc1_security_environment(),
@@ -335,7 +335,7 @@ def test_dry_run_with_live_reports_the_plan_without_starting_anything(
     assert launcher_module.main() == 0
 
     output = capsys.readouterr().out
-    assert "doc1 profile      live" in output
+    assert "cdd-sow-research profile      live" in output
     assert "PORTAL_UPSTREAM_TIMEOUT=600s" in output
     assert "warning GOOGLE_CLOUD_PROJECT is not set" in output
     # With nothing on the port and no launch command, the plan warns rather than promising
@@ -350,27 +350,27 @@ def test_fresh_state_removes_only_launcher_owned_review_databases(
 ) -> None:
     state_dir = tmp_path / "presenter-state"
     state_dir.mkdir()
-    doc1 = state_dir / "doc1.sqlite3"
-    hrz7 = state_dir / "hrz7.sqlite3"
+    cdd_sow = state_dir / "cdd-sow-research.sqlite3"
+    review_console = state_dir / "human-review-console.sqlite3"
     unrelated = state_dir / "keep.sqlite3"
-    for database in (doc1, hrz7):
+    for database in (cdd_sow, review_console):
         database.write_text("database", encoding="utf-8")
         Path(f"{database}-wal").write_text("wal", encoding="utf-8")
         Path(f"{database}-shm").write_text("shm", encoding="utf-8")
     unrelated.write_text("unrelated", encoding="utf-8")
     monkeypatch.setattr(launcher_module, "_PRESENTER_STATE_DIR", state_dir)
-    monkeypatch.setattr(launcher_module, "_CDD_REVIEW_OUTBOX", doc1)
-    monkeypatch.setattr(launcher_module, "_REVIEW_CONSOLE_DB", hrz7)
+    monkeypatch.setattr(launcher_module, "_CDD_REVIEW_OUTBOX", cdd_sow)
+    monkeypatch.setattr(launcher_module, "_REVIEW_CONSOLE_DB", review_console)
 
     removed = launcher_module._reset_presenter_state()
 
     assert set(removed) == {
-        doc1,
-        Path(f"{doc1}-wal"),
-        Path(f"{doc1}-shm"),
-        hrz7,
-        Path(f"{hrz7}-wal"),
-        Path(f"{hrz7}-shm"),
+        cdd_sow,
+        Path(f"{cdd_sow}-wal"),
+        Path(f"{cdd_sow}-shm"),
+        review_console,
+        Path(f"{review_console}-wal"),
+        Path(f"{review_console}-shm"),
     }
     assert unrelated.read_text(encoding="utf-8") == "unrelated"
 
@@ -393,7 +393,9 @@ def test_fresh_state_refuses_a_database_outside_its_owned_directory(
     state_dir.mkdir()
     monkeypatch.setattr(launcher_module, "_PRESENTER_STATE_DIR", state_dir)
     monkeypatch.setattr(launcher_module, "_CDD_REVIEW_OUTBOX", tmp_path / "outside.sqlite3")
-    monkeypatch.setattr(launcher_module, "_REVIEW_CONSOLE_DB", state_dir / "hrz7.sqlite3")
+    monkeypatch.setattr(
+        launcher_module, "_REVIEW_CONSOLE_DB", state_dir / "human-review-console.sqlite3"
+    )
 
     with pytest.raises(RuntimeError, match="escaped"):
         launcher_module._reset_presenter_state()
@@ -456,13 +458,13 @@ def test_readiness_reports_ready_processes(
     launcher = launcher_module.Launcher(with_shells=False)
     launcher._readiness.append(
         launcher_module._ReadinessCheck(
-            "doc1-backend", "http://127.0.0.1:8090/healthz", _LiveProcess()
+            "cdd-sow-research-backend", "http://127.0.0.1:8090/healthz", _LiveProcess()
         )
     )
     launcher._probe = lambda url: "HTTP 200"
 
     assert launcher.wait_for_readiness(timeout=0.01, poll_interval=0) is True
-    assert "doc1-backend           READY   HTTP 200" in capsys.readouterr().out
+    assert "cdd-sow-research-backend           READY   HTTP 200" in capsys.readouterr().out
 
 
 def test_readiness_reports_the_failed_app_by_name(
@@ -471,13 +473,13 @@ def test_readiness_reports_the_failed_app_by_name(
     launcher = launcher_module.Launcher(with_shells=False)
     launcher._readiness.append(
         launcher_module._ReadinessCheck(
-            "doc4-backend", "http://127.0.0.1:8094/healthz", _ExitedProcess()
+            "trade-finance-checker-backend", "http://127.0.0.1:8094/healthz", _ExitedProcess()
         )
     )
 
     assert launcher.wait_for_readiness(timeout=0.01, poll_interval=0) is False
     output = capsys.readouterr().out
-    assert "doc4-backend           FAILED  exited with code 17 before ready" in output
+    assert "trade-finance-checker-backend      FAILED  exited with code 17 before ready" in output
 
 
 def test_spawn_creates_a_dedicated_process_session(

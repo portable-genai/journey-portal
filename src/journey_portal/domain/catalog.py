@@ -18,8 +18,9 @@ from .errors import JourneyConfigError, UnknownApp, UnknownJourney
 from .models import AppMount, Journey
 
 # An app id is a URL path segment, so it stays lowercase, hyphenated and bounded. The bound
-# was 31 characters, which fitted the old catalog codes (`doc1`, `mkt6`) and nothing else:
-# once ids became repository names, `performance-marketing-optimisation` — 34 — was refused.
+# was 31 characters, which fitted the four-character catalog codes these ids used to be and
+# nothing else: once ids became repository names, `performance-marketing-optimisation` — 34
+# characters — was refused.
 # 63 is the label limit these ids also have to satisfy as Cloud Run service-name components.
 _APP_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
 _HTTP_SCHEMES = ("http://", "https://")

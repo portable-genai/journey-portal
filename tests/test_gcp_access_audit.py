@@ -25,7 +25,7 @@ def _event(adapter: GcpAccessAuditAdapter) -> PortalAccessEvent:
         pseudonym_key_id=adapter.pseudonym_key_id,
         method="POST",
         action="forward:api",
-        app_id="doc1",
+        app_id="cdd-sow-research",
     )
 
 

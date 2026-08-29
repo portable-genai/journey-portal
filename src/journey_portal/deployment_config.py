@@ -55,7 +55,17 @@ _PLACEHOLDER_MARKERS = (
 # the set may not be empty, every id must be known, every app must be complete and pinned to
 # an immutable digest, and the rollback map must cover exactly what is being deployed. What
 # is dropped is only the requirement that the portfolio be deployed all at once.
-_KNOWN_JOURNEY_APPS = frozenset({"doc1", "doc2", "doc3", "doc4", "doc5", "rsk1", "hrz7"})
+_KNOWN_JOURNEY_APPS = frozenset(
+    {
+        "cdd-sow-research",
+        "credit-memo-drafting",
+        "cio-advisory",
+        "trade-finance-checker",
+        "loan-document-intelligence",
+        "compliance-advisory",
+        "human-review-console",
+    }
+)
 _EMBEDDED_APP_KEYS = frozenset(
     {
         "ui_image",
@@ -70,31 +80,31 @@ _EMBEDDED_APP_KEYS = frozenset(
     }
 )
 _UI_BUILD_BASE_PATH_BY_APP = {
-    "doc1": "/agent",
-    "doc2": "/apps/doc2",
-    "doc3": "/apps/doc3",
-    "doc4": "/apps/doc4",
-    "doc5": "/apps/doc5",
-    "rsk1": "/apps/rsk1",
-    "hrz7": "/apps/hrz7",
+    "cdd-sow-research": "/agent",
+    "credit-memo-drafting": "/apps/credit-memo-drafting",
+    "cio-advisory": "/apps/cio-advisory",
+    "trade-finance-checker": "/apps/trade-finance-checker",
+    "loan-document-intelligence": "/apps/loan-document-intelligence",
+    "compliance-advisory": "/apps/compliance-advisory",
+    "human-review-console": "/apps/human-review-console",
 }
 _PROFILE_ENV_BY_APP = {
-    "doc1": "CDD_PROFILE",
-    "doc2": "CREDIT_MEMO_PROFILE",
-    "doc3": "CIO_PROFILE",
-    "doc4": "TRADE_FINANCE_PROFILE",
-    "doc5": "LOAN_DOC_PROFILE",
-    "rsk1": "COMPLIANCE_PROFILE",
-    "hrz7": "REVIEW_PROFILE",
+    "cdd-sow-research": "CDD_PROFILE",
+    "credit-memo-drafting": "CREDIT_MEMO_PROFILE",
+    "cio-advisory": "CIO_PROFILE",
+    "trade-finance-checker": "TRADE_FINANCE_PROFILE",
+    "loan-document-intelligence": "LOAN_DOC_PROFILE",
+    "compliance-advisory": "COMPLIANCE_PROFILE",
+    "human-review-console": "REVIEW_PROFILE",
 }
 _IAP_AUDIENCE_ENV_BY_APP = {
-    "doc1": "CDD_IAP_AUDIENCE",
-    "doc2": "CREDIT_MEMO_IAP_AUDIENCE",
-    "doc3": "CIO_IAP_AUDIENCE",
-    "doc4": "TRADE_FINANCE_IAP_AUDIENCE",
-    "doc5": "LOAN_DOC_IAP_AUDIENCE",
-    "rsk1": "COMPLIANCE_IAP_AUDIENCE",
-    "hrz7": "REVIEW_IAP_AUDIENCE",
+    "cdd-sow-research": "CDD_IAP_AUDIENCE",
+    "credit-memo-drafting": "CREDIT_MEMO_IAP_AUDIENCE",
+    "cio-advisory": "CIO_IAP_AUDIENCE",
+    "trade-finance-checker": "TRADE_FINANCE_IAP_AUDIENCE",
+    "loan-document-intelligence": "LOAN_DOC_IAP_AUDIENCE",
+    "compliance-advisory": "COMPLIANCE_IAP_AUDIENCE",
+    "human-review-console": "REVIEW_IAP_AUDIENCE",
 }
 _CLOUD_RUN_MANAGED_ENV_NAMES = frozenset({"PORT", "K_SERVICE", "K_REVISION", "K_CONFIGURATION"})
 _ALL_PROFILE_ENV_NAMES = frozenset(_PROFILE_ENV_BY_APP.values())
@@ -310,7 +320,11 @@ def _validate_embedded_apps(apps: dict[str, Any]) -> None:
             f"{', '.join(sorted(_KNOWN_JOURNEY_APPS))}"
         )
     for app_id, app in apps.items():
-        if not isinstance(app_id, str) or not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,20}", app_id):
+        # 63, not 21: the old bound fitted the four-character catalog codes these ids used to
+        # be, so `loan-document-intelligence` was refused the moment ids became repository
+        # names. 63 is the label limit the ids must satisfy anyway as Cloud Run service-name
+        # components, which is the real constraint. `domain/catalog.py` carries the same bound.
+        if not isinstance(app_id, str) or not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,62}", app_id):
             raise DeploymentConfigError(f"unsafe embedded app id: {app_id!r}")
         if not isinstance(app, dict):
             raise DeploymentConfigError(f"embedded app {app_id} must be a JSON object")

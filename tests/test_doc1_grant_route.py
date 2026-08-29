@@ -55,7 +55,9 @@ def grant_client(
     monkeypatch.setenv("PORTAL_TENANT_EMBED_POLICIES_JSON", TENANT_POLICIES)
     monkeypatch.setenv("PORTAL_SESSION_SIGNING_KEY", "portal-session-signing-key-fixture")
     monkeypatch.setenv("PORTAL_BFF_SIGNING_KEY_FILE", str(tmp_path / "bff-signing-key.json"))
-    monkeypatch.setenv("PORTAL_DOC1_GRANT_ENDPOINT", "https://doc1.example/v1/embed/grants")
+    monkeypatch.setenv(
+        "PORTAL_DOC1_GRANT_ENDPOINT", "https://cdd-sow-research.example/v1/embed/grants"
+    )
     monkeypatch.setenv("PORTAL_DOC1_INSTALLATION_ID", "inst_fixture")
     monkeypatch.setenv("PORTAL_DOC1_BFF_CLIENT_ID", "hrz9-journey-portal-bff-fixture")
     recording_upstream.response = UpstreamResponse(
@@ -97,7 +99,7 @@ def test_the_jwks_route_publishes_the_active_key_unauthenticated_and_cacheable(
     grant_client: tuple[TestClient, RecordingUpstream],
 ) -> None:
     client, _ = grant_client
-    response = client.get("/.well-known/doc1-bff-jwks.json")
+    response = client.get("/.well-known/cdd-sow-research-bff-jwks.json")
     assert response.status_code == 200, response.text
     assert response.headers["cache-control"] == "public, max-age=300"
     keys = response.json()["keys"]
@@ -115,7 +117,7 @@ def test_the_jwks_route_never_emits_private_key_material(
     grant_client: tuple[TestClient, RecordingUpstream],
 ) -> None:
     client, _ = grant_client
-    published = client.get("/.well-known/doc1-bff-jwks.json").json()["keys"][0]
+    published = client.get("/.well-known/cdd-sow-research-bff-jwks.json").json()["keys"][0]
     assert set(published) == {"kty", "use", "alg", "kid", "n", "e"}
 
 
@@ -125,7 +127,7 @@ def test_the_jwks_route_needs_no_session_and_no_tenant_policy_decision(
     """It is fetched by a relying party that holds no credential of ours, from any host."""
     client, _ = grant_client
     response = client.get(
-        "/.well-known/doc1-bff-jwks.json", headers={"host": "unregistered.example"}
+        "/.well-known/cdd-sow-research-bff-jwks.json", headers={"host": "unregistered.example"}
     )
     assert response.status_code == 200
     assert response.headers["x-content-type-options"] == "nosniff"
@@ -212,7 +214,7 @@ def test_an_authorized_request_sends_the_proof_and_the_assertion_to_the_broker(
 
     assert len(upstream.calls) == 1
     call = upstream.calls[0]
-    assert call["url"] == "https://doc1.example/v1/embed/grants"
+    assert call["url"] == "https://cdd-sow-research.example/v1/embed/grants"
     assert call["method"] == "POST"
     body = json.loads(call["content"])  # type: ignore[arg-type]
     assert body["installation_id"] == "inst_fixture"
@@ -284,7 +286,7 @@ def test_an_unconfigured_registration_refuses_and_names_the_gap(
     monkeypatch.setenv("PORTAL_BFF_SIGNING_KEY_FILE", str(tmp_path / "bff-signing-key.json"))
     # SET, and invalid: a relative grant endpoint is not an absolute URL, so the reviewed
     # policy cannot be constructed and the route must refuse instead of guessing one.
-    monkeypatch.setenv("PORTAL_DOC1_GRANT_ENDPOINT", "doc1.example/v1/embed/grants")
+    monkeypatch.setenv("PORTAL_DOC1_GRANT_ENDPOINT", "cdd-sow-research.example/v1/embed/grants")
     app_module._container.cache_clear()
     app_module.app.dependency_overrides[app_module._upstream] = lambda: recording_upstream
     try:

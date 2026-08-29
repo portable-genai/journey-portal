@@ -27,7 +27,7 @@ _SUBJECTS = {
     "approver": "demo.approver@bank.example",
 }
 _REVIEW_ID = "rev-smoke-0001"
-_DECISION_PATH = f"/apps/hrz7/api/v1/reviews/{_REVIEW_ID}/decision"
+_DECISION_PATH = f"/apps/human-review-console/api/v1/reviews/{_REVIEW_ID}/decision"
 
 
 class _PortalRecorder:
@@ -73,18 +73,33 @@ class _PortalRecorder:
                         {
                             "key": "rm",
                             "apps": [
-                                {"id": "doc1", "api_base": "/agent/api"},
-                                {"id": "doc5", "api_base": "/apps/doc5/api"},
-                                {"id": "doc3", "api_base": "/apps/doc3/api"},
+                                {"id": "cdd-sow-research", "api_base": "/agent/api"},
+                                {
+                                    "id": "loan-document-intelligence",
+                                    "api_base": "/apps/loan-document-intelligence/api",
+                                },
+                                {"id": "cio-advisory", "api_base": "/apps/cio-advisory/api"},
                             ],
                         },
                         {
                             "key": "ops",
                             "apps": [
-                                {"id": "doc2", "api_base": "/apps/doc2/api"},
-                                {"id": "doc4", "api_base": "/apps/doc4/api"},
-                                {"id": "rsk1", "api_base": "/apps/rsk1/api"},
-                                {"id": "hrz7", "api_base": "/apps/hrz7/api"},
+                                {
+                                    "id": "credit-memo-drafting",
+                                    "api_base": "/apps/credit-memo-drafting/api",
+                                },
+                                {
+                                    "id": "trade-finance-checker",
+                                    "api_base": "/apps/trade-finance-checker/api",
+                                },
+                                {
+                                    "id": "compliance-advisory",
+                                    "api_base": "/apps/compliance-advisory/api",
+                                },
+                                {
+                                    "id": "human-review-console",
+                                    "api_base": "/apps/human-review-console/api",
+                                },
                             ],
                         },
                     ]
@@ -99,7 +114,7 @@ class _PortalRecorder:
             return self._module.JsonResponse(
                 200, {"persona": requested, "subject": _SUBJECTS[requested]}
             )
-        if path == "/apps/hrz7/api/v1/reviews":
+        if path == "/apps/human-review-console/api/v1/reviews":
             return self._module.JsonResponse(201, {"review_id": _REVIEW_ID, "maker": self._maker})
         if path == _DECISION_PATH:
             return self._module.JsonResponse(
@@ -117,14 +132,14 @@ def test_smoke_uses_portal_paths_and_proves_selected_actor(smoke_module: ModuleT
     assert paths == [
         "/v1/journeys",
         "/agent/api/healthz",
-        "/apps/doc5/api/healthz",
-        "/apps/doc3/api/healthz",
-        "/apps/doc2/api/healthz",
-        "/apps/doc4/api/healthz",
-        "/apps/rsk1/api/healthz",
-        "/apps/hrz7/api/healthz",
+        "/apps/loan-document-intelligence/api/healthz",
+        "/apps/cio-advisory/api/healthz",
+        "/apps/credit-memo-drafting/api/healthz",
+        "/apps/trade-finance-checker/api/healthz",
+        "/apps/compliance-advisory/api/healthz",
+        "/apps/human-review-console/api/healthz",
         "/v1/session/persona",
-        "/apps/hrz7/api/v1/reviews",
+        "/apps/human-review-console/api/v1/reviews",
         "/v1/session/persona",
         _DECISION_PATH,
     ]
@@ -183,12 +198,12 @@ def test_smoke_scoped_to_one_journey_checks_only_that_journey(smoke_module: Modu
     paths = [path for _, path, _, _ in portal.calls]
     assert paths == [
         "/v1/journeys",
-        "/apps/doc2/api/healthz",
-        "/apps/doc4/api/healthz",
-        "/apps/rsk1/api/healthz",
-        "/apps/hrz7/api/healthz",
+        "/apps/credit-memo-drafting/api/healthz",
+        "/apps/trade-finance-checker/api/healthz",
+        "/apps/compliance-advisory/api/healthz",
+        "/apps/human-review-console/api/healthz",
         "/v1/session/persona",
-        "/apps/hrz7/api/v1/reviews",
+        "/apps/human-review-console/api/v1/reviews",
         "/v1/session/persona",
         _DECISION_PATH,
     ]
@@ -197,7 +212,7 @@ def test_smoke_scoped_to_one_journey_checks_only_that_journey(smoke_module: Modu
 def test_smoke_skips_the_identity_proof_where_the_console_is_not_mounted(
     smoke_module: ModuleType,
 ) -> None:
-    """`rm` does not embed hrz7, so the proof is unavailable rather than failed."""
+    """`rm` does not embed human-review-console, so the proof is unavailable rather than failed."""
     portal = _PortalRecorder(smoke_module)
 
     smoke_module.run_smoke(portal, ("rm",))
@@ -207,8 +222,8 @@ def test_smoke_skips_the_identity_proof_where_the_console_is_not_mounted(
     assert paths == [
         "/v1/journeys",
         "/agent/api/healthz",
-        "/apps/doc5/api/healthz",
-        "/apps/doc3/api/healthz",
+        "/apps/loan-document-intelligence/api/healthz",
+        "/apps/cio-advisory/api/healthz",
     ]
 
 

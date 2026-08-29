@@ -55,67 +55,67 @@ variables {
     bff      = "registry.example.test/bff@sha256:1111111111111111111111111111111111111111111111111111111111111111"
     rm       = "registry.example.test/rm@sha256:2222222222222222222222222222222222222222222222222222222222222222"
     ops      = "registry.example.test/ops@sha256:3333333333333333333333333333333333333333333333333333333333333333"
-    doc1-ui  = "registry.example.test/doc1-ui@sha256:1111111111111111111111111111111111111111111111111111111111111111"
-    doc1-api = "registry.example.test/doc1-api@sha256:1111111111111111111111111111111111111111111111111111111111111111"
-    doc2-ui  = "registry.example.test/doc2-ui@sha256:2222222222222222222222222222222222222222222222222222222222222222"
-    doc2-api = "registry.example.test/doc2-api@sha256:2222222222222222222222222222222222222222222222222222222222222222"
-    doc3-ui  = "registry.example.test/doc3-ui@sha256:3333333333333333333333333333333333333333333333333333333333333333"
-    doc3-api = "registry.example.test/doc3-api@sha256:3333333333333333333333333333333333333333333333333333333333333333"
-    doc4-ui  = "registry.example.test/doc4-ui@sha256:4444444444444444444444444444444444444444444444444444444444444444"
-    doc4-api = "registry.example.test/doc4-api@sha256:4444444444444444444444444444444444444444444444444444444444444444"
-    doc5-ui  = "registry.example.test/doc5-ui@sha256:7777777777777777777777777777777777777777777777777777777777777777"
-    doc5-api = "registry.example.test/doc5-api@sha256:7777777777777777777777777777777777777777777777777777777777777777"
-    rsk1-ui  = "registry.example.test/rsk1-ui@sha256:5555555555555555555555555555555555555555555555555555555555555555"
-    rsk1-api = "registry.example.test/rsk1-api@sha256:5555555555555555555555555555555555555555555555555555555555555555"
-    hrz7-ui  = "registry.example.test/hrz7-ui@sha256:6666666666666666666666666666666666666666666666666666666666666666"
-    hrz7-api = "registry.example.test/hrz7-api@sha256:6666666666666666666666666666666666666666666666666666666666666666"
+    cdd-sow-research-ui  = "registry.example.test/cdd-sow-research-ui@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    cdd-sow-research-api = "registry.example.test/cdd-sow-research-api@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    credit-memo-drafting-ui  = "registry.example.test/credit-memo-drafting-ui@sha256:2222222222222222222222222222222222222222222222222222222222222222"
+    credit-memo-drafting-api = "registry.example.test/credit-memo-drafting-api@sha256:2222222222222222222222222222222222222222222222222222222222222222"
+    cio-advisory-ui  = "registry.example.test/cio-advisory-ui@sha256:3333333333333333333333333333333333333333333333333333333333333333"
+    cio-advisory-api = "registry.example.test/cio-advisory-api@sha256:3333333333333333333333333333333333333333333333333333333333333333"
+    trade-finance-checker-ui  = "registry.example.test/trade-finance-checker-ui@sha256:4444444444444444444444444444444444444444444444444444444444444444"
+    trade-finance-checker-api = "registry.example.test/trade-finance-checker-api@sha256:4444444444444444444444444444444444444444444444444444444444444444"
+    loan-document-intelligence-ui  = "registry.example.test/loan-document-intelligence-ui@sha256:7777777777777777777777777777777777777777777777777777777777777777"
+    loan-document-intelligence-api = "registry.example.test/loan-document-intelligence-api@sha256:7777777777777777777777777777777777777777777777777777777777777777"
+    compliance-advisory-ui  = "registry.example.test/compliance-advisory-ui@sha256:5555555555555555555555555555555555555555555555555555555555555555"
+    compliance-advisory-api = "registry.example.test/compliance-advisory-api@sha256:5555555555555555555555555555555555555555555555555555555555555555"
+    human-review-console-ui  = "registry.example.test/human-review-console-ui@sha256:6666666666666666666666666666666666666666666666666666666666666666"
+    human-review-console-api = "registry.example.test/human-review-console-api@sha256:6666666666666666666666666666666666666666666666666666666666666666"
   }
   embedded_apps = {
-    doc1 = {
-      ui_image           = "registry.example.test/doc1-ui@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
-      api_image          = "registry.example.test/doc1-api@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    cdd-sow-research = {
+      ui_image           = "registry.example.test/cdd-sow-research-ui@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+      api_image          = "registry.example.test/cdd-sow-research-api@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
       ui_build_base_path = "/agent"
       ui_env             = { UI_ONLY = "ui" }
-      ui_secret_env      = { UI_SECRET = "doc1-ui-secret" }
+      ui_secret_env      = { UI_SECRET = "cdd-sow-research-ui-secret" }
       api_env            = { API_ONLY = "api", CDD_PROFILE = "gcp" }
       api_secret_env = {
-        API_SECRET = "doc1-api-secret"
+        API_SECRET = "cdd-sow-research-api-secret"
       }
     }
-    doc2 = {
-      ui_image           = "registry.example.test/doc2-ui@sha256:2222222222222222222222222222222222222222222222222222222222222222"
-      api_image          = "registry.example.test/doc2-api@sha256:2222222222222222222222222222222222222222222222222222222222222222"
-      ui_build_base_path = "/apps/doc2"
+    credit-memo-drafting = {
+      ui_image           = "registry.example.test/credit-memo-drafting-ui@sha256:2222222222222222222222222222222222222222222222222222222222222222"
+      api_image          = "registry.example.test/credit-memo-drafting-api@sha256:2222222222222222222222222222222222222222222222222222222222222222"
+      ui_build_base_path = "/apps/credit-memo-drafting"
       api_env            = { CREDIT_MEMO_PROFILE = "gcp" }
     }
-    doc3 = {
-      ui_image           = "registry.example.test/doc3-ui@sha256:3333333333333333333333333333333333333333333333333333333333333333"
-      api_image          = "registry.example.test/doc3-api@sha256:3333333333333333333333333333333333333333333333333333333333333333"
-      ui_build_base_path = "/apps/doc3"
+    cio-advisory = {
+      ui_image           = "registry.example.test/cio-advisory-ui@sha256:3333333333333333333333333333333333333333333333333333333333333333"
+      api_image          = "registry.example.test/cio-advisory-api@sha256:3333333333333333333333333333333333333333333333333333333333333333"
+      ui_build_base_path = "/apps/cio-advisory"
       api_env            = { CIO_PROFILE = "gcp" }
     }
-    doc4 = {
-      ui_image           = "registry.example.test/doc4-ui@sha256:4444444444444444444444444444444444444444444444444444444444444444"
-      api_image          = "registry.example.test/doc4-api@sha256:4444444444444444444444444444444444444444444444444444444444444444"
-      ui_build_base_path = "/apps/doc4"
+    trade-finance-checker = {
+      ui_image           = "registry.example.test/trade-finance-checker-ui@sha256:4444444444444444444444444444444444444444444444444444444444444444"
+      api_image          = "registry.example.test/trade-finance-checker-api@sha256:4444444444444444444444444444444444444444444444444444444444444444"
+      ui_build_base_path = "/apps/trade-finance-checker"
       api_env            = { TRADE_FINANCE_PROFILE = "gcp" }
     }
-    doc5 = {
-      ui_image           = "registry.example.test/doc5-ui@sha256:7777777777777777777777777777777777777777777777777777777777777777"
-      api_image          = "registry.example.test/doc5-api@sha256:7777777777777777777777777777777777777777777777777777777777777777"
-      ui_build_base_path = "/apps/doc5"
+    loan-document-intelligence = {
+      ui_image           = "registry.example.test/loan-document-intelligence-ui@sha256:7777777777777777777777777777777777777777777777777777777777777777"
+      api_image          = "registry.example.test/loan-document-intelligence-api@sha256:7777777777777777777777777777777777777777777777777777777777777777"
+      ui_build_base_path = "/apps/loan-document-intelligence"
       api_env            = { LOAN_DOC_PROFILE = "gcp" }
     }
-    rsk1 = {
-      ui_image           = "registry.example.test/rsk1-ui@sha256:5555555555555555555555555555555555555555555555555555555555555555"
-      api_image          = "registry.example.test/rsk1-api@sha256:5555555555555555555555555555555555555555555555555555555555555555"
-      ui_build_base_path = "/apps/rsk1"
+    compliance-advisory = {
+      ui_image           = "registry.example.test/compliance-advisory-ui@sha256:5555555555555555555555555555555555555555555555555555555555555555"
+      api_image          = "registry.example.test/compliance-advisory-api@sha256:5555555555555555555555555555555555555555555555555555555555555555"
+      ui_build_base_path = "/apps/compliance-advisory"
       api_env            = { COMPLIANCE_PROFILE = "gcp" }
     }
-    hrz7 = {
-      ui_image           = "registry.example.test/hrz7-ui@sha256:6666666666666666666666666666666666666666666666666666666666666666"
-      api_image          = "registry.example.test/hrz7-api@sha256:6666666666666666666666666666666666666666666666666666666666666666"
-      ui_build_base_path = "/apps/hrz7"
+    human-review-console = {
+      ui_image           = "registry.example.test/human-review-console-ui@sha256:6666666666666666666666666666666666666666666666666666666666666666"
+      api_image          = "registry.example.test/human-review-console-api@sha256:6666666666666666666666666666666666666666666666666666666666666666"
+      ui_build_base_path = "/apps/human-review-console"
       api_env            = { REVIEW_PROFILE = "gcp" }
     }
   }
@@ -135,7 +135,7 @@ run "complete_edge_and_private_services" {
   }
 
   assert {
-    condition     = google_cloud_run_v2_service.embedded_api["doc1"].ingress == "INGRESS_TRAFFIC_INTERNAL_ONLY"
+    condition     = google_cloud_run_v2_service.embedded_api["cdd-sow-research"].ingress == "INGRESS_TRAFFIC_INTERNAL_ONLY"
     error_message = "Embedded APIs must remain private to authenticated service calls."
   }
 
@@ -164,27 +164,27 @@ run "complete_edge_and_private_services" {
   }
 
   assert {
-    condition     = google_service_account.embedded_ui["doc1"].account_id != google_service_account.embedded_api["doc1"].account_id
+    condition     = google_service_account.embedded_ui["cdd-sow-research"].account_id != google_service_account.embedded_api["cdd-sow-research"].account_id
     error_message = "Embedded UI and API surfaces must have distinct runtime identities."
   }
 
   assert {
     condition = (
-      contains([for item in google_cloud_run_v2_service.embedded_ui["doc1"].template[0].containers[0].env : item.name], "UI_ONLY") &&
-      contains([for item in google_cloud_run_v2_service.embedded_ui["doc1"].template[0].containers[0].env : item.name], "UI_SECRET") &&
-      !contains([for item in google_cloud_run_v2_service.embedded_ui["doc1"].template[0].containers[0].env : item.name], "API_ONLY") &&
-      !contains([for item in google_cloud_run_v2_service.embedded_ui["doc1"].template[0].containers[0].env : item.name], "API_SECRET")
+      contains([for item in google_cloud_run_v2_service.embedded_ui["cdd-sow-research"].template[0].containers[0].env : item.name], "UI_ONLY") &&
+      contains([for item in google_cloud_run_v2_service.embedded_ui["cdd-sow-research"].template[0].containers[0].env : item.name], "UI_SECRET") &&
+      !contains([for item in google_cloud_run_v2_service.embedded_ui["cdd-sow-research"].template[0].containers[0].env : item.name], "API_ONLY") &&
+      !contains([for item in google_cloud_run_v2_service.embedded_ui["cdd-sow-research"].template[0].containers[0].env : item.name], "API_SECRET")
     )
     error_message = "The UI runtime must receive only UI-scoped configuration and secrets."
   }
 
   assert {
     condition = (
-      contains([for item in google_cloud_run_v2_service.embedded_api["doc1"].template[0].containers[0].env : item.name], "API_ONLY") &&
-      contains([for item in google_cloud_run_v2_service.embedded_api["doc1"].template[0].containers[0].env : item.name], "API_SECRET") &&
-      contains([for item in google_cloud_run_v2_service.embedded_api["doc1"].template[0].containers[0].env : item.name], "CDD_IAP_AUDIENCE") &&
-      !contains([for item in google_cloud_run_v2_service.embedded_api["doc1"].template[0].containers[0].env : item.name], "UI_ONLY") &&
-      !contains([for item in google_cloud_run_v2_service.embedded_api["doc1"].template[0].containers[0].env : item.name], "UI_SECRET")
+      contains([for item in google_cloud_run_v2_service.embedded_api["cdd-sow-research"].template[0].containers[0].env : item.name], "API_ONLY") &&
+      contains([for item in google_cloud_run_v2_service.embedded_api["cdd-sow-research"].template[0].containers[0].env : item.name], "API_SECRET") &&
+      contains([for item in google_cloud_run_v2_service.embedded_api["cdd-sow-research"].template[0].containers[0].env : item.name], "CDD_IAP_AUDIENCE") &&
+      !contains([for item in google_cloud_run_v2_service.embedded_api["cdd-sow-research"].template[0].containers[0].env : item.name], "UI_ONLY") &&
+      !contains([for item in google_cloud_run_v2_service.embedded_api["cdd-sow-research"].template[0].containers[0].env : item.name], "UI_SECRET")
     )
     error_message = "The API runtime must receive only API-scoped configuration and secrets."
   }
@@ -193,8 +193,8 @@ run "complete_edge_and_private_services" {
     condition = (
       length(google_secret_manager_secret_iam_member.embedded_ui_secret_access) == 1 &&
       length(google_secret_manager_secret_iam_member.embedded_api_secret_access) == 1 &&
-      google_secret_manager_secret_iam_member.embedded_ui_secret_access["doc1-UI_SECRET"].secret_id == "doc1-ui-secret" &&
-      google_secret_manager_secret_iam_member.embedded_api_secret_access["doc1-API_SECRET"].secret_id == "doc1-api-secret"
+      google_secret_manager_secret_iam_member.embedded_ui_secret_access["cdd-sow-research-UI_SECRET"].secret_id == "cdd-sow-research-ui-secret" &&
+      google_secret_manager_secret_iam_member.embedded_api_secret_access["cdd-sow-research-API_SECRET"].secret_id == "cdd-sow-research-api-secret"
     )
     error_message = "Secret Manager grants must preserve UI/API identity isolation."
   }
@@ -264,7 +264,7 @@ run "accept_reviewed_second_region" {
   assert {
     condition = (
       google_cloud_run_v2_service.portal.location == "australia-southeast1" &&
-      google_cloud_run_v2_service.embedded_api["doc1"].location == "australia-southeast1"
+      google_cloud_run_v2_service.embedded_api["cdd-sow-research"].location == "australia-southeast1"
     )
     error_message = "Regional services must follow the selected deploy-time region."
   }
@@ -298,41 +298,41 @@ run "reject_api_secret_collision_with_managed_environment" {
   command = plan
   variables {
     embedded_apps = {
-      doc1 = {
-        ui_image           = "registry.example.test/doc1-ui@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
-        api_image          = "registry.example.test/doc1-api@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      cdd-sow-research = {
+        ui_image           = "registry.example.test/cdd-sow-research-ui@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        api_image          = "registry.example.test/cdd-sow-research-api@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         ui_build_base_path = "/agent"
         api_env            = { CDD_PROFILE = "gcp" }
-        api_secret_env     = { CDD_PROFILE = "doc1-profile-secret" }
+        api_secret_env     = { CDD_PROFILE = "cdd-sow-research-profile-secret" }
       }
-      doc2 = {
-        ui_image           = "registry.example.test/doc2-ui@sha256:2222222222222222222222222222222222222222222222222222222222222222"
-        api_image          = "registry.example.test/doc2-api@sha256:2222222222222222222222222222222222222222222222222222222222222222"
-        ui_build_base_path = "/apps/doc2"
+      credit-memo-drafting = {
+        ui_image           = "registry.example.test/credit-memo-drafting-ui@sha256:2222222222222222222222222222222222222222222222222222222222222222"
+        api_image          = "registry.example.test/credit-memo-drafting-api@sha256:2222222222222222222222222222222222222222222222222222222222222222"
+        ui_build_base_path = "/apps/credit-memo-drafting"
         api_env            = { CREDIT_MEMO_PROFILE = "gcp" }
       }
-      doc3 = {
-        ui_image           = "registry.example.test/doc3-ui@sha256:3333333333333333333333333333333333333333333333333333333333333333"
-        api_image          = "registry.example.test/doc3-api@sha256:3333333333333333333333333333333333333333333333333333333333333333"
-        ui_build_base_path = "/apps/doc3"
+      cio-advisory = {
+        ui_image           = "registry.example.test/cio-advisory-ui@sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        api_image          = "registry.example.test/cio-advisory-api@sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        ui_build_base_path = "/apps/cio-advisory"
         api_env            = { CIO_PROFILE = "gcp" }
       }
-      doc4 = {
-        ui_image           = "registry.example.test/doc4-ui@sha256:4444444444444444444444444444444444444444444444444444444444444444"
-        api_image          = "registry.example.test/doc4-api@sha256:4444444444444444444444444444444444444444444444444444444444444444"
-        ui_build_base_path = "/apps/doc4"
+      trade-finance-checker = {
+        ui_image           = "registry.example.test/trade-finance-checker-ui@sha256:4444444444444444444444444444444444444444444444444444444444444444"
+        api_image          = "registry.example.test/trade-finance-checker-api@sha256:4444444444444444444444444444444444444444444444444444444444444444"
+        ui_build_base_path = "/apps/trade-finance-checker"
         api_env            = { TRADE_FINANCE_PROFILE = "gcp" }
       }
-      rsk1 = {
-        ui_image           = "registry.example.test/rsk1-ui@sha256:5555555555555555555555555555555555555555555555555555555555555555"
-        api_image          = "registry.example.test/rsk1-api@sha256:5555555555555555555555555555555555555555555555555555555555555555"
-        ui_build_base_path = "/apps/rsk1"
+      compliance-advisory = {
+        ui_image           = "registry.example.test/compliance-advisory-ui@sha256:5555555555555555555555555555555555555555555555555555555555555555"
+        api_image          = "registry.example.test/compliance-advisory-api@sha256:5555555555555555555555555555555555555555555555555555555555555555"
+        ui_build_base_path = "/apps/compliance-advisory"
         api_env            = { COMPLIANCE_PROFILE = "gcp" }
       }
-      hrz7 = {
-        ui_image           = "registry.example.test/hrz7-ui@sha256:6666666666666666666666666666666666666666666666666666666666666666"
-        api_image          = "registry.example.test/hrz7-api@sha256:6666666666666666666666666666666666666666666666666666666666666666"
-        ui_build_base_path = "/apps/hrz7"
+      human-review-console = {
+        ui_image           = "registry.example.test/human-review-console-ui@sha256:6666666666666666666666666666666666666666666666666666666666666666"
+        api_image          = "registry.example.test/human-review-console-api@sha256:6666666666666666666666666666666666666666666666666666666666666666"
+        ui_build_base_path = "/apps/human-review-console"
         api_env            = { REVIEW_PROFILE = "gcp" }
       }
     }
@@ -344,40 +344,40 @@ run "reject_api_env_using_another_apps_profile" {
   command = plan
   variables {
     embedded_apps = {
-      doc1 = {
-        ui_image           = "registry.example.test/doc1-ui@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
-        api_image          = "registry.example.test/doc1-api@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      cdd-sow-research = {
+        ui_image           = "registry.example.test/cdd-sow-research-ui@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        api_image          = "registry.example.test/cdd-sow-research-api@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         ui_build_base_path = "/agent"
         api_env            = { CDD_PROFILE = "gcp", CIO_PROFILE = "gcp" }
       }
-      doc2 = {
-        ui_image           = "registry.example.test/doc2-ui@sha256:2222222222222222222222222222222222222222222222222222222222222222"
-        api_image          = "registry.example.test/doc2-api@sha256:2222222222222222222222222222222222222222222222222222222222222222"
-        ui_build_base_path = "/apps/doc2"
+      credit-memo-drafting = {
+        ui_image           = "registry.example.test/credit-memo-drafting-ui@sha256:2222222222222222222222222222222222222222222222222222222222222222"
+        api_image          = "registry.example.test/credit-memo-drafting-api@sha256:2222222222222222222222222222222222222222222222222222222222222222"
+        ui_build_base_path = "/apps/credit-memo-drafting"
         api_env            = { CREDIT_MEMO_PROFILE = "gcp" }
       }
-      doc3 = {
-        ui_image           = "registry.example.test/doc3-ui@sha256:3333333333333333333333333333333333333333333333333333333333333333"
-        api_image          = "registry.example.test/doc3-api@sha256:3333333333333333333333333333333333333333333333333333333333333333"
-        ui_build_base_path = "/apps/doc3"
+      cio-advisory = {
+        ui_image           = "registry.example.test/cio-advisory-ui@sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        api_image          = "registry.example.test/cio-advisory-api@sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        ui_build_base_path = "/apps/cio-advisory"
         api_env            = { CIO_PROFILE = "gcp" }
       }
-      doc4 = {
-        ui_image           = "registry.example.test/doc4-ui@sha256:4444444444444444444444444444444444444444444444444444444444444444"
-        api_image          = "registry.example.test/doc4-api@sha256:4444444444444444444444444444444444444444444444444444444444444444"
-        ui_build_base_path = "/apps/doc4"
+      trade-finance-checker = {
+        ui_image           = "registry.example.test/trade-finance-checker-ui@sha256:4444444444444444444444444444444444444444444444444444444444444444"
+        api_image          = "registry.example.test/trade-finance-checker-api@sha256:4444444444444444444444444444444444444444444444444444444444444444"
+        ui_build_base_path = "/apps/trade-finance-checker"
         api_env            = { TRADE_FINANCE_PROFILE = "gcp" }
       }
-      rsk1 = {
-        ui_image           = "registry.example.test/rsk1-ui@sha256:5555555555555555555555555555555555555555555555555555555555555555"
-        api_image          = "registry.example.test/rsk1-api@sha256:5555555555555555555555555555555555555555555555555555555555555555"
-        ui_build_base_path = "/apps/rsk1"
+      compliance-advisory = {
+        ui_image           = "registry.example.test/compliance-advisory-ui@sha256:5555555555555555555555555555555555555555555555555555555555555555"
+        api_image          = "registry.example.test/compliance-advisory-api@sha256:5555555555555555555555555555555555555555555555555555555555555555"
+        ui_build_base_path = "/apps/compliance-advisory"
         api_env            = { COMPLIANCE_PROFILE = "gcp" }
       }
-      hrz7 = {
-        ui_image           = "registry.example.test/hrz7-ui@sha256:6666666666666666666666666666666666666666666666666666666666666666"
-        api_image          = "registry.example.test/hrz7-api@sha256:6666666666666666666666666666666666666666666666666666666666666666"
-        ui_build_base_path = "/apps/hrz7"
+      human-review-console = {
+        ui_image           = "registry.example.test/human-review-console-ui@sha256:6666666666666666666666666666666666666666666666666666666666666666"
+        api_image          = "registry.example.test/human-review-console-api@sha256:6666666666666666666666666666666666666666666666666666666666666666"
+        ui_build_base_path = "/apps/human-review-console"
         api_env            = { REVIEW_PROFILE = "gcp" }
       }
     }
@@ -389,41 +389,41 @@ run "reject_ui_env_using_cloud_run_managed_name" {
   command = plan
   variables {
     embedded_apps = {
-      doc1 = {
-        ui_image           = "registry.example.test/doc1-ui@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
-        api_image          = "registry.example.test/doc1-api@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      cdd-sow-research = {
+        ui_image           = "registry.example.test/cdd-sow-research-ui@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        api_image          = "registry.example.test/cdd-sow-research-api@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         ui_build_base_path = "/agent"
         ui_env             = { PORT = "3000" }
         api_env            = { CDD_PROFILE = "gcp" }
       }
-      doc2 = {
-        ui_image           = "registry.example.test/doc2-ui@sha256:2222222222222222222222222222222222222222222222222222222222222222"
-        api_image          = "registry.example.test/doc2-api@sha256:2222222222222222222222222222222222222222222222222222222222222222"
-        ui_build_base_path = "/apps/doc2"
+      credit-memo-drafting = {
+        ui_image           = "registry.example.test/credit-memo-drafting-ui@sha256:2222222222222222222222222222222222222222222222222222222222222222"
+        api_image          = "registry.example.test/credit-memo-drafting-api@sha256:2222222222222222222222222222222222222222222222222222222222222222"
+        ui_build_base_path = "/apps/credit-memo-drafting"
         api_env            = { CREDIT_MEMO_PROFILE = "gcp" }
       }
-      doc3 = {
-        ui_image           = "registry.example.test/doc3-ui@sha256:3333333333333333333333333333333333333333333333333333333333333333"
-        api_image          = "registry.example.test/doc3-api@sha256:3333333333333333333333333333333333333333333333333333333333333333"
-        ui_build_base_path = "/apps/doc3"
+      cio-advisory = {
+        ui_image           = "registry.example.test/cio-advisory-ui@sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        api_image          = "registry.example.test/cio-advisory-api@sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        ui_build_base_path = "/apps/cio-advisory"
         api_env            = { CIO_PROFILE = "gcp" }
       }
-      doc4 = {
-        ui_image           = "registry.example.test/doc4-ui@sha256:4444444444444444444444444444444444444444444444444444444444444444"
-        api_image          = "registry.example.test/doc4-api@sha256:4444444444444444444444444444444444444444444444444444444444444444"
-        ui_build_base_path = "/apps/doc4"
+      trade-finance-checker = {
+        ui_image           = "registry.example.test/trade-finance-checker-ui@sha256:4444444444444444444444444444444444444444444444444444444444444444"
+        api_image          = "registry.example.test/trade-finance-checker-api@sha256:4444444444444444444444444444444444444444444444444444444444444444"
+        ui_build_base_path = "/apps/trade-finance-checker"
         api_env            = { TRADE_FINANCE_PROFILE = "gcp" }
       }
-      rsk1 = {
-        ui_image           = "registry.example.test/rsk1-ui@sha256:5555555555555555555555555555555555555555555555555555555555555555"
-        api_image          = "registry.example.test/rsk1-api@sha256:5555555555555555555555555555555555555555555555555555555555555555"
-        ui_build_base_path = "/apps/rsk1"
+      compliance-advisory = {
+        ui_image           = "registry.example.test/compliance-advisory-ui@sha256:5555555555555555555555555555555555555555555555555555555555555555"
+        api_image          = "registry.example.test/compliance-advisory-api@sha256:5555555555555555555555555555555555555555555555555555555555555555"
+        ui_build_base_path = "/apps/compliance-advisory"
         api_env            = { COMPLIANCE_PROFILE = "gcp" }
       }
-      hrz7 = {
-        ui_image           = "registry.example.test/hrz7-ui@sha256:6666666666666666666666666666666666666666666666666666666666666666"
-        api_image          = "registry.example.test/hrz7-api@sha256:6666666666666666666666666666666666666666666666666666666666666666"
-        ui_build_base_path = "/apps/hrz7"
+      human-review-console = {
+        ui_image           = "registry.example.test/human-review-console-ui@sha256:6666666666666666666666666666666666666666666666666666666666666666"
+        api_image          = "registry.example.test/human-review-console-api@sha256:6666666666666666666666666666666666666666666666666666666666666666"
+        ui_build_base_path = "/apps/human-review-console"
         api_env            = { REVIEW_PROFILE = "gcp" }
       }
     }
@@ -435,42 +435,42 @@ run "reject_plain_and_secret_source_collision" {
   command = plan
   variables {
     embedded_apps = {
-      doc1 = {
-        ui_image           = "registry.example.test/doc1-ui@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
-        api_image          = "registry.example.test/doc1-api@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      cdd-sow-research = {
+        ui_image           = "registry.example.test/cdd-sow-research-ui@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        api_image          = "registry.example.test/cdd-sow-research-api@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         ui_build_base_path = "/agent"
         ui_env             = { UI_SETTING = "plain" }
-        ui_secret_env      = { UI_SETTING = "doc1-ui-secret" }
+        ui_secret_env      = { UI_SETTING = "cdd-sow-research-ui-secret" }
         api_env            = { CDD_PROFILE = "gcp" }
       }
-      doc2 = {
-        ui_image           = "registry.example.test/doc2-ui@sha256:2222222222222222222222222222222222222222222222222222222222222222"
-        api_image          = "registry.example.test/doc2-api@sha256:2222222222222222222222222222222222222222222222222222222222222222"
-        ui_build_base_path = "/apps/doc2"
+      credit-memo-drafting = {
+        ui_image           = "registry.example.test/credit-memo-drafting-ui@sha256:2222222222222222222222222222222222222222222222222222222222222222"
+        api_image          = "registry.example.test/credit-memo-drafting-api@sha256:2222222222222222222222222222222222222222222222222222222222222222"
+        ui_build_base_path = "/apps/credit-memo-drafting"
         api_env            = { CREDIT_MEMO_PROFILE = "gcp" }
       }
-      doc3 = {
-        ui_image           = "registry.example.test/doc3-ui@sha256:3333333333333333333333333333333333333333333333333333333333333333"
-        api_image          = "registry.example.test/doc3-api@sha256:3333333333333333333333333333333333333333333333333333333333333333"
-        ui_build_base_path = "/apps/doc3"
+      cio-advisory = {
+        ui_image           = "registry.example.test/cio-advisory-ui@sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        api_image          = "registry.example.test/cio-advisory-api@sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        ui_build_base_path = "/apps/cio-advisory"
         api_env            = { CIO_PROFILE = "gcp" }
       }
-      doc4 = {
-        ui_image           = "registry.example.test/doc4-ui@sha256:4444444444444444444444444444444444444444444444444444444444444444"
-        api_image          = "registry.example.test/doc4-api@sha256:4444444444444444444444444444444444444444444444444444444444444444"
-        ui_build_base_path = "/apps/doc4"
+      trade-finance-checker = {
+        ui_image           = "registry.example.test/trade-finance-checker-ui@sha256:4444444444444444444444444444444444444444444444444444444444444444"
+        api_image          = "registry.example.test/trade-finance-checker-api@sha256:4444444444444444444444444444444444444444444444444444444444444444"
+        ui_build_base_path = "/apps/trade-finance-checker"
         api_env            = { TRADE_FINANCE_PROFILE = "gcp" }
       }
-      rsk1 = {
-        ui_image           = "registry.example.test/rsk1-ui@sha256:5555555555555555555555555555555555555555555555555555555555555555"
-        api_image          = "registry.example.test/rsk1-api@sha256:5555555555555555555555555555555555555555555555555555555555555555"
-        ui_build_base_path = "/apps/rsk1"
+      compliance-advisory = {
+        ui_image           = "registry.example.test/compliance-advisory-ui@sha256:5555555555555555555555555555555555555555555555555555555555555555"
+        api_image          = "registry.example.test/compliance-advisory-api@sha256:5555555555555555555555555555555555555555555555555555555555555555"
+        ui_build_base_path = "/apps/compliance-advisory"
         api_env            = { COMPLIANCE_PROFILE = "gcp" }
       }
-      hrz7 = {
-        ui_image           = "registry.example.test/hrz7-ui@sha256:6666666666666666666666666666666666666666666666666666666666666666"
-        api_image          = "registry.example.test/hrz7-api@sha256:6666666666666666666666666666666666666666666666666666666666666666"
-        ui_build_base_path = "/apps/hrz7"
+      human-review-console = {
+        ui_image           = "registry.example.test/human-review-console-ui@sha256:6666666666666666666666666666666666666666666666666666666666666666"
+        api_image          = "registry.example.test/human-review-console-api@sha256:6666666666666666666666666666666666666666666666666666666666666666"
+        ui_build_base_path = "/apps/human-review-console"
         api_env            = { REVIEW_PROFILE = "gcp" }
       }
     }

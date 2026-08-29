@@ -52,12 +52,24 @@ class _Requester:
             body = {"subject": "live-user@bank.internal", "source": "gcp-iap"}
         elif path == "/v1/journeys":
             rm_ids = (
-                ("doc1", "doc2", "doc3") if self._wrong_membership else ("doc1", "doc5", "doc3")
+                ("cdd-sow-research", "credit-memo-drafting", "cio-advisory")
+                if self._wrong_membership
+                else ("cdd-sow-research", "loan-document-intelligence", "cio-advisory")
             )
             ops_ids = (
-                ("doc3", "doc4", "rsk1", "hrz7")
+                (
+                    "cio-advisory",
+                    "trade-finance-checker",
+                    "compliance-advisory",
+                    "human-review-console",
+                )
                 if self._wrong_membership
-                else ("doc2", "doc4", "rsk1", "hrz7")
+                else (
+                    "credit-memo-drafting",
+                    "trade-finance-checker",
+                    "compliance-advisory",
+                    "human-review-console",
+                )
             )
             body = {
                 "journeys": [
@@ -75,23 +87,26 @@ class _Requester:
                     },
                 ]
             }
-        elif path == "/apps/doc5/api/healthz":
+        elif path == "/apps/loan-document-intelligence/api/healthz":
             body = {"status": "ok", "profile": "gcp", "region": "asia-southeast1"}
         elif path in {
             "/agent/api/healthz",
-            "/apps/doc3/api/healthz",
-            "/apps/doc2/api/healthz",
-            "/apps/doc4/api/healthz",
-            "/apps/rsk1/api/healthz",
+            "/apps/cio-advisory/api/healthz",
+            "/apps/credit-memo-drafting/api/healthz",
+            "/apps/trade-finance-checker/api/healthz",
+            "/apps/compliance-advisory/api/healthz",
         }:
             body = {"status": "ok", "profile": "live", "region": "asia-southeast1"}
-        elif path == "/apps/hrz7/api/healthz":
+        elif path == "/apps/human-review-console/api/healthz":
             body = {"status": "ok", "profile": "gcp", "region": "asia-southeast1"}
-        elif path == "/apps/doc1/":
+        elif path == "/apps/cdd-sow-research/":
             return self._module.Response(307, "text/html", b"", "/agent/")
         elif path == "/agent/":
-            return self._ui("doc1", "/agent")
-        elif re.fullmatch(r"/apps/(doc2|doc3|doc4|doc5|rsk1|hrz7)/", path):
+            return self._ui("cdd-sow-research", "/agent")
+        elif re.fullmatch(
+            r"/apps/(credit-memo-drafting|cio-advisory|trade-finance-checker|loan-document-intelligence|compliance-advisory|human-review-console)/",
+            path,
+        ):
             app_id = path.split("/")[2]
             return self._ui(app_id, f"/apps/{app_id}")
         elif path.endswith("/assets/app.js"):
@@ -123,12 +138,12 @@ def test_checks_both_hosts_through_iap(live_module: ModuleType) -> None:
     app_health_paths = {path for _, path, _ in requester.calls if path.endswith("/api/healthz")}
     assert app_health_paths == {
         "/agent/api/healthz",
-        "/apps/doc5/api/healthz",
-        "/apps/doc3/api/healthz",
-        "/apps/doc2/api/healthz",
-        "/apps/doc4/api/healthz",
-        "/apps/rsk1/api/healthz",
-        "/apps/hrz7/api/healthz",
+        "/apps/loan-document-intelligence/api/healthz",
+        "/apps/cio-advisory/api/healthz",
+        "/apps/credit-memo-drafting/api/healthz",
+        "/apps/trade-finance-checker/api/healthz",
+        "/apps/compliance-advisory/api/healthz",
+        "/apps/human-review-console/api/healthz",
     }
 
 
@@ -209,13 +224,13 @@ def test_rejects_local_embedded_app_profile(live_module: ModuleType) -> None:
 
     def get(base_url: str, path: str, token: str):
         response = original_get(base_url, path, token)
-        if path == "/apps/doc2/api/healthz":
+        if path == "/apps/credit-memo-drafting/api/healthz":
             body = {"status": "ok", "profile": "local", "region": "asia-southeast1"}
             return live_module.Response(200, "application/json", json.dumps(body).encode())
         return response
 
     requester.get = get
-    with pytest.raises(live_module.LiveCheckError, match="doc2 health profile"):
+    with pytest.raises(live_module.LiveCheckError, match="credit-memo-drafting health profile"):
         live_module.run_check(
             requester,
             rm_url="https://rm.bank.internal",
@@ -228,7 +243,7 @@ def test_rejects_local_embedded_app_profile(live_module: ModuleType) -> None:
 def test_rejects_embedded_ui_asset_outside_build_base(live_module: ModuleType) -> None:
     with pytest.raises(live_module.LiveCheckError, match="escaped"):
         live_module.run_check(
-            _Requester(live_module, broken_ui="doc2"),
+            _Requester(live_module, broken_ui="credit-memo-drafting"),
             rm_url="https://rm.bank.internal",
             ops_url="https://ops.bank.internal",
             token="signed-id-token",

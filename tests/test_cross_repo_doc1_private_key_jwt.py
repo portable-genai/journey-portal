@@ -40,7 +40,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 _DRIVER = Path(__file__).resolve().parent / "cross_repo" / "verify_with_doc1.py"
 
 CLIENT_ID = "hrz9-journey-portal-bff-fixture"
-GRANT_ENDPOINT = "https://doc1.example/agent/api/v1/embed/grants"
+GRANT_ENDPOINT = "https://cdd-sow-research.example/agent/api/v1/embed/grants"
 
 
 def _doc1_repo() -> Path | None:
@@ -159,7 +159,9 @@ def test_portal_assertion_verifies_against_doc1_and_its_negatives_are_refused(
     valid = _mint(signer, now=now)
     tampered = valid[:-4] + ("AAAA" if not valid.endswith("AAAA") else "BBBB")
     expired = _mint(signer, now=now - timedelta(minutes=10))
-    wrong_audience = _mint(signer, now=now, audience="https://doc1.example/agent/api/v1/other")
+    wrong_audience = _mint(
+        signer, now=now, audience="https://cdd-sow-research.example/agent/api/v1/other"
+    )
 
     document = _run_doc1_verifier(
         {

@@ -42,7 +42,7 @@ browser ──▶ shell (Next.js rewrites / Angular proxy)  ──▶ BFF ──
 
 Most embedded apps are built with `NEXT_PUBLIC_BASE_PATH=/apps/<id>` and
 `NEXT_PUBLIC_EMBED=1`. Doc1 instead keeps its portable artifact fixed at `/agent`: Hrz9
-exposes `/agent/*`, redirects the `/apps/doc1` compatibility entry to `/agent/`, and
+exposes `/agent/*`, redirects the `/apps/cdd-sow-research` compatibility entry to `/agent/`, and
 reports `/agent/api` to the shell. The launcher selects Doc1's native channel plus
 loopback `local-persona` or hosted IAP identity explicitly. Cross-repo build, proxy,
 asset, API, identity, and RM-journey tests cover this contract.

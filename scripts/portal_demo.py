@@ -106,7 +106,7 @@ def _audit_view() -> PortalAuditView:
             pseudonym_key_id=key_id,
             method="GET",
             action="forward:ui",
-            app_id="doc1",
+            app_id="cdd-sow-research",
         ),
         PortalAccessEvent(
             event_id="fictional-access-002",
@@ -116,7 +116,7 @@ def _audit_view() -> PortalAuditView:
             pseudonym_key_id=key_id,
             method="POST",
             action="forward:api",
-            app_id="doc1",
+            app_id="cdd-sow-research",
         ),
     )
     records = []

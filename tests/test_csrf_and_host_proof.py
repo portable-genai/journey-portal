@@ -26,14 +26,14 @@ from journey_portal.domain.doc1_broker import (
 from journey_portal.domain.jose import b64u_decode, b64u_encode, compact_json
 
 SECRET = b"portal-session-signing-key-fixture"
-GRANT_PATH = "/v1/doc1/embed/grant"
+GRANT_PATH = "/v1/cdd-sow-research/embed/grant"
 NOW = 1_786_000_000
 INSTANCE = "instance-fixture-0123456789"
 
 
 def _policy(**overrides: object) -> Doc1BrokerPolicy:
     fields: dict[str, object] = {
-        "grant_endpoint": "https://doc1.example/agent/api/v1/embed/grants",
+        "grant_endpoint": "https://cdd-sow-research.example/agent/api/v1/embed/grants",
         "installation_id": "inst_fixture",
         "bff_client_id": "hrz9-journey-portal-bff-fixture",
         "portal_origin": "https://portal.example",
@@ -129,7 +129,7 @@ def test_an_expired_token_is_refused_and_a_stretched_lifetime_does_not_help() ->
 
     encoded = b64u_encode(compact_json(payload))
     key = hmac.new(
-        SECRET, b"hrz9-doc1-grant-csrf\x00" + _binding().encode("ascii"), hashlib.sha256
+        SECRET, b"hrz9-cdd-sow-research-grant-csrf\x00" + _binding().encode("ascii"), hashlib.sha256
     ).digest()
     signature = hmac.new(key, encoded.encode("ascii"), hashlib.sha256).digest()
     with pytest.raises(CsrfError):
@@ -287,7 +287,7 @@ def test_the_grant_body_is_the_shape_doc1_accepts() -> None:
     "overrides",
     [
         {"grant_endpoint": ""},
-        {"grant_endpoint": "doc1.example/grants"},
+        {"grant_endpoint": "cdd-sow-research.example/grants"},
         {"installation_id": ""},
         {"bff_client_id": ""},
         {"portal_origin": ""},

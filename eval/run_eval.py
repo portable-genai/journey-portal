@@ -121,7 +121,7 @@ def identity_case_ok(forwarded: dict[str, str], case: dict[str, Any]) -> bool:
 
 def routing_case_ok(case: dict[str, Any]) -> bool:
     mount = AppMount(
-        app_id="doc1",
+        app_id="cdd-sow-research",
         label="x",
         ui_upstream=case["ui_upstream"],
         api_upstream=case["api_upstream"],
@@ -163,7 +163,7 @@ def observability_case_ok(case: dict[str, Any]) -> bool:
         pseudonym_key_id="fictional-key-v1",
         method="POST",
         action=case["action"],
-        app_id=case.get("app_id", "doc1"),
+        app_id=case.get("app_id", "cdd-sow-research"),
     )
     payload = to_observability_audit_event(event)
     return (

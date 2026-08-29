@@ -79,9 +79,9 @@ def main() -> int:
             page.goto("http://localhost:3000", wait_until="domcontentloaded")
             page.locator('[data-demo="rm-journey"]').wait_for()
             assert page.locator('[data-demo^="app-tab-"]').count() == 3
-            page.locator('[data-demo="app-tab-doc5"]').wait_for()
+            page.locator('[data-demo="app-tab-loan-document-intelligence"]').wait_for()
             rm_src = page.locator('[data-demo="embedded-app"]').get_attribute("src") or ""
-            assert urlsplit(rm_src).path.startswith("/apps/doc1"), rm_src
+            assert urlsplit(rm_src).path.startswith("/apps/cdd-sow-research"), rm_src
             page.locator('[data-demo="persona-selector"]').select_option("approver")
             page.locator('[data-demo="verified-identity"]').filter(
                 has_text="demo.approver@bank.example"
@@ -97,13 +97,13 @@ def main() -> int:
             page.locator('[data-demo="verified-identity"]').filter(
                 has_text="demo.approver@bank.example"
             ).wait_for()
-            page.locator('[data-demo="app-tab-hrz7"]').click()
+            page.locator('[data-demo="app-tab-human-review-console"]').click()
             page.wait_for_function(
                 """() => document.querySelector('[data-demo="embedded-app"]')
-                  ?.getAttribute('src')?.includes('/apps/hrz7')"""
+                  ?.getAttribute('src')?.includes('/apps/human-review-console')"""
             )
             ops_src = page.locator('[data-demo="embedded-app"]').get_attribute("src") or ""
-            assert urlsplit(ops_src).path.startswith("/apps/hrz7"), ops_src
+            assert urlsplit(ops_src).path.startswith("/apps/human-review-console"), ops_src
             assert not browser_errors, browser_errors
             browser.close()
     finally:
