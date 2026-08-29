@@ -426,6 +426,15 @@ class Step:
     # journey subset that exists on the deployment; persona-picker steps and apps the
     # deployment does not embed stay local-only.
     hosted: bool = False
+    # The step ids this one is the counterpart of: the refusal half of a pair naming the
+    # permission it is set against. A control that only ever says yes cannot be told apart
+    # from no control at all, so the run sheets and the generated decks mark the pair.
+    # It lives HERE, beside the steps it describes, rather than in the deck renderer that
+    # draws it. The renderer used to key on the word "pair" appearing in the narration,
+    # which both missed a declared pair and would have marked any step that happened to use
+    # the word; moving the declaration to the source removes the guess. The renderer reads
+    # this and refuses to render when a partner names a step the walkthrough no longer runs.
+    pair_with: tuple[str, ...] = ()
     # Spoken instead of presenter_notes on a hosted run, where the mechanics differ
     # (managed services, edge sign-on, the deployment's labelled screening stand-in).
     hosted_notes: str | None = None
@@ -1248,6 +1257,7 @@ STEPS: tuple[Step, ...] = (
             "watched decide both ways on a single machine decides the same both ways here, "
             "enforced by the same code."
         ),
+        pair_with=("rm-whoami",),
     ),
     Step(
         "rm-doc1-cdd",
@@ -1288,6 +1298,7 @@ STEPS: tuple[Step, ...] = (
         frozenset({"rm"}),
         _rm_doc1_flagged,
         requires_live=("cdd-sow-research",),
+        pair_with=("rm-doc1-cdd",),
     ),
     Step(
         "rm-doc1-blocked",
@@ -1302,6 +1313,7 @@ STEPS: tuple[Step, ...] = (
         frozenset({"rm"}),
         _rm_doc1_blocked,
         requires_live=("cdd-sow-research",),
+        pair_with=("rm-doc1-cdd", "rm-doc1-flagged",),
     ),
     Step(
         "rm-doc3-briefing",
@@ -1441,6 +1453,7 @@ STEPS: tuple[Step, ...] = (
         frozenset({"mkt"}),
         _mkt_gate_refused,
         requires_fixture=("marketing-compliance-gate",),
+        pair_with=("mkt-creative",),
     ),
     Step(
         "mkt-performance",
@@ -1574,6 +1587,7 @@ STEPS: tuple[Step, ...] = (
         "a gate, so watch this refusal and the approval that follows it as one pair.",
         frozenset({"ops"}),
         _ops_hrz7_self_approval,
+        pair_with=("ops-hrz7-review",),
     ),
     Step(
         "ops-hrz7-review",
