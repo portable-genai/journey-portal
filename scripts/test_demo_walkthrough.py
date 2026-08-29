@@ -352,13 +352,13 @@ class WalkthroughSelectionTests(unittest.TestCase):
         self.assertEqual(
             live,
             {
-                "rm-doc1-cdd": ("doc1",),
-                "rm-doc1-flagged": ("doc1",),
-                "rm-doc1-blocked": ("doc1",),
-                "rm-doc3-briefing": ("doc3",),
-                "ops-doc2-credit-memo": ("doc2",),
-                "ops-doc4-ucp600": ("doc4",),
-                "ops-rsk1-compliance": ("rsk1",),
+                "rm-doc1-cdd": ("cdd-sow-research",),
+                "rm-doc1-flagged": ("cdd-sow-research",),
+                "rm-doc1-blocked": ("cdd-sow-research",),
+                "rm-doc3-briefing": ("cio-advisory",),
+                "ops-doc2-credit-memo": ("credit-memo-drafting",),
+                "ops-doc4-ucp600": ("trade-finance-checker",),
+                "ops-rsk1-compliance": ("compliance-advisory",),
             },
         )
         for step in walkthrough.STEPS:

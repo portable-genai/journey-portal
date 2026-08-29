@@ -36,7 +36,7 @@ _ACTIVE_JOURNEY = "both"
 # (``--confirm-inputs``), so the audience can read exactly what is about to be sent.
 _CONFIRM_INPUTS = False
 # App id -> same-origin API base, discovered once per run from /v1/journeys. Doc1's
-# canonical mount is /agent on every target; /apps/doc1 is only a local compatibility
+# canonical mount is /agent on every target; /apps/cdd-sow-research is only a local compatibility
 # route, so hardcoding either would break one target.
 _APP_API_BASES: dict[str, str] = {}
 
@@ -132,20 +132,20 @@ _JOURNEY_SHELLS: dict[str, tuple[str, str]] = {
 
 # Which shell origin proxies each profile-checked app (healthz goes through the shell).
 _APP_ORIGINS: dict[str, tuple[str, str]] = {
-    "doc1": (RM_ORIGIN, "RM Journey"),
-    "doc3": (RM_ORIGIN, "RM Journey"),
-    "doc2": (OPS_ORIGIN, "Ops Journey"),
-    "doc4": (OPS_ORIGIN, "Ops Journey"),
-    "rsk1": (OPS_ORIGIN, "Ops Journey"),
-    "mkt1": (MKT_ORIGIN, "Marketing Journeys"),
-    "mkt2": (MKT_ORIGIN, "Marketing Journeys"),
-    "mkt3": (MKT_ORIGIN, "Marketing Journeys"),
-    "mkt4": (MKT_ORIGIN, "Marketing Journeys"),
-    "mkt5": (MKT_ORIGIN, "Marketing Journeys"),
-    "mkt6": (MKT_ORIGIN, "Marketing Journeys"),
-    "rsk3": (GOV_ORIGIN, "AI Governance Journeys"),
-    "hrz4": (GOV_ORIGIN, "AI Governance Journeys"),
-    "doc6": (SVC_ORIGIN, "Service Journeys"),
+    "cdd-sow-research": (RM_ORIGIN, "RM Journey"),
+    "cio-advisory": (RM_ORIGIN, "RM Journey"),
+    "credit-memo-drafting": (OPS_ORIGIN, "Ops Journey"),
+    "trade-finance-checker": (OPS_ORIGIN, "Ops Journey"),
+    "compliance-advisory": (OPS_ORIGIN, "Ops Journey"),
+    "market-intelligence": (MKT_ORIGIN, "Marketing Journeys"),
+    "campaign-planner": (MKT_ORIGIN, "Marketing Journeys"),
+    "creative-studio": (MKT_ORIGIN, "Marketing Journeys"),
+    "performance-marketing-optimisation": (MKT_ORIGIN, "Marketing Journeys"),
+    "next-best-action": (MKT_ORIGIN, "Marketing Journeys"),
+    "marketing-compliance-gate": (MKT_ORIGIN, "Marketing Journeys"),
+    "architecture-validator": (GOV_ORIGIN, "AI Governance Journeys"),
+    "model-quality-gate": (GOV_ORIGIN, "AI Governance Journeys"),
+    "complaints-review": (SVC_ORIGIN, "Service Journeys"),
 }
 # The audience-registered demo client Doc3's briefing runs on (opaque id, never PII).
 _DOC3_DEMO_CLIENT = {
@@ -251,7 +251,7 @@ def _require_live(page: Any, app_id: str) -> None:
 
 
 def _require_live_doc1(page: Any) -> None:
-    _require_live(page, "doc1")
+    _require_live(page, "cdd-sow-research")
 
 
 def _shell_of(journey: str) -> tuple[str, str]:
@@ -284,7 +284,7 @@ def _preflight(page: Any, steps: Sequence[Step]) -> None:
                 wanted.setdefault(shell, {})[app_id] = "gcp" if _HOSTED else "live"
             for app_id in step.requires_fixture:
                 wanted.setdefault(shell, {})[app_id] = _PORTAL_FIXTURE_PROFILE
-        if "doc1" in step.requires_live:
+        if "cdd-sow-research" in step.requires_live:
             needs_doc1_packs = True
     if not wanted:
         return
@@ -514,7 +514,7 @@ def _rm_doc1(page: Any) -> None:
         RM_ORIGIN,
         "RM Journey",
         "CDD + Source of Wealth",
-        "doc1",
+        "cdd-sow-research",
     )
     _prepare_doc1_case(
         frame,
@@ -551,7 +551,7 @@ def _rm_doc1_flagged(page: Any) -> None:
         RM_ORIGIN,
         "RM Journey",
         "CDD + Source of Wealth",
-        "doc1",
+        "cdd-sow-research",
     )
     _prepare_doc1_case(
         frame,
@@ -631,7 +631,7 @@ def _rm_doc1_blocked(page: Any) -> None:
         RM_ORIGIN,
         "RM Journey",
         "CDD + Source of Wealth",
-        "doc1",
+        "cdd-sow-research",
     )
     # The live profile refuses an assessment with no evidence on file, so give the
     # manipulated request a document too: the guardrail must be what refuses it, before
@@ -740,8 +740,8 @@ def _mkt_open(page: Any) -> None:
 
 def _mkt_brief(page: Any) -> None:
     """The research step: a cited market brief the rest of the journey is planned from."""
-    _require_profile(page, "mkt1", _PORTAL_FIXTURE_PROFILE)
-    frame = _select_journey_tab(page, "mkt", "Market Intelligence", "mkt1")
+    _require_profile(page, "market-intelligence", _PORTAL_FIXTURE_PROFILE)
+    frame = _select_journey_tab(page, "mkt", "Market Intelligence", "market-intelligence")
     frame.locator("input").first.fill(_MKT_TOPIC)  # topic
     _inputs_ready("the topic, market and vertical to research")
     frame.get_by_role("button", name="Build cited brief", exact=True).click()
@@ -752,8 +752,8 @@ def _mkt_brief(page: Any) -> None:
 
 def _mkt_plan(page: Any) -> None:
     """The planning step: channel mix, budget split and pacing, each computed."""
-    _require_profile(page, "mkt2", _PORTAL_FIXTURE_PROFILE)
-    frame = _select_journey_tab(page, "mkt", "Campaign Planner", "mkt2")
+    _require_profile(page, "campaign-planner", _PORTAL_FIXTURE_PROFILE)
+    frame = _select_journey_tab(page, "mkt", "Campaign Planner", "campaign-planner")
     frame.locator("input").nth(0).fill(_MKT_OBJECTIVE)
     frame.locator("input").nth(1).fill(_MKT_BUDGET)
     _inputs_ready("the objective and the total budget")
@@ -765,8 +765,8 @@ def _mkt_plan(page: Any) -> None:
 
 def _mkt_creative(page: Any) -> None:
     """The positive half of the brand-safety pair: variants that pass every check."""
-    _require_profile(page, "mkt3", _PORTAL_FIXTURE_PROFILE)
-    frame = _select_journey_tab(page, "mkt", "Creative Studio", "mkt3")
+    _require_profile(page, "creative-studio", _PORTAL_FIXTURE_PROFILE)
+    frame = _select_journey_tab(page, "mkt", "Creative Studio", "creative-studio")
     frame.locator("input").nth(0).fill(_MKT_THEME)
     frame.locator("input").nth(1).fill(_MKT_OFFER)
     _inputs_ready("the campaign theme and the offer")
@@ -789,8 +789,10 @@ def _mkt_gate_refused(page: Any) -> None:
     Paired with the creative step directly before it. Same gate, same rules, opposite
     answer, which is what makes either of them evidence.
     """
-    _require_profile(page, "mkt6", _PORTAL_FIXTURE_PROFILE)
-    frame = _select_journey_tab(page, "mkt", "Marketing Compliance Gate", "mkt6")
+    _require_profile(page, "marketing-compliance-gate", _PORTAL_FIXTURE_PROFILE)
+    frame = _select_journey_tab(
+        page, "mkt", "Marketing Compliance Gate", "marketing-compliance-gate"
+    )
     frame.locator("textarea").first.fill(_MKT_NONCOMPLIANT_COPY)
     _inputs_ready("marketing copy that promises a guaranteed return")
     frame.get_by_role("button", name="Run compliance review", exact=True).click()
@@ -808,8 +810,10 @@ def _mkt_gate_refused(page: Any) -> None:
 
 def _mkt_performance(page: Any) -> None:
     """Return against target, the significance of each test, and the anomalies found."""
-    _require_profile(page, "mkt4", _PORTAL_FIXTURE_PROFILE)
-    frame = _select_journey_tab(page, "mkt", "Performance Marketing", "mkt4")
+    _require_profile(page, "performance-marketing-optimisation", _PORTAL_FIXTURE_PROFILE)
+    frame = _select_journey_tab(
+        page, "mkt", "Performance Marketing", "performance-marketing-optimisation"
+    )
     frame.locator("input").nth(0).fill(_MKT_ACCOUNT)
     _inputs_ready("the advertising account to report on")
     frame.get_by_role("button", name="Build cited report", exact=True).click()
@@ -825,8 +829,8 @@ def _mkt_performance(page: Any) -> None:
 
 def _mkt_next_best_action(page: Any) -> None:
     """One customer, an eligibility and consent decision made in code, ranked."""
-    _require_profile(page, "mkt5", _PORTAL_FIXTURE_PROFILE)
-    frame = _select_journey_tab(page, "mkt", "Next Best Action", "mkt5")
+    _require_profile(page, "next-best-action", _PORTAL_FIXTURE_PROFILE)
+    frame = _select_journey_tab(page, "mkt", "Next Best Action", "next-best-action")
     frame.locator("input").nth(0).fill(_MKT_CUSTOMER)
     _inputs_ready("the customer to recommend for")
     frame.get_by_role("button", name="Recommend next-best-action", exact=True).click()
@@ -841,8 +845,8 @@ def _gov_open(page: Any) -> None:
 
 def _gov_architecture(page: Any) -> None:
     """The intake gate: a proposed system judged against the written standard."""
-    _require_profile(page, "rsk3", _PORTAL_FIXTURE_PROFILE)
-    frame = _select_journey_tab(page, "gov", "Architecture Validator", "rsk3")
+    _require_profile(page, "architecture-validator", _PORTAL_FIXTURE_PROFILE)
+    frame = _select_journey_tab(page, "gov", "Architecture Validator", "architecture-validator")
     _inputs_ready("the proposed system, its region and the controls it declares")
     frame.get_by_role("button", name="Validate at intake", exact=True).click()
     # The findings panel exists only once a report has come back. The console's own waiting
@@ -857,8 +861,8 @@ def _gov_architecture(page: Any) -> None:
 
 def _gov_promotion_gate(page: Any) -> None:
     """The promotion gate: measured quality and adversarial probes, then a verdict."""
-    _require_profile(page, "hrz4", _PORTAL_FIXTURE_PROFILE)
-    frame = _select_journey_tab(page, "gov", "AI Quality & Promotion Gate", "hrz4")
+    _require_profile(page, "model-quality-gate", _PORTAL_FIXTURE_PROFILE)
+    frame = _select_journey_tab(page, "gov", "AI Quality & Promotion Gate", "model-quality-gate")
     _inputs_ready("the model, the prompt version and the golden dataset to judge")
     frame.get_by_role("button", name="Run promotion gate", exact=True).click()
     frame.get_by_text("RED-TEAM REPORT", exact=False).first.wait_for(timeout=_LIVE_STEP_TIMEOUT_MS)
@@ -888,8 +892,8 @@ def _svc_open(page: Any) -> None:
 
 def _svc_complaint(page: Any) -> None:
     """Assess one complaint: outcome, root cause, citations, and an unsent draft."""
-    _require_profile(page, "doc6", _PORTAL_FIXTURE_PROFILE)
-    frame = _select_journey_tab(page, "svc", "Complaints Review", "doc6")
+    _require_profile(page, "complaints-review", _PORTAL_FIXTURE_PROFILE)
+    frame = _select_journey_tab(page, "svc", "Complaints Review", "complaints-review")
     frame.locator("textarea").first.fill(_SVC_COMPLAINT)
     _inputs_ready("the complaint as the customer wrote it")
     frame.get_by_role("button", name="Review complaint", exact=True).click()
@@ -901,8 +905,10 @@ def _svc_complaint(page: Any) -> None:
 
 def _svc_rules(page: Any) -> None:
     """The handler's own question, answered from the instruments this assistant ships with."""
-    _require_profile(page, "rsk1", _PORTAL_FIXTURE_PROFILE)
-    frame = _select_journey_tab(page, "svc", "Compliance Assistant & Control Mapper", "rsk1")
+    _require_profile(page, "compliance-advisory", _PORTAL_FIXTURE_PROFILE)
+    frame = _select_journey_tab(
+        page, "svc", "Compliance Assistant & Control Mapper", "compliance-advisory"
+    )
     frame.get_by_role("button", name="MAS", exact=False).first.click()
     composer = frame.get_by_placeholder("Ask a grounded compliance question", exact=False)
     composer.fill(_SVC_QUESTION)
@@ -930,7 +936,7 @@ def _ops_hrz7_self_approval(page: Any) -> None:
     page.locator("select").select_option("analyst")
     page.locator(".who").get_by_text("demo.analyst@bank.example", exact=False).wait_for()
     outcome = page.evaluate("""async () => {
-        const listed = await fetch('/apps/hrz7/api/v1/reviews');
+        const listed = await fetch('/apps/human-review-console/api/v1/reviews');
         if (!listed.ok) throw new Error(`review queue failed: ${listed.status}`);
         const reviews = await listed.json();
         const item = reviews.find(
@@ -939,7 +945,7 @@ def _ops_hrz7_self_approval(page: Any) -> None:
         );
         if (!item) throw new Error('no pending cdd_dossier to attempt a self-approval on');
         const response = await fetch(
-            `/apps/hrz7/api/v1/reviews/${item.review_id}/decision`,
+            `/apps/human-review-console/api/v1/reviews/${item.review_id}/decision`,
             {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -970,11 +976,11 @@ def _rm_doc3(page: Any) -> None:
     UI's "Add a client" panel posts the identical body), and the briefing's themes come
     from grounded research over real market commentary, each cited to its source.
     """
-    _require_live(page, "doc3")
+    _require_live(page, "cio-advisory")
     _open_shell(page, RM_ORIGIN, "RM Journey")
     registration = page.evaluate(
         """async (client) => {
-        const response = await fetch('/apps/doc3/api/v1/clients', {
+        const response = await fetch('/apps/cio-advisory/api/v1/clients', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(client),
@@ -991,7 +997,7 @@ def _rm_doc3(page: Any) -> None:
         RM_ORIGIN,
         "RM Journey",
         "CIO Advisory Assistant",
-        "doc3",
+        "cio-advisory",
     )
     client_id = str(_DOC3_DEMO_CLIENT["client_id"])
     frame.get_by_placeholder("client-000042").fill(client_id)
@@ -1032,13 +1038,13 @@ def _ops_open(page: Any) -> None:
 
 def _ops_doc2(page: Any) -> None:
     """A real credit memo: a real listed borrower grounded on its SEC EDGAR record."""
-    _require_live(page, "doc2")
+    _require_live(page, "credit-memo-drafting")
     frame = _select_tab(
         page,
         OPS_ORIGIN,
         "Ops Journey",
         "Credit Memo / Underwriting",
-        "doc2",
+        "credit-memo-drafting",
     )
     frame.get_by_label("Borrower").fill(_DOC2_BORROWER["name"])
     frame.get_by_label("Sector").fill(_DOC2_BORROWER["sector"])
@@ -1057,13 +1063,13 @@ def _ops_doc4(page: Any) -> None:
     the UI claims the new LC for the verified tenant before the deterministic UCP600
     examination runs, exactly what happens when a viewer pastes their own presentation.
     """
-    _require_live(page, "doc4")
+    _require_live(page, "trade-finance-checker")
     frame = _select_tab(
         page,
         OPS_ORIGIN,
         "Ops Journey",
         "Trade-Finance Checker (UCP600)",
-        "doc4",
+        "trade-finance-checker",
     )
     editor = frame.locator("textarea")
     presentation = json.loads(editor.input_value())
@@ -1077,10 +1083,10 @@ def _ops_doc4(page: Any) -> None:
 
 def _ops_rsk1(page: Any) -> None:
     """A real grounded answer: audience question against the real regulatory corpus."""
-    _require_live(page, "rsk1")
+    _require_live(page, "compliance-advisory")
     # The corpus behind the answer must be the real ingested instruments, not fiction.
     status = page.evaluate("""async () => {
-        const response = await fetch('/apps/rsk1/api/corpus/status');
+        const response = await fetch('/apps/compliance-advisory/api/corpus/status');
         if (!response.ok) throw new Error(`corpus status failed: ${response.status}`);
         return response.json();
     }""")
@@ -1096,7 +1102,7 @@ def _ops_rsk1(page: Any) -> None:
         OPS_ORIGIN,
         "Ops Journey",
         "Compliance Assistant & Control Mapper",
-        "rsk1",
+        "compliance-advisory",
     )
     # The accessible name includes the long regulator label and jurisdiction beneath "MAS".
     frame.get_by_role("button", name="MAS", exact=False).click()
@@ -1131,7 +1137,7 @@ def _ops_hrz7(page: Any) -> None:
     # Query the authoritative API before interpreting the UI. The UI initially renders an empty
     # queue while its asynchronous health, persona, and queue requests are still in flight.
     reviews = page.evaluate("""async () => {
-        const response = await fetch('/apps/hrz7/api/v1/reviews');
+        const response = await fetch('/apps/human-review-console/api/v1/reviews');
         if (!response.ok) throw new Error(`review queue failed: ${response.status}`);
         return response.json();
     }""")
@@ -1173,7 +1179,7 @@ def _ops_hrz7(page: Any) -> None:
     # The watchlist-alerted case must NOT have been swept up by this approval.
     flagged_slug = _case_slug(_doc1_manifest()["flagged"]["subject_name"])
     after = page.evaluate("""async () => {
-        const response = await fetch('/apps/hrz7/api/v1/reviews');
+        const response = await fetch('/apps/human-review-console/api/v1/reviews');
         if (!response.ok) throw new Error(`review queue failed: ${response.status}`);
         return response.json();
     }""")
@@ -1256,7 +1262,7 @@ STEPS: tuple[Step, ...] = (
         "and the model never decides it.",
         frozenset({"rm"}),
         _rm_doc1,
-        requires_live=("doc1",),
+        requires_live=("cdd-sow-research",),
         hosted=True,
         hosted_notes=(
             "The manager uploads the same public filings and asks for the same assessment, "
@@ -1281,7 +1287,7 @@ STEPS: tuple[Step, ...] = (
         "you watch the same one decide both ways on real names.",
         frozenset({"rm"}),
         _rm_doc1_flagged,
-        requires_live=("doc1",),
+        requires_live=("cdd-sow-research",),
     ),
     Step(
         "rm-doc1-blocked",
@@ -1295,7 +1301,7 @@ STEPS: tuple[Step, ...] = (
         "institution's own checks rather than by a supplier vouching for it.",
         frozenset({"rm"}),
         _rm_doc1_blocked,
-        requires_live=("doc1",),
+        requires_live=("cdd-sow-research",),
     ),
     Step(
         "rm-doc3-briefing",
@@ -1309,7 +1315,7 @@ STEPS: tuple[Step, ...] = (
         "by field or rebuilt on another provider.",
         frozenset({"rm"}),
         _rm_doc3,
-        requires_live=("doc3",),
+        requires_live=("cio-advisory",),
     ),
     Step(
         "rm-switch-approver",
@@ -1345,7 +1351,7 @@ STEPS: tuple[Step, ...] = (
         "quietly becoming the place institutional memory is trapped.",
         frozenset({"ops"}),
         _ops_doc2,
-        requires_live=("doc2",),
+        requires_live=("credit-memo-drafting",),
     ),
     Step(
         "ops-doc4-ucp600",
@@ -1359,7 +1365,7 @@ STEPS: tuple[Step, ...] = (
         "model you cannot.",
         frozenset({"ops"}),
         _ops_doc4,
-        requires_live=("doc4",),
+        requires_live=("trade-finance-checker",),
     ),
     Step(
         "ops-rsk1-compliance",
@@ -1372,7 +1378,7 @@ STEPS: tuple[Step, ...] = (
         "stack around it change over the years without the evidence base having to be rebuilt.",
         frozenset({"ops"}),
         _ops_rsk1,
-        requires_live=("rsk1",),
+        requires_live=("compliance-advisory",),
     ),
     Step(
         "mkt-open",
@@ -1399,7 +1405,7 @@ STEPS: tuple[Step, ...] = (
         "exported and checked rather than as a summary somebody wrote once.",
         frozenset({"mkt"}),
         _mkt_brief,
-        requires_fixture=("mkt1",),
+        requires_fixture=("market-intelligence",),
     ),
     Step(
         "mkt-plan",
@@ -1411,7 +1417,7 @@ STEPS: tuple[Step, ...] = (
         "person is accountable for are computed, and the writing around them is drafted.",
         frozenset({"mkt"}),
         _mkt_plan,
-        requires_fixture=("mkt2",),
+        requires_fixture=("campaign-planner",),
     ),
     Step(
         "mkt-creative",
@@ -1421,7 +1427,7 @@ STEPS: tuple[Step, ...] = (
         "that result, because the next step is the same class of control answering the other way.",
         frozenset({"mkt"}),
         _mkt_creative,
-        requires_fixture=("mkt3",),
+        requires_fixture=("creative-studio",),
     ),
     Step(
         "mkt-gate-refused",
@@ -1434,7 +1440,7 @@ STEPS: tuple[Step, ...] = (
         "have now seen it decide both ways on the same rules within a minute.",
         frozenset({"mkt"}),
         _mkt_gate_refused,
-        requires_fixture=("mkt6",),
+        requires_fixture=("marketing-compliance-gate",),
     ),
     Step(
         "mkt-performance",
@@ -1447,7 +1453,7 @@ STEPS: tuple[Step, ...] = (
         "not give.",
         frozenset({"mkt"}),
         _mkt_performance,
-        requires_fixture=("mkt4",),
+        requires_fixture=("performance-marketing-optimisation",),
     ),
     Step(
         "mkt-next-best-action",
@@ -1459,7 +1465,7 @@ STEPS: tuple[Step, ...] = (
         "answer here is a rule and a record rather than a score nobody can reconstruct.",
         frozenset({"mkt"}),
         _mkt_next_best_action,
-        requires_fixture=("mkt5",),
+        requires_fixture=("next-best-action",),
     ),
     Step(
         "gov-open",
@@ -1483,7 +1489,7 @@ STEPS: tuple[Step, ...] = (
         "committee can rely on rather than a meeting.",
         frozenset({"gov"}),
         _gov_architecture,
-        requires_fixture=("rsk3",),
+        requires_fixture=("architecture-validator",),
     ),
     Step(
         "gov-promotion-gate",
@@ -1503,7 +1509,7 @@ STEPS: tuple[Step, ...] = (
         "certificate.",
         frozenset({"gov"}),
         _gov_promotion_gate,
-        requires_fixture=("hrz4",),
+        requires_fixture=("model-quality-gate",),
     ),
     Step(
         "svc-open",
@@ -1527,7 +1533,7 @@ STEPS: tuple[Step, ...] = (
         "boundary is in the code rather than in a working practice somebody might skip.",
         frozenset({"svc"}),
         _svc_complaint,
-        requires_fixture=("doc6",),
+        requires_fixture=("complaints-review",),
     ),
     Step(
         "svc-rules",
@@ -1542,7 +1548,7 @@ STEPS: tuple[Step, ...] = (
         "mounted for a second person's question rather than deployed a second time.",
         frozenset({"svc"}),
         _svc_rules,
-        requires_fixture=("rsk1",),
+        requires_fixture=("compliance-advisory",),
     ),
     Step(
         "persona-close",
