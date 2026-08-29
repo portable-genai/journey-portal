@@ -202,12 +202,18 @@ def run(target: Target, out_dir: Path) -> Evidence:
             # console loads the existing documents after its own bootstrap, so counting too
             # early reads an empty list and uploads a duplicate every run.
             frame.locator('[data-demo="panel-case-documents"]').wait_for(timeout=STEP_TIMEOUT_MS)
+            # Settled means "the panel has decided what it holds", which is a list OR the
+            # empty state -- and the empty state is keyed on markup, never on its prose. The
+            # console renders two different empty sentences (a seeded demo corpus makes an
+            # upload optional; without one an assessment with nothing to read is refused), so
+            # a wait that matched one of those sentences waited forever on the other profile
+            # while the panel had in fact settled seconds earlier.
             frame.wait_for_function(
                 """() => {
                   const panel = document.querySelector('[data-demo="panel-case-documents"]');
                   if (!panel) return false;
                   return Boolean(panel.querySelector('[data-demo="document-list"]'))
-                    || panel.textContent.includes('No documents yet');
+                    || Boolean(panel.querySelector('[data-demo="document-list-empty"]'));
                 }""",
                 timeout=STEP_TIMEOUT_MS,
             )
