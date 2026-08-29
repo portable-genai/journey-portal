@@ -142,7 +142,7 @@ def test_platform_profile_requires_hrz5_observability_url(
     with pytest.raises(ValueError, match="PORTAL_OBSERVABILITY_URL"):
         Settings.load()
 
-    monkeypatch.setenv("PORTAL_OBSERVABILITY_URL", "https://hrz5.fictional-bank.test")
+    monkeypatch.setenv("PORTAL_OBSERVABILITY_URL", "https://observability.fictional-bank.test")
     with pytest.raises(ValueError, match="PORTAL_OBSERVABILITY_AUDIENCE"):
         Settings.load()
 
@@ -236,8 +236,10 @@ def test_a_managed_profile_gets_no_registration_default_at_all(
 ) -> None:
     """A deployment names its own registration; an absent one refuses rather than defaulting."""
     monkeypatch.setenv("PORTAL_PROFILE", profile)
-    monkeypatch.setenv("PORTAL_OBSERVABILITY_URL", "https://hrz5.example.test")
-    monkeypatch.setenv("PORTAL_OBSERVABILITY_AUDIENCE", "https://hrz5-audience.example.test")
+    monkeypatch.setenv("PORTAL_OBSERVABILITY_URL", "https://observability.example.test")
+    monkeypatch.setenv(
+        "PORTAL_OBSERVABILITY_AUDIENCE", "https://observability-audience.example.test"
+    )
     monkeypatch.setenv(
         "PORTAL_TENANT_EMBED_POLICIES_JSON",
         json.dumps(

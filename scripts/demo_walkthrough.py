@@ -1313,7 +1313,10 @@ STEPS: tuple[Step, ...] = (
         frozenset({"rm"}),
         _rm_doc1_blocked,
         requires_live=("cdd-sow-research",),
-        pair_with=("rm-doc1-cdd", "rm-doc1-flagged",),
+        pair_with=(
+            "rm-doc1-cdd",
+            "rm-doc1-flagged",
+        ),
     ),
     Step(
         "rm-doc3-briefing",

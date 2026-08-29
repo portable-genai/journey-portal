@@ -15,7 +15,7 @@ Two named layers via ``--mode`` (the scaffold is ``agent_eval_kit.eval_main``):
       match the hand-computed golden; threshold 0.99.
     - ``tenant_policy_isolation``: exact host, verified tenant and Origin inputs match the
       independently declared allow/deny and framing outcomes; threshold 0.99.
-    - ``hrz5_audit_isolation``: central audit mapping preserves keyed references and bounded
+    - ``observability_audit_isolation``: central audit mapping preserves keyed references and bounded
       metadata while emitting no prompt, response or citation content; threshold 1.00.
 * **gate** - the promotion verdict from the shared Hrz4 authority (requires the platform / gcp
   profile), via ``agent_eval_kit.PromotionGateClient``.
@@ -40,19 +40,19 @@ from hex_service_kit.netdefaults import read_env_setting
 from journey_portal.domain.catalog import JourneyCatalog, api_target, ui_target
 from journey_portal.domain.embed_policy import TenantEmbedPolicyService
 from journey_portal.domain.errors import JourneyConfigError
-from journey_portal.domain.hrz5_audit import to_hrz5_audit_event
 from journey_portal.domain.identity_injection import (
     build_injection_plan,
     sanitize_request_headers,
 )
 from journey_portal.domain.models import AppMount, PortalAccessEvent, TenantEmbedPolicy
+from journey_portal.domain.observability_audit import to_observability_audit_event
 
 THRESHOLDS: dict[str, float] = {
     "journey_integrity": 0.99,
     "identity_isolation": 0.99,
     "routing_correctness": 0.99,
     "tenant_policy_isolation": 0.99,
-    "hrz5_audit_isolation": 1.0,
+    "observability_audit_isolation": 1.0,
 }
 
 #: The dataset ``kind`` each metric scores. ``smoke()`` selects a metric's cases by exact kind
@@ -64,7 +64,7 @@ METRIC_KINDS: dict[str, str] = {
     "identity_isolation": "identity",
     "routing_correctness": "routing",
     "tenant_policy_isolation": "tenant-policy",
-    "hrz5_audit_isolation": "hrz5-audit",
+    "observability_audit_isolation": "observability-audit",
 }
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -154,7 +154,7 @@ def policy_case_ok(case: dict[str, Any]) -> bool:
     )
 
 
-def hrz5_case_ok(case: dict[str, Any]) -> bool:
+def observability_case_ok(case: dict[str, Any]) -> bool:
     event = PortalAccessEvent(
         event_id="fictional-eval-event",
         occurred_at="2026-07-29T12:00:00+00:00",
@@ -165,7 +165,7 @@ def hrz5_case_ok(case: dict[str, Any]) -> bool:
         action=case["action"],
         app_id=case.get("app_id", "doc1"),
     )
-    payload = to_hrz5_audit_event(event)
+    payload = to_observability_audit_event(event)
     return (
         payload["decision"] == case["expect_decision"]
         and payload["actor"] == event.actor_ref
@@ -223,7 +223,9 @@ def smoke(dataset: Path) -> EvalReport:
     ]
     routing = [routing_case_ok(c) for c in cases if c["kind"] == "routing"]
     tenant_policy = [policy_case_ok(c) for c in cases if c["kind"] == "tenant-policy"]
-    hrz5_audit = [hrz5_case_ok(c) for c in cases if c["kind"] == "hrz5-audit"]
+    observability_audit = [
+        observability_case_ok(c) for c in cases if c["kind"] == "observability-audit"
+    ]
     results = (
         EvalMetricResult.scored(
             "journey_integrity", _fraction(config), THRESHOLDS["journey_integrity"]
@@ -240,9 +242,9 @@ def smoke(dataset: Path) -> EvalReport:
             THRESHOLDS["tenant_policy_isolation"],
         ),
         EvalMetricResult.scored(
-            "hrz5_audit_isolation",
-            _fraction(hrz5_audit),
-            THRESHOLDS["hrz5_audit_isolation"],
+            "observability_audit_isolation",
+            _fraction(observability_audit),
+            THRESHOLDS["observability_audit_isolation"],
         ),
     )
     return EvalReport(dataset=str(dataset), results=results, n_examples=len(cases))

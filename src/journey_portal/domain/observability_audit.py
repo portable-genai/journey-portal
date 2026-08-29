@@ -5,7 +5,7 @@ from __future__ import annotations
 from .models import PortalAccessEvent
 
 
-def to_hrz5_audit_event(event: PortalAccessEvent) -> dict[str, object]:
+def to_observability_audit_event(event: PortalAccessEvent) -> dict[str, object]:
     """Map one content-free portal event to Hrz5 without introducing user content."""
     decision = (
         "blocked"

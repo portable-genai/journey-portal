@@ -10,8 +10,8 @@ from agent_eval_kit import assert_can_go_red
 from eval.run_eval import (
     THRESHOLDS,
     config_case_ok,
-    hrz5_case_ok,
     identity_case_ok,
+    observability_case_ok,
     policy_case_ok,
     routing_case_ok,
 )
@@ -96,16 +96,16 @@ def test_tenant_policy_isolation_can_go_red() -> None:
     )
 
 
-def test_hrz5_audit_isolation_can_go_red() -> None:
+def test_observability_audit_isolation_can_go_red() -> None:
     good = {
         "action": "forward:api",
         "expect_decision": "allowed",
     }
     bad = {**good, "expect_decision": "blocked"}
     assert_can_go_red(
-        lambda case: 1.0 if hrz5_case_ok(case) else 0.0,
+        lambda case: 1.0 if observability_case_ok(case) else 0.0,
         green=good,
         red=bad,
-        threshold=THRESHOLDS["hrz5_audit_isolation"],
-        metric="hrz5_audit_isolation",
+        threshold=THRESHOLDS["observability_audit_isolation"],
+        metric="observability_audit_isolation",
     )

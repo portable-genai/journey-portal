@@ -26,7 +26,7 @@ def test_every_port_binds_and_conforms(profile: str, tmp_path) -> None:  # type:
             local_audit_db=str(tmp_path / "audit.sqlite3"),
             audit_hmac_key="k" * 32,
             observability_url="http://localhost:8085",
-            observability_audience="https://hrz5-audience.example.test",
+            observability_audience="https://observability-audience.example.test",
             bff_signing_key_file=str(tmp_path / "bff-signing-key.json"),
         )
     )
@@ -78,7 +78,7 @@ def test_the_managed_subject_token_refuses_and_names_the_pending_input() -> None
             Settings(
                 profile=profile,
                 observability_url="http://localhost:8085",
-                observability_audience="https://hrz5-audience.example.test",
+                observability_audience="https://observability-audience.example.test",
             )
         )
         with pytest.raises(SubjectTokenUnavailable, match="dedicated Google OAuth client id"):
@@ -92,7 +92,7 @@ def test_the_managed_signing_key_refuses_without_a_named_kms_key_version() -> No
         Settings(
             profile="gcp",
             observability_url="http://localhost:8085",
-            observability_audience="https://hrz5-audience.example.test",
+            observability_audience="https://observability-audience.example.test",
         )
     )
     with pytest.raises(SigningKeyUnavailable, match="PORTAL_BFF_SIGNING_KEY_VERSION"):

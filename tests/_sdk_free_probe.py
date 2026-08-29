@@ -89,7 +89,7 @@ def main(profile: str) -> int:
             local_audit_db=str(scratch / "audit.sqlite3"),
             audit_hmac_key="k" * 32,
             observability_url="http://localhost:8085",
-            observability_audience="https://hrz5-audience.example.test",
+            observability_audience="https://observability-audience.example.test",
             bff_signing_key_file=str(scratch / "bff-signing-key.json"),
         )
     )

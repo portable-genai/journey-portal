@@ -29,7 +29,6 @@ from journey_portal.domain.audit import (
 )
 from journey_portal.domain.catalog import JourneyCatalog
 from journey_portal.domain.embed_policy import TenantEmbedPolicyService
-from journey_portal.domain.hrz5_audit import to_hrz5_audit_event
 from journey_portal.domain.identity_injection import (
     build_injection_plan,
     sanitize_request_headers,
@@ -40,12 +39,13 @@ from journey_portal.domain.models import (
     TenantEmbedAssessment,
     TenantEmbedPolicy,
 )
+from journey_portal.domain.observability_audit import to_observability_audit_event
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _OUT = _REPO_ROOT / "scripts" / "out" / "portal_demo.html"
 _JSON_OUT = _REPO_ROOT / "scripts" / "out" / "portal_audit_integrity.json"
 _POLICY_JSON_OUT = _REPO_ROOT / "scripts" / "out" / "portal_embed_policy.json"
-_HRZ5_JSON_OUT = _REPO_ROOT / "scripts" / "out" / "portal_hrz5_event.json"
+_OBSERVABILITY_JSON_OUT = _REPO_ROOT / "scripts" / "out" / "portal_observability_event.json"
 
 _CASES = [
     {
@@ -157,10 +157,10 @@ def _policy_views() -> tuple[TenantEmbedAssessment, ...]:
     )
 
 
-def _hrz5_view() -> dict[str, object]:
-    return to_hrz5_audit_event(
+def _observability_view() -> dict[str, object]:
+    return to_observability_audit_event(
         PortalAccessEvent(
-            event_id="fictional-access-hrz5-001",
+            event_id="fictional-access-observability-001",
             occurred_at="2026-07-29T12:02:00+00:00",
             actor_ref="actor:v1:fictional-pseudonym",
             tenant_ref="tenant:v1:fictional-pseudonym",
@@ -204,7 +204,7 @@ def _render(
     catalog: JourneyCatalog,
     audit_view: PortalAuditView,
     policy_views: tuple[TenantEmbedAssessment, ...],
-    hrz5_view: dict[str, object],
+    observability_view: dict[str, object],
 ) -> str:
     journeys_html = []
     for journey in catalog.list_journeys():
@@ -274,12 +274,12 @@ def _render(
         journeys="".join(journeys_html),
         cases="".join(cases_html),
         policies="".join(policy_panels),
-        hrz5=(
+        observability=(
             "<div class='panel'><h3>Hrz5 WORM handoff "
             "<span class='pill'>CONTENT-FREE</span></h3>"
-            f"<p class='meta'>action <code>{html.escape(str(hrz5_view['action']))}</code> "
-            f"&middot; decision <code>{html.escape(str(hrz5_view['decision']))}</code> "
-            f"&middot; resource <code>{html.escape(str(hrz5_view['resource']))}</code></p>"
+            f"<p class='meta'>action <code>{html.escape(str(observability_view['action']))}</code> "
+            f"&middot; decision <code>{html.escape(str(observability_view['decision']))}</code> "
+            f"&middot; resource <code>{html.escape(str(observability_view['resource']))}</code></p>"
             "<p>Actor and tenant remain deployment-keyed pseudonyms. Prompt, response, "
             "citations, credentials and identity assertions are absent.</p></div>"
         ),
@@ -323,7 +323,7 @@ identity trust boundary shown per request.</p></header>
 <h2>Journeys</h2>{journeys}
 <h2>Identity trust boundary (browser &rarr; embedded app)</h2>{cases}
 <h2>Tenant host, framing and CORS policy</h2>{policies}
-<h2>Central observability handoff</h2>{hrz5}
+<h2>Central observability handoff</h2>{observability}
 <h2>Tamper-evident local access evidence</h2>{integrity}
 </main></body></html>
 """
@@ -333,9 +333,9 @@ def main() -> int:
     catalog = JourneyCatalog.from_mapping(load_journeys_mapping(Settings.load().journeys_path))
     audit_view = _audit_view()
     policy_views = _policy_views()
-    hrz5_view = _hrz5_view()
+    observability_view = _observability_view()
     _OUT.parent.mkdir(parents=True, exist_ok=True)
-    _OUT.write_text(_render(catalog, audit_view, policy_views, hrz5_view))
+    _OUT.write_text(_render(catalog, audit_view, policy_views, observability_view))
     _JSON_OUT.write_text(json.dumps(audit_view.to_jsonable(), indent=2, sort_keys=True) + "\n")
     _POLICY_JSON_OUT.write_text(
         json.dumps(
@@ -345,11 +345,13 @@ def main() -> int:
         )
         + "\n"
     )
-    _HRZ5_JSON_OUT.write_text(json.dumps(hrz5_view, indent=2, sort_keys=True) + "\n")
+    _OBSERVABILITY_JSON_OUT.write_text(
+        json.dumps(observability_view, indent=2, sort_keys=True) + "\n"
+    )
     print(f"wrote {_OUT}")
     print(f"wrote {_JSON_OUT}")
     print(f"wrote {_POLICY_JSON_OUT}")
-    print(f"wrote {_HRZ5_JSON_OUT}")
+    print(f"wrote {_OBSERVABILITY_JSON_OUT}")
     return 0
 
 
