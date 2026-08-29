@@ -1,5 +1,9 @@
 # syntax=docker/dockerfile:1
-FROM node:26-bookworm-slim@sha256:cd565714d4da3e84bfd341e31448f81d47c6362198f152345297c9c1154e6341 AS builder
+# --platform=$BUILDPLATFORM: the builder stage emits only static files (copied below), so
+# it runs on the build host's own architecture. Without it, a cross-arch build emulates
+# node and the Angular CLI's lmdb build cache crashes ("The service was stopped",
+# observed 2026-08-29 building linux/amd64 on Apple silicon).
+FROM --platform=$BUILDPLATFORM node:26-bookworm-slim@sha256:cd565714d4da3e84bfd341e31448f81d47c6362198f152345297c9c1154e6341 AS builder
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci

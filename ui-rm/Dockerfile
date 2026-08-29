@@ -1,5 +1,8 @@
 # syntax=docker/dockerfile:1
-FROM node:26-bookworm-slim@sha256:cd565714d4da3e84bfd341e31448f81d47c6362198f152345297c9c1154e6341 AS builder
+# --platform=$BUILDPLATFORM: the builder emits only the static export (copied below), so
+# it runs on the build host's own architecture rather than under emulation. See
+# ui-ops/Dockerfile for the crash this avoids on cross-arch builds.
+FROM --platform=$BUILDPLATFORM node:26-bookworm-slim@sha256:cd565714d4da3e84bfd341e31448f81d47c6362198f152345297c9c1154e6341 AS builder
 ENV PORTAL_STATIC_EXPORT=1
 WORKDIR /app
 COPY package.json package-lock.json ./
