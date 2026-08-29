@@ -16,10 +16,24 @@ spec able to describe both, and it is also the mode-1 same-origin embedding clai
 ## Running it
 
 ```bash
-make e2e-local        # needs `make journeys --journey rm` (or `python scripts/run_journeys.py --journey rm`) already up
+# The local stack, PRODUCTION-SHAPED. --built is not a preference:
+PORTAL_PROFILE=local python scripts/run_journeys.py --journey rm --built
+
+make e2e-local        # needs the launcher above already up
 make e2e-gcp          # needs gcloud, and the three inputs below
 make e2e-pair         # F4: assert the two agree. Needs both runs above to have happened.
 ```
+
+**`--built`, not the default dev launch.** Behind the portal's reverse proxy a `next dev` embed
+never hydrates: the markup is served, the chunks load, React never attaches, and the console sits
+on "Connecting to the CDD agent" until the step times out — against an API answering `200` in
+milliseconds. `next start` behaves correctly, and it is also the shape the deployment runs, so the
+laptop leg of a pair should not be measuring a dev server anyway. This cost an hour once; it is
+written here rather than in the runbook that used to carry the warning.
+
+**`PORTAL_PROFILE=local` must be set deliberately.** The launcher refuses to inherit it, so a run
+that has not chosen a profile stops instead of silently taking the seeded wildcard tenant embed
+policy. That is the three-state rule working, not a fault.
 
 `e2e-gcp` names its deployment explicitly. Three settings, read from the environment and
 deliberately absent from every `.env` in this repo, because each one names ONE live deployment and
