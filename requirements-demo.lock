@@ -17,7 +17,7 @@
 #
 # tag -> commit, and `tests/test_lockfile_pins.py` proves each line against the tag
 # `pyproject.toml` names and against every other lockfile:
-#   hex-service-kit  v0.0.5 = 20ba3bece41c069a135151b9630d02dc1c69169f
+#   hex-service-kit  v0.0.6 = 418b969d79edc70e2b9d99856c5b48515f93e6f8
 #   agent-eval-kit   v0.0.1 = a79f0afd125ba81c0fec001f9617f9473d6d7ec1
 #   pii-kit          v0.0.1 = 654493048a8434d645757cc916bb9d446313688f
 agent-eval-kit @ git+https://github.com/portable-genai/agent-eval-kit@a79f0afd125ba81c0fec001f9617f9473d6d7ec1
@@ -35,10 +35,8 @@ certifi==2026.7.22
     # via
     #   httpcore
     #   httpx
-click==8.4.2
+click==8.5.0
     # via uvicorn
-colorama==0.4.6 ; sys_platform == 'win32'
-    # via click
 fastapi==0.141.1
     # via
     #   journey-portal (pyproject.toml)
@@ -49,7 +47,7 @@ h11==0.16.0
     # via
     #   httpcore
     #   uvicorn
-hex-service-kit @ git+https://github.com/portable-genai/hex-service-kit@20ba3bece41c069a135151b9630d02dc1c69169f
+hex-service-kit @ git+https://github.com/portable-genai/hex-service-kit@418b969d79edc70e2b9d99856c5b48515f93e6f8
     # via journey-portal (pyproject.toml)
 httpcore==1.0.9
     # via httpx
@@ -67,9 +65,9 @@ pii-kit @ git+https://github.com/portable-genai/pii-kit@654493048a8434d645757cc9
     # via journey-portal (pyproject.toml)
 playwright==1.62.0
     # via journey-portal (pyproject.toml)
-pydantic==2.13.4
+pydantic==2.13.5
     # via fastapi
-pydantic-core==2.46.4
+pydantic-core==2.46.5
     # via pydantic
 pyee==13.0.1
     # via playwright
@@ -102,5 +100,5 @@ uvloop==0.22.1 ; platform_python_implementation != 'PyPy' and sys_platform != 'c
     # via uvicorn
 watchfiles==1.2.0
     # via uvicorn
-websockets==17.0.1
+websockets==17.1
     # via uvicorn
