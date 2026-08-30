@@ -403,7 +403,12 @@ variable "runtime" {
     memory        = "512Mi"
     concurrency   = 40
     max_instances = 10
-    timeout       = "300s"
+    # 900s, not the platform default 300s: a live CDD dossier build against the real
+    # watchlist measured 5m13s-5m40s on this hardware (2026-08-30, twice), so 300s made
+    # the edge answer 504 while the build completed uselessly behind it. 900s covers the
+    # observed worst case with headroom; the BFF's own upstream timeout below is what a
+    # caller actually experiences.
+    timeout       = "900s"
   }
   description = <<-EOT
     Bounded Cloud Run sizing shared by the portal services.
@@ -586,7 +591,10 @@ variable "tenant_by_identity_domain" {
 
 variable "upstream_timeout_seconds" {
   type        = number
-  default     = 240
+  # 600, matching what the laptop launcher already grants the same build
+  # (PORTAL_UPSTREAM_TIMEOUT=600 in scripts/run_journeys.py) and the e2e's own 600s
+  # dossier wait: the three surfaces that time one dossier build now agree.
+  default     = 600
   description = <<-EOT
     How long the BFF waits on an embedded app before giving up.
 
