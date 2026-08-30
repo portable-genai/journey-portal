@@ -157,21 +157,23 @@ fair-access policy asks automated traffic to identify itself.
 
 Two things must exist outside the portal:
 
-- ONE local OpenAI-compatible model server hosting a Gemma build, shared by every live app for
-  generation (and, for Doc1, page transcription). It is called at
+- ONE local OpenAI-compatible model server hosting a Gemma build, shared by the live apps
+  still on a local model (Doc1 is not among them: every one of its live model calls is the
+  Gemini API, org decision 2026-08-30). It is called at
   `http://127.0.0.1:8001/chat/completions` unless `CDD_LIVE_LLM_URL` says otherwise (the
   launcher mirrors that endpoint into each app's own URL variable). Under `--live` the launcher
-  brings this up for you: if a healthy server is already answering on that port it is reused
-  untouched (loading the model takes minutes and it is often managed outside this repo),
-  otherwise the launcher runs the command in `JOURNEY_MODEL_SERVER_CMD`. If nothing is
-  listening and that variable is unset, the launch plan warns and the apps' model calls fail
-  fast rather than hang. A cold model load can exceed the default readiness window, so raise
-  `--readiness-timeout` when the launcher starts the server itself;
-- Google application default credentials and `GOOGLE_CLOUD_PROJECT`, for the Gemini
-  `google_search` grounding behind Doc1's adverse media and corporate registry and Doc3's
-  house-view research. The launcher passes the project through from your environment and never
-  invents one; it prints a warning in the launch plan when it is unset, and those lookups fail
-  without it.
+  brings this up for you, and only when such an app is in the launch plan: if a healthy server
+  is already answering on that port it is reused untouched (loading the model takes minutes and
+  it is often managed outside this repo), otherwise the launcher runs the command in
+  `JOURNEY_MODEL_SERVER_CMD`. If nothing is listening and that variable is unset, the launch
+  plan warns and the apps' model calls fail fast rather than hang. A cold model load can exceed
+  the default readiness window, so raise `--readiness-timeout` when the launcher starts the
+  server itself;
+- Google application default credentials and `GOOGLE_CLOUD_PROJECT`, for every Doc1 live model
+  call (generation, page transcription, and the Gemini `google_search` grounding behind its
+  adverse media and corporate registry) and Doc3's house-view research. The launcher passes the
+  project through from your environment and never invents one; it prints a warning in the
+  launch plan when it is unset, and Doc1's live profile is entirely dead without it.
 
 One more thing should exist for real screening: the synced sanctions snapshot
 (`scripts/out/sanctions/current.json` in the `cdd-sow-research` repo, written by its
@@ -180,13 +182,14 @@ One more thing should exist for real screening: the synced sanctions snapshot
 Doc1's bundled fictional fixture, which a live demo must not do.
 
 What is different in the room: you upload real documents and assess real subject names, and a
-dossier build makes several local model calls, so it takes minutes rather than seconds. The
+dossier build makes several Gemini calls plus a transcription per scanned page, so it takes
+minutes rather than seconds. The
 launcher therefore starts the BFF with `PORTAL_UPSTREAM_TIMEOUT=600` so a build is not cut short
 at the proxy; export your own value to override it. Add `--dry-run` to print the whole live plan,
 warning included, without starting anything. `scripts/smoke_journeys.py` accepts a `local` or a
 `live` profile from each mounted app and still fails on any other.
 
-For what the live profile actually does, and how to serve the model it expects, see the
+For what the live profile actually does, see the
 [`cdd-sow-research`](https://github.com/portable-genai/cdd-sow-research) repository.
 
 ## 3. How the modules fit together, and where every byte comes from
@@ -728,7 +731,7 @@ from real uploaded public records; the credit memo, CIO briefing, trade-finance 
 compliance answer run on real public sources and audience-provided inputs exactly as a
 viewer would submit them after the demo; and the Hrz7 maker-checker step approves the real
 `cdd_dossier` delivered from Doc1's local durable outbox. A live dossier build makes several
-local model calls, so the two dossier steps take minutes each; the script waits.
+Gemini calls, so the two dossier steps take minutes each; the script waits.
 
 ### Showing each control decide both ways
 

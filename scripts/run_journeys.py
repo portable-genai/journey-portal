@@ -23,12 +23,14 @@ installed.
 queue before processes start.  Their paths live under ``scripts/out/presenter-state`` so this
 never resets either sibling repo's general local data.
 
-``--live`` runs the Doc1 backend in its ``live`` profile: real uploaded documents, a local
-OpenAI-compatible model server for generation and page transcription, and Gemini ``google_search``
-grounding for adverse media and the corporate registry (which needs Google ADC plus
-``GOOGLE_CLOUD_PROJECT``).  A live dossier build takes minutes, so the portal BFF also gets a
-raised ``PORTAL_UPSTREAM_TIMEOUT``.  Nothing else about the launch changes, and every other
-embedded app stays on its offline profile.
+``--live`` runs the Doc1 backend in its ``live`` profile: real uploaded documents, with
+generation, page transcription and the ``google_search`` grounded research all on the Gemini
+API (which needs Google ADC plus ``GOOGLE_CLOUD_PROJECT``; org decision 2026-08-30 — no local
+model in an outbound-grounded system).  The remaining local-model live apps still share one
+OpenAI-compatible model server, started only when one of them is in the launch plan.  A live
+dossier build takes minutes, so the portal BFF also gets a raised ``PORTAL_UPSTREAM_TIMEOUT``.
+Nothing else about the launch changes, and every other embedded app stays on its offline
+profile.
 
 This is a convenience launcher, not production wiring: in production the BFF and apps are separate
 Cloud Run services behind one HTTPS load balancer + IAP (see docs/embedding-and-identity.md).
@@ -95,19 +97,22 @@ _LIVE_DOC1_DEFAULTS: dict[str, str] = {
     # 32 MiB: real PDF uploads must not be rejected by the request-body cap.
     "CDD_MAX_BODY_BYTES": "33554432",
 }
-# A live dossier makes several local model calls, so the proxy must outlive the default 30s.
+# A live dossier makes several Gemini calls plus a transcription per scanned page, so the
+# proxy must outlive the default 30s.
 _LIVE_PORTAL_UPSTREAM_TIMEOUT = "600"
 # The REAL synced watchlist snapshot Doc1's sibling repo writes (scripts/sync_sanctions.py).
 # When present it becomes Doc1's screening list under --live; without it screening would
 # silently run against the bundled FICTIONAL fixture, which a live demo must not do.
 _LIVE_SANCTIONS_ENV = "CDD_LOCAL_SANCTIONS"
 _LIVE_SANCTIONS_SNAPSHOT = "scripts/out/sanctions/current.json"
-# The local OpenAI-compatible model server Doc1's live profile calls for generation and
-# page transcription. Doc1 names the endpoint via CDD_LIVE_LLM_URL; the launcher reads the
-# same variable to learn which port it must answer on and derives the health URL from it.
-# Its launch command is machine-specific (the server lives outside this workspace), so it
-# is supplied by the operator via JOURNEY_MODEL_SERVER_CMD rather than hardcoded; an
-# already-running server on the port is reused untouched.
+# The local OpenAI-compatible model server the remaining local-model live apps call
+# (the _LIVE_APP_PROFILES roster below; Doc1 left it for the Gemini API, 2026-08-30).
+# The env var keeps its historical name: it is the one endpoint mirrored into each
+# app's own URL variable, and the launcher reads it to learn which port must answer
+# and derives the health URL from it. Its launch command is machine-specific (the
+# server lives outside this workspace), so it is supplied by the operator via
+# JOURNEY_MODEL_SERVER_CMD rather than hardcoded; an already-running server on the
+# port is reused untouched.
 _MODEL_SERVER_URL_ENV = "CDD_LIVE_LLM_URL"
 _MODEL_SERVER_CMD_ENV = "JOURNEY_MODEL_SERVER_CMD"
 _DEFAULT_MODEL_SERVER_URL = "http://127.0.0.1:8001/chat/completions"
@@ -422,10 +427,10 @@ class Launcher:
 
     @staticmethod
     def _model_server_endpoint() -> tuple[int, str]:
-        """(port, health_url) for the local model server Doc1's live profile calls.
+        """(port, health_url) for the local model server the local-model live apps call.
 
-        Doc1 posts to ``.../chat/completions``; the OpenAI-compatible MLX server answers a
-        sibling ``/health``, so the health URL is derived from the endpoint's origin.
+        The apps post to ``.../chat/completions``; the OpenAI-compatible MLX server answers
+        a sibling ``/health``, so the health URL is derived from the endpoint's origin.
         """
         url = _defaulted_setting(_MODEL_SERVER_URL_ENV, _DEFAULT_MODEL_SERVER_URL)
         parsed = urlparse(url)
@@ -441,7 +446,7 @@ class Launcher:
         managed outside this workspace (e.g. by launchd); the launcher must not restart a
         server it did not start. Only when nothing is listening does it run the operator's
         ``JOURNEY_MODEL_SERVER_CMD``; if that is unset the live plan already warned, and
-        Doc1's model calls will fail fast rather than hang.
+        the local-model apps' calls will fail fast rather than hang.
         """
         port, health_url = self._model_server_endpoint()
         if self._listener_pids(port):
@@ -458,7 +463,7 @@ class Launcher:
                 self._unavailable(
                     "model-server",
                     f"a process holds :{port} but does not answer /health ({detail}); "
-                    "Doc1's live model calls will fail until it is healthy",
+                    "the local-model apps' live calls will fail until it is healthy",
                 )
             return
         command = _optional_setting(_MODEL_SERVER_CMD_ENV)
@@ -466,7 +471,7 @@ class Launcher:
             self._unavailable(
                 "model-server",
                 f"nothing on :{port} and {_MODEL_SERVER_CMD_ENV} is unset; export it (or start "
-                "the model server yourself, see DEMO.md). Doc1's live model calls need it.",
+                "the model server yourself, see DEMO.md). The local-model apps need it.",
             )
             return
         self._spawn(
@@ -854,25 +859,26 @@ class Launcher:
             time.sleep(1)
 
 
-def _print_live_plan() -> None:
+def _print_live_plan(plan: dict[str, tuple[int, int]]) -> None:
     """Report the ``--live`` overrides, including the warning a dry run must also show."""
     doc1_env = Launcher._live_doc1_environment()
     portal_timeout = _defaulted_setting(_PORTAL_UPSTREAM_TIMEOUT_ENV, _LIVE_PORTAL_UPSTREAM_TIMEOUT)
-    port, health_url = Launcher._model_server_endpoint()
-    if Launcher._listener_pids(port):
-        print(f"  model server      reuse already-running server on :{port}")
-    elif _optional_setting(_MODEL_SERVER_CMD_ENV):
-        print(f"  model server      start via {_MODEL_SERVER_CMD_ENV} (nothing on :{port} yet)")
-    else:
-        print(
-            f"  warning nothing on :{port} and {_MODEL_SERVER_CMD_ENV} is unset: Doc1's live "
-            "generation and page transcription will fail. Start the model server, or export "
-            f"{_MODEL_SERVER_CMD_ENV} so the launcher starts it (a cold model load needs a "
-            "larger --readiness-timeout)."
-        )
+    if any(app_id in _LIVE_APP_PROFILES for app_id in plan):
+        port, health_url = Launcher._model_server_endpoint()
+        if Launcher._listener_pids(port):
+            print(f"  model server      reuse already-running server on :{port}")
+        elif _optional_setting(_MODEL_SERVER_CMD_ENV):
+            print(f"  model server      start via {_MODEL_SERVER_CMD_ENV} (nothing on :{port} yet)")
+        else:
+            print(
+                f"  warning nothing on :{port} and {_MODEL_SERVER_CMD_ENV} is unset: the "
+                "local-model apps' live generation will fail. Start the model server, or export "
+                f"{_MODEL_SERVER_CMD_ENV} so the launcher starts it (a cold model load needs a "
+                "larger --readiness-timeout)."
+            )
     print(
         f"  cdd-sow-research profile      {doc1_env['CDD_PROFILE']}"
-        " (local model + grounded research)"
+        " (Gemini API + grounded research)"
     )
     print(f"  cdd-sow-research triage model {doc1_env['CDD_TRIAGE_MODEL']}")
     print(f"  cdd-sow-research body cap     {doc1_env['CDD_MAX_BODY_BYTES']} bytes")
@@ -881,8 +887,9 @@ def _print_live_plan() -> None:
         print(f"  google project    {doc1_env[_GOOGLE_PROJECT_ENV]}")
     else:
         print(
-            f"  warning {_GOOGLE_PROJECT_ENV} is not set: Doc1's adverse-media and corporate "
-            "registry grounding will fail. Export it before starting a live run."
+            f"  warning {_GOOGLE_PROJECT_ENV} is not set: every Doc1 live model call is the "
+            "Gemini API, so generation, transcription and the grounded research will all "
+            "fail. Export it before starting a live run."
         )
     if _LIVE_SANCTIONS_ENV in doc1_env:
         print(f"  cdd-sow-research watchlist    {doc1_env[_LIVE_SANCTIONS_ENV]}")
@@ -894,7 +901,8 @@ def _print_live_plan() -> None:
         )
     # Every other journey app runs its live profile too: real data in, no fictional seeds.
     for app_id in sorted(_LIVE_APP_PROFILES):
-        print(f"  {app_id} profile      live")
+        if app_id in plan:
+            print(f"  {app_id} profile      live")
     print(
         "  compliance-advisory corpus       refreshed at startup"
         " (expired-only; real regulator sources)"
@@ -975,7 +983,7 @@ def main() -> int:
     if args.fresh_state:
         print(f"  presenter state   reset requested ({_PRESENTER_STATE_DIR})")
     if args.live:
-        _print_live_plan()
+        _print_live_plan(plan)
     if args.dry_run:
         return 0
 
@@ -993,8 +1001,10 @@ def main() -> int:
     launcher.install_termination_handler()
     try:
         print("\nstarting processes:")
-        # The model server (live only) starts first so a cold model load overlaps app startup.
-        if args.live:
+        # The model server (live only, and only for the apps still on a local model)
+        # starts first so a cold model load overlaps app startup. Doc1 is not among
+        # them: its live profile is Gemini-API-only (org decision, 2026-08-30).
+        if args.live and any(app_id in _LIVE_APP_PROFILES for app_id in plan):
             launcher.launch_model_server()
             if "compliance-advisory" in plan:
                 launcher.refresh_live_corpus()
