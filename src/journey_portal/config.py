@@ -203,6 +203,12 @@ class ProfileNotConfigured(ValueError):
     """
 
 
+#: The profiles whose runtime is a managed cloud, for :attr:`Settings.runtime`. ``onprem`` is
+#: NOT one -- running on the adopter's own iron is its entire point, and "on GCP" is the one
+#: sentence that deployment must never print at the top of a page.
+_MANAGED_PROFILES: frozenset[str] = frozenset({"gcp", "platform"})
+
+
 @dataclass(frozen=True, slots=True)
 class ProfileChoice:
     """The ONE resolution of ``PORTAL_PROFILE``, and what each consumer must key off.
@@ -566,6 +572,35 @@ class Settings:
     # this False when PORTAL_PROFILE is absent; configured-empty refuses. Direct construction is
     # definition (a caller named the profile in code), so the default is True.
     profile_explicit: bool = True
+
+    @property
+    def runtime(self) -> str:
+        """Where this portal is running, as its banner states it: ``gcp`` or ``local``.
+
+        Derived from the profile, never sniffed from the environment. A shell that read
+        its runtime from ``window.location`` would be right until the deployment served
+        through a proxy and wrong silently after that, so the service is the one asked.
+        """
+        return "gcp" if self.profile in _MANAGED_PROFILES else "local"
+
+    @property
+    def generator_model(self) -> str:
+        """Which model answers, for the provenance banner (org decision, 2026-08-30).
+
+        None does. The portal is a launcher and a BFF: it mounts embedded apps, brokers
+        their identity and proxies their calls, and it declares no ``llm`` port anywhere.
+        Every page that shows GENERATED content is an embedded app, and each of those
+        states its own provenance from its own healthz, inside its own frame.
+
+        That is why the portal's banner is worth having rather than redundant. The two
+        answers can legitimately differ -- a portal on GCP mounting an app on a laptop, or
+        the reverse -- and a viewer reading a dossier in a frame needs both facts, not
+        whichever one happened to be rendered. ``no-model`` is the honest string for a
+        surface that generates nothing, and it is deliberately not
+        ``deterministic-offline-stub``, which would claim a model-shaped port bound to a
+        stub.
+        """
+        return "no-model"
 
     @property
     def choice(self) -> ProfileChoice:

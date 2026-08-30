@@ -106,7 +106,8 @@ _LIVE_PORTAL_UPSTREAM_TIMEOUT = "600"
 _LIVE_SANCTIONS_ENV = "CDD_LOCAL_SANCTIONS"
 _LIVE_SANCTIONS_SNAPSHOT = "scripts/out/sanctions/current.json"
 # The local OpenAI-compatible model server the remaining local-model live apps call
-# (the _LIVE_APP_PROFILES roster below; Doc1 left it for the Gemini API, 2026-08-30).
+# (the _LOCAL_MODEL_APPS set below, which is down to trade-finance-checker; Doc1, Rsk1,
+# Doc2 and the CIO advisor all left it for the Gemini API, 2026-08-30).
 # The env var keeps its historical name: it is the one endpoint mirrored into each
 # app's own URL variable, and the launcher reads it to learn which port must answer
 # and derives the health URL from it. Its launch command is machine-specific (the
@@ -117,18 +118,30 @@ _MODEL_SERVER_URL_ENV = "CDD_LIVE_LLM_URL"
 _MODEL_SERVER_CMD_ENV = "JOURNEY_MODEL_SERVER_CMD"
 _DEFAULT_MODEL_SERVER_URL = "http://127.0.0.1:8001/chat/completions"
 
-# ``--live`` now covers every journey app, not only Doc1: each of these runs its own live
-# profile (real data sources + the shared local model server; no fictional seeds). The
-# tuple is (profile env var, the app's own model-server URL env var): the launcher forces
-# the profile (selecting it is what the flag means) and mirrors the one model-server
-# endpoint into each app's URL variable so a non-default port set once via
-# CDD_LIVE_LLM_URL reaches every app.
-_LIVE_APP_PROFILES: dict[str, tuple[str, str]] = {
-    "credit-memo-drafting": ("CREDIT_MEMO_PROFILE", "CREDIT_MEMO_LIVE_LLM_URL"),
-    "cio-advisory": ("CIO_PROFILE", "CIO_LIVE_LLM_URL"),
+# ``--live`` covers every journey app, not only Doc1: each of these runs its own live
+# profile (real data sources, no fictional seeds). The tuple is (profile env var, the
+# app's own model-server URL env var, or None). The launcher always forces the profile --
+# selecting it is what the flag means -- and mirrors the one model-server endpoint into
+# the URL variable only for the apps that still have one.
+#
+# ``None`` is the Gemini-only shape and it is now the majority (org decision, 2026-08-30:
+# a system whose use case requires outbound grounding is only implemented for customers
+# who permit leaving the data centre, so a local-model profile there is a fiction). Doc1
+# left the roster entirely on the same decision; these three stay on it because the
+# launcher still forces their profile, they just no longer want a model server.
+# ``trade-finance-checker`` is the one that keeps its local model, because on-prem is its
+# point.
+_LIVE_APP_PROFILES: dict[str, tuple[str, str | None]] = {
+    "credit-memo-drafting": ("CREDIT_MEMO_PROFILE", None),
+    "cio-advisory": ("CIO_PROFILE", None),
     "trade-finance-checker": ("TRADE_FINANCE_PROFILE", "TRADE_FINANCE_LIVE_LLM_URL"),
-    "compliance-advisory": ("COMPLIANCE_PROFILE", "COMPLIANCE_LIVE_LLM_URL"),
+    "compliance-advisory": ("COMPLIANCE_PROFILE", None),
 }
+#: The apps that still need the shared local model server. Derived, never hand-listed, so
+#: a conversion cannot leave the launcher starting a server nothing calls.
+_LOCAL_MODEL_APPS: frozenset[str] = frozenset(
+    app_id for app_id, (_, url_env) in _LIVE_APP_PROFILES.items() if url_env is not None
+)
 # Doc2's EDGAR traffic must be declared with a contact (SEC fair-access policy).
 _EDGAR_CONTACT_ENV = "SEC_EDGAR_CONTACT"
 _PRESENTER_STATE_DIR = _REPO_ROOT / "scripts" / "out" / "presenter-state"
@@ -370,16 +383,20 @@ class Launcher:
             return {"LOAN_DOC_PROFILE": "gcp"}
         profile_env, llm_url_env = _LIVE_APP_PROFILES[app_id]
         environment = {profile_env: "live"}
-        # One model server serves every app: mirror the resolved endpoint into the app's
-        # own URL variable unless the operator already pinned that app elsewhere.
-        model_url = _defaulted_setting(_MODEL_SERVER_URL_ENV, _DEFAULT_MODEL_SERVER_URL)
-        environment[llm_url_env] = _defaulted_setting(llm_url_env, model_url)
+        if llm_url_env is not None:
+            # One model server serves the apps that still have one: mirror the resolved
+            # endpoint into the app's own URL variable unless the operator already pinned
+            # that app elsewhere.
+            model_url = _defaulted_setting(_MODEL_SERVER_URL_ENV, _DEFAULT_MODEL_SERVER_URL)
+            environment[llm_url_env] = _defaulted_setting(llm_url_env, model_url)
         if app_id == "credit-memo-drafting":
             contact = _optional_setting(_EDGAR_CONTACT_ENV)
             if contact:
                 environment[_EDGAR_CONTACT_ENV] = contact
-        if app_id == "cio-advisory":
-            # Grounded house-view research needs the project (like Doc1's research).
+        if llm_url_env is None:
+            # Every model call in these profiles is the Gemini API, so each needs the
+            # project the same way Doc1 does. cio-advisory needed it already, for its
+            # grounded house-view research; the other two need it now for generation.
             project = _optional_setting(_GOOGLE_PROJECT_ENV)
             if project:
                 environment[_GOOGLE_PROJECT_ENV] = project
@@ -863,7 +880,7 @@ def _print_live_plan(plan: dict[str, tuple[int, int]]) -> None:
     """Report the ``--live`` overrides, including the warning a dry run must also show."""
     doc1_env = Launcher._live_doc1_environment()
     portal_timeout = _defaulted_setting(_PORTAL_UPSTREAM_TIMEOUT_ENV, _LIVE_PORTAL_UPSTREAM_TIMEOUT)
-    if any(app_id in _LIVE_APP_PROFILES for app_id in plan):
+    if any(app_id in _LOCAL_MODEL_APPS for app_id in plan):
         port, health_url = Launcher._model_server_endpoint()
         if Launcher._listener_pids(port):
             print(f"  model server      reuse already-running server on :{port}")
@@ -900,9 +917,24 @@ def _print_live_plan(plan: dict[str, tuple[int, int]]) -> None:
             f"(writes {_LIVE_SANCTIONS_SNAPSHOT}) before a live run."
         )
     # Every other journey app runs its live profile too: real data in, no fictional seeds.
+    gemini_only = []
     for app_id in sorted(_LIVE_APP_PROFILES):
-        if app_id in plan:
-            print(f"  {app_id} profile      live")
+        if app_id not in plan:
+            continue
+        if app_id in _LOCAL_MODEL_APPS:
+            print(f"  {app_id} profile      live (local model server)")
+        else:
+            print(f"  {app_id} profile      live (Gemini API)")
+            gemini_only.append(app_id)
+    if gemini_only and not _optional_setting(_GOOGLE_PROJECT_ENV):
+        # Same failure as Doc1's, reported for the apps that just joined it. Without the
+        # project these start clean and fail at the first generation, which is the worst
+        # moment to discover it.
+        print(
+            f"  warning {_GOOGLE_PROJECT_ENV} is not set: every model call in "
+            f"{', '.join(gemini_only)} is the Gemini API, so their live generation will "
+            "fail. Export it before starting a live run."
+        )
     print(
         "  compliance-advisory corpus       refreshed at startup"
         " (expired-only; real regulator sources)"
@@ -1002,12 +1034,18 @@ def main() -> int:
     try:
         print("\nstarting processes:")
         # The model server (live only, and only for the apps still on a local model)
-        # starts first so a cold model load overlaps app startup. Doc1 is not among
-        # them: its live profile is Gemini-API-only (org decision, 2026-08-30).
-        if args.live and any(app_id in _LIVE_APP_PROFILES for app_id in plan):
+        # starts first so a cold model load overlaps app startup. Only
+        # trade-finance-checker is among them now: on-prem is its point. Doc1, Rsk1,
+        # Doc2 and the CIO advisor all serve every model call from the Gemini API
+        # (org decision, 2026-08-30).
+        if args.live and any(app_id in _LOCAL_MODEL_APPS for app_id in plan):
             launcher.launch_model_server()
-            if "compliance-advisory" in plan:
-                launcher.refresh_live_corpus()
+        # Rsk1's corpus refresh is NOT nested under the model server. It used to be, and
+        # that was only correct while Rsk1 needed one: the refresh is about the real
+        # regulator corpus, not about generation, and folding it under the server would
+        # have silently stopped it the moment Rsk1 went Gemini-only.
+        if args.live and "compliance-advisory" in plan:
+            launcher.refresh_live_corpus()
         for app_id, (api_port, ui_port) in plan.items():
             launcher.launch_app(app_id, api_port, ui_port)
         launcher.launch_portal()

@@ -29,3 +29,15 @@ export interface WhoAmI {
   source: string;
   persona: string;
 }
+
+/** The portal BFF's health, for the provenance banner. */
+export type Health = {
+  status: string;
+  profile: string;
+  // Where the PORTAL runs and which model answers it. The portal generates nothing, so
+  // its model is "no-model"; each embedded app states its own inside its own frame, and
+  // the two can legitimately differ.
+  runtime: string;
+  generator_model: string;
+  region: string;
+};

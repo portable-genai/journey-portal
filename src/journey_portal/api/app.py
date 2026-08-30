@@ -351,7 +351,13 @@ def _proxied_response(resp: UpstreamResponse) -> Response:
 @app.get("/healthz", response_model=HealthResponse, tags=["ops"])
 def healthz() -> HealthResponse:
     settings = _container().settings
-    return HealthResponse(status="ok", profile=settings.profile, region=settings.region)
+    return HealthResponse(
+        status="ok",
+        profile=settings.profile,
+        runtime=settings.runtime,
+        generator_model=settings.generator_model,
+        region=settings.region,
+    )
 
 
 @app.get("/v1/healthz", response_model=HealthResponse, tags=["ops"])
@@ -366,7 +372,13 @@ def versioned_healthz() -> HealthResponse:
     """
 
     settings = _container().settings
-    return HealthResponse(status="ok", profile=settings.profile, region=settings.region)
+    return HealthResponse(
+        status="ok",
+        profile=settings.profile,
+        runtime=settings.runtime,
+        generator_model=settings.generator_model,
+        region=settings.region,
+    )
 
 
 @app.get(BFF_JWKS_PATH, response_model=JwkSetResponse, tags=["ops"])

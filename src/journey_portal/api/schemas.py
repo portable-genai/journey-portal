@@ -96,6 +96,12 @@ class SetPersonaRequest(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     profile: str
+    #: Provenance the shell banner states on every page: where the runtime sits and which
+    #: model answers. Derived server-side so the shell never guesses (org decision,
+    #: 2026-08-30). The portal generates nothing, so its model is ``no-model``; each
+    #: embedded app states its own from its own healthz, inside its own frame.
+    runtime: str = "local"  # "gcp" | "local"
+    generator_model: str = "no-model"
     region: str
 
 

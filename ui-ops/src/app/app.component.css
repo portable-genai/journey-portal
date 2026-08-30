@@ -8,10 +8,33 @@
   --accent: #1fae7a;
 }
 
-.shell {
+.provenance-banner {
+  margin: 0;
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* The HOST owns the viewport height and the shell claims what is left after the banner.
+   `.shell` was `height: 100vh`, which is a full viewport whether or not anything sits above
+   it, so adding the banner pushed the bottom of the workbench off screen. Making the host
+   the column removes the need to know the banner's height at all -- no magic number to go
+   stale when the font or the padding changes, and the layout is identical when the banner
+   has not rendered. */
+:host {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  overflow: hidden;
+}
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
   background: var(--bg);
   color: var(--ink);
