@@ -27,8 +27,25 @@ export class AppComponent implements OnInit {
   active: AppModel | null = null;
   frameUrl: SafeResourceUrl | null = null;
   error = "";
+  // Where the portal runs and which model answers it, stated at the top of every page (org
+  // decision, 2026-08-30). Null until the BFF answers and null again if it never does:
+  // defaulting to "running locally" during the fetch would state a falsehood on every
+  // deployment page load, and a shell that guessed would assert provenance it does not have.
+  provenance: string | null = null;
 
   ngOnInit(): void {
+    // Deliberately NOT folded into the error banner below: a portal whose journeys fail to
+    // load still has a runtime worth naming, and the provenance strip is chrome rather than
+    // content.
+    this.portal.health().subscribe({
+      next: (health) => {
+        if (!health?.runtime) return;
+        const where = health.runtime === "gcp" ? "running on GCP" : "running locally";
+        this.provenance = `${where} · model ${health.generator_model}`;
+        this.changeDetector.detectChanges();
+      },
+      error: () => undefined,
+    });
     this.portal.journeys().subscribe({
       next: (journeys) => {
         this.journey = journeys.find((j) => j.key === JOURNEY_KEY) ?? journeys[0] ?? null;

@@ -1,3 +1,7 @@
+<!-- Above the *ngIf on purpose: the provenance is a fact about this deployment, so it must
+     survive the error branch. A screenshot of a failed console is still a screenshot
+     somebody has to be able to place. -->
+<p class="provenance-banner" *ngIf="provenance">{{ provenance }}</p>
 <main class="shell" data-demo="ops-journey" *ngIf="!error; else errorTpl">
   <ng-container *ngIf="journey; else loadingTpl">
     <header class="topbar">

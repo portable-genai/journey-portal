@@ -2,7 +2,7 @@
 // next.config.mjs (/v1/* -> BFF); in production the reverse proxy in front of the shell does the
 // same. No base URL and no CORS: the shell and the BFF are one origin to the browser.
 
-import type { JourneyModel, Persona, WhoAmI } from "./types";
+import type { Health, JourneyModel, Persona, WhoAmI } from "./types";
 
 async function asJson<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -31,4 +31,8 @@ export async function setPersona(id: string): Promise<WhoAmI> {
     body: JSON.stringify({ id }),
   });
   return asJson<WhoAmI>(res);
+}
+
+export async function health(): Promise<Health> {
+  return asJson<Health>(await fetch("/v1/healthz"));
 }

@@ -22,6 +22,17 @@ export interface JourneyModel {
   apps: AppModel[];
 }
 
+export interface Health {
+  status: string;
+  profile: string;
+  // Where the PORTAL runs and which model answers it. The portal generates nothing, so
+  // its model is "no-model"; each embedded app states its own inside its own frame, and
+  // the two can legitimately differ.
+  runtime: string;
+  generator_model: string;
+  region: string;
+}
+
 export interface Persona {
   id: string;
   subject: string;
@@ -53,6 +64,13 @@ export class PortalService {
 
   whoami(): Observable<WhoAmI> {
     return this.http.get<WhoAmI>("/v1/whoami");
+  }
+
+  // /v1/healthz, not /healthz: the serverless frontend answers the latter without ever
+  // reaching the container, so a shell reading it would be told the portal is healthy and
+  // running locally whether or not the application is up. See the BFF's own comment.
+  health(): Observable<Health> {
+    return this.http.get<Health>("/v1/healthz");
   }
 
   setPersona(id: string): Observable<WhoAmI> {

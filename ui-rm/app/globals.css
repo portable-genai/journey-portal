@@ -21,10 +21,31 @@ body {
   font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
+/* The body is a column so the provenance banner can take its own height at the top and
+   the shell can claim the rest. `.shell` was `height: 100vh`, which is a full viewport
+   whether or not anything sits above it: adding the banner that way pushed the bottom of
+   the workbench off screen. `flex: 1` + `min-height: 0` is the same layout when there is
+   no banner and the correct one when there is. */
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+.provenance-banner {
+  flex: none;
+  margin: 0;
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .shell {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  flex: 1;
+  min-height: 0;
 }
 
 .topbar {
