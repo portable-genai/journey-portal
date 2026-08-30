@@ -52,6 +52,7 @@ google-api-core==2.34.0
     # via
     #   google-cloud-appengine-logging
     #   google-cloud-core
+    #   google-cloud-kms
     #   google-cloud-logging
 google-auth==2.57.0
     # via
@@ -59,6 +60,7 @@ google-auth==2.57.0
     #   google-api-core
     #   google-cloud-appengine-logging
     #   google-cloud-core
+    #   google-cloud-kms
     #   google-cloud-logging
 google-cloud-appengine-logging==1.10.0
     # via google-cloud-logging
@@ -66,6 +68,8 @@ google-cloud-audit-log==0.6.2
     # via google-cloud-logging
 google-cloud-core==2.7.0
     # via google-cloud-logging
+google-cloud-kms==3.16.0
+    # via journey-portal (pyproject.toml)
 google-cloud-logging==3.16.3
     # via journey-portal (pyproject.toml)
 googleapis-common-protos==1.75.2
@@ -75,11 +79,14 @@ googleapis-common-protos==1.75.2
     #   grpc-google-iam-v1
     #   grpcio-status
 grpc-google-iam-v1==0.14.5
-    # via google-cloud-logging
+    # via
+    #   google-cloud-kms
+    #   google-cloud-logging
 grpcio==1.83.1
     # via
     #   google-api-core
     #   google-cloud-appengine-logging
+    #   google-cloud-kms
     #   google-cloud-logging
     #   googleapis-common-protos
     #   grpc-google-iam-v1
@@ -113,12 +120,14 @@ proto-plus==1.28.4
     # via
     #   google-api-core
     #   google-cloud-appengine-logging
+    #   google-cloud-kms
     #   google-cloud-logging
 protobuf==7.36.0
     # via
     #   google-api-core
     #   google-cloud-appengine-logging
     #   google-cloud-audit-log
+    #   google-cloud-kms
     #   google-cloud-logging
     #   googleapis-common-protos
     #   grpc-google-iam-v1
