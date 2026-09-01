@@ -25,6 +25,3 @@ updates:
   - package-ecosystem: docker
     directory: /ui-ops
     schedule: { interval: weekly }
-  - package-ecosystem: github-actions
-    directory: /
-    schedule: { interval: weekly }
