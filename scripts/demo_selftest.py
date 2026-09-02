@@ -8,7 +8,14 @@ from collections.abc import Mapping
 from fastapi.testclient import TestClient
 
 from journey_portal.api.app import _upstream, app
+from journey_portal.config import Settings, load_journeys_mapping
 from journey_portal.domain.models import UpstreamResponse
+
+#: A loopback peer for the ``TestClient``. The app-object exposure guard refuses the
+#: unauthenticated ``local`` posture to any other peer, and TestClient's DEFAULT peer is the
+#: literal host ``"testclient"``, which is not a loopback address and is refused with a 503.
+#: The suite pins the same peer in ``tests/conftest.py``, for the same reason.
+LOOPBACK_PEER = ("127.0.0.1", 50000)
 
 
 class EvidenceUpstream:
@@ -42,10 +49,16 @@ def main() -> int:
     evidence = EvidenceUpstream()
     app.dependency_overrides[_upstream] = lambda: evidence
     try:
-        with TestClient(app) as client:
+        with TestClient(app, client=LOOPBACK_PEER) as client:
             journeys = client.get("/v1/journeys")
             assert journeys.status_code == 200
-            assert {item["key"] for item in journeys.json()["journeys"]} == {"rm", "ops"}
+            # Read the expectation from the SAME catalog the app reads, rather than freezing a
+            # literal here. This assertion used to name two journeys; the config grew to five and
+            # the demo went red on a change that had broken nothing. What the live route must
+            # prove is that it serves the configured catalog, whatever the adopter configured.
+            configured = load_journeys_mapping(Settings.load().journeys_path)["journeys"]
+            assert isinstance(configured, dict) and configured, "the journey catalog is empty"
+            assert {item["key"] for item in journeys.json()["journeys"]} == set(configured)
             assert journeys.headers["content-security-policy"] == "frame-ancestors 'self'"
 
             policy = client.get("/v1/embed-policy")
