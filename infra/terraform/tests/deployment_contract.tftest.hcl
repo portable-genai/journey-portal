@@ -48,27 +48,31 @@ variables {
     }
   }
   vpc_sc_access_policy_id = "123456789"
+  # The contract's default posture builds the edge, so `complete_edge_and_private_services`
+  # keeps asserting against a complete one. The stack's own default is false -- guarding the
+  # edge must not silently shrink what this file covers.
+  production_edge_enabled = true
   bff_image               = "registry.example.test/bff@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
   rm_shell_image          = "registry.example.test/rm@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
   ops_shell_image         = "registry.example.test/ops@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
   rollback_images = {
-    bff      = "registry.example.test/bff@sha256:1111111111111111111111111111111111111111111111111111111111111111"
-    rm       = "registry.example.test/rm@sha256:2222222222222222222222222222222222222222222222222222222222222222"
-    ops      = "registry.example.test/ops@sha256:3333333333333333333333333333333333333333333333333333333333333333"
-    cdd-sow-research-ui  = "registry.example.test/cdd-sow-research-ui@sha256:1111111111111111111111111111111111111111111111111111111111111111"
-    cdd-sow-research-api = "registry.example.test/cdd-sow-research-api@sha256:1111111111111111111111111111111111111111111111111111111111111111"
-    credit-memo-drafting-ui  = "registry.example.test/credit-memo-drafting-ui@sha256:2222222222222222222222222222222222222222222222222222222222222222"
-    credit-memo-drafting-api = "registry.example.test/credit-memo-drafting-api@sha256:2222222222222222222222222222222222222222222222222222222222222222"
-    cio-advisory-ui  = "registry.example.test/cio-advisory-ui@sha256:3333333333333333333333333333333333333333333333333333333333333333"
-    cio-advisory-api = "registry.example.test/cio-advisory-api@sha256:3333333333333333333333333333333333333333333333333333333333333333"
-    trade-finance-checker-ui  = "registry.example.test/trade-finance-checker-ui@sha256:4444444444444444444444444444444444444444444444444444444444444444"
-    trade-finance-checker-api = "registry.example.test/trade-finance-checker-api@sha256:4444444444444444444444444444444444444444444444444444444444444444"
+    bff                            = "registry.example.test/bff@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    rm                             = "registry.example.test/rm@sha256:2222222222222222222222222222222222222222222222222222222222222222"
+    ops                            = "registry.example.test/ops@sha256:3333333333333333333333333333333333333333333333333333333333333333"
+    cdd-sow-research-ui            = "registry.example.test/cdd-sow-research-ui@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    cdd-sow-research-api           = "registry.example.test/cdd-sow-research-api@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    credit-memo-drafting-ui        = "registry.example.test/credit-memo-drafting-ui@sha256:2222222222222222222222222222222222222222222222222222222222222222"
+    credit-memo-drafting-api       = "registry.example.test/credit-memo-drafting-api@sha256:2222222222222222222222222222222222222222222222222222222222222222"
+    cio-advisory-ui                = "registry.example.test/cio-advisory-ui@sha256:3333333333333333333333333333333333333333333333333333333333333333"
+    cio-advisory-api               = "registry.example.test/cio-advisory-api@sha256:3333333333333333333333333333333333333333333333333333333333333333"
+    trade-finance-checker-ui       = "registry.example.test/trade-finance-checker-ui@sha256:4444444444444444444444444444444444444444444444444444444444444444"
+    trade-finance-checker-api      = "registry.example.test/trade-finance-checker-api@sha256:4444444444444444444444444444444444444444444444444444444444444444"
     loan-document-intelligence-ui  = "registry.example.test/loan-document-intelligence-ui@sha256:7777777777777777777777777777777777777777777777777777777777777777"
     loan-document-intelligence-api = "registry.example.test/loan-document-intelligence-api@sha256:7777777777777777777777777777777777777777777777777777777777777777"
-    compliance-advisory-ui  = "registry.example.test/compliance-advisory-ui@sha256:5555555555555555555555555555555555555555555555555555555555555555"
-    compliance-advisory-api = "registry.example.test/compliance-advisory-api@sha256:5555555555555555555555555555555555555555555555555555555555555555"
-    human-review-console-ui  = "registry.example.test/human-review-console-ui@sha256:6666666666666666666666666666666666666666666666666666666666666666"
-    human-review-console-api = "registry.example.test/human-review-console-api@sha256:6666666666666666666666666666666666666666666666666666666666666666"
+    compliance-advisory-ui         = "registry.example.test/compliance-advisory-ui@sha256:5555555555555555555555555555555555555555555555555555555555555555"
+    compliance-advisory-api        = "registry.example.test/compliance-advisory-api@sha256:5555555555555555555555555555555555555555555555555555555555555555"
+    human-review-console-ui        = "registry.example.test/human-review-console-ui@sha256:6666666666666666666666666666666666666666666666666666666666666666"
+    human-review-console-api       = "registry.example.test/human-review-console-api@sha256:6666666666666666666666666666666666666666666666666666666666666666"
   }
   embedded_apps = {
     cdd-sow-research = {
@@ -598,4 +602,38 @@ run "reject_observability_audience_path" {
     observability_audience = "https://observability.hrz9.example.test/path"
   }
   expect_failures = [var.observability_audience]
+}
+
+
+# The guard is the whole point of the variable, so it is asserted in both directions: the run
+# above proves the edge is built when the deployment asks for it, and this one proves nothing
+# is left behind when it declines. Counting the resources rather than reading the flag is what
+# makes this a test -- the reference deployment released a global address by hand on 2026-09-02
+# after the LB in front of it was deleted, and an unattached address bills MORE than an attached
+# one, so a guard that half-applies costs money silently.
+run "declined_edge_builds_no_billable_edge" {
+  command = plan
+  variables {
+    production_edge_enabled = false
+  }
+
+  assert {
+    condition = (
+      length(google_compute_global_forwarding_rule.portal_https) == 0 &&
+      length(google_compute_target_https_proxy.portal) == 0 &&
+      length(google_compute_url_map.portal) == 0 &&
+      length(google_compute_managed_ssl_certificate.portal) == 0 &&
+      length(google_compute_global_address.portal) == 0
+    )
+    error_message = "A declined edge must leave no forwarding rule, proxy, url map, certificate or address."
+  }
+
+  assert {
+    condition = (
+      google_compute_backend_service.portal.iap[0].enabled &&
+      google_compute_backend_service.rm_shell.iap[0].enabled &&
+      google_compute_backend_service.ops_shell.iap[0].enabled
+    )
+    error_message = "Declining the edge must keep the backend services: they are free without a forwarding rule and are what a rebuild reuses."
+  }
 }

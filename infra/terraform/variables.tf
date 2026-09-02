@@ -280,6 +280,28 @@ variable "rollback_images" {
   }
 }
 
+# --------------------------------------------------------------------------- #
+# The serving edge itself.
+# --------------------------------------------------------------------------- #
+
+# The external load balancer -- url map, managed certificate, HTTPS proxy, global address and
+# forwarding rule -- bills a forwarding-rule minimum whether or not anything reaches it, and a
+# released global address is billed at the HIGHER unattached rate for as long as it is held.
+# The reference deployment tore the edge down on 2026-09-02 and released 8.233.116.41 with it;
+# the three backend services and their serverless NEGs are free without a forwarding rule in
+# front and are deliberately kept, so re-enabling this rebuilds the edge over them.
+#
+# Default false, matching `production_edge_enabled` across the fleet. It was previously
+# unconditional, which meant any apply -- for any unrelated reason -- silently rebuilt the edge
+# and re-minted a DIFFERENT address. Because the reference hostnames encode the address
+# (rm-8-233-116-41.nip.io), that rebuild also invalidates the domains and the certificate issued
+# for them, so the cost returns under names nothing points at.
+variable "production_edge_enabled" {
+  description = "Provision the external load-balancer edge in front of the backend services."
+  type        = bool
+  default     = false
+}
+
 variable "rm_domain" {
   type        = string
   description = "DNS name for the RM shell, without scheme or path."
@@ -408,7 +430,7 @@ variable "runtime" {
     # the edge answer 504 while the build completed uselessly behind it. 900s covers the
     # observed worst case with headroom; the BFF's own upstream timeout below is what a
     # caller actually experiences.
-    timeout       = "900s"
+    timeout = "900s"
   }
   description = <<-EOT
     Bounded Cloud Run sizing shared by the portal services.
@@ -590,7 +612,7 @@ variable "tenant_by_identity_domain" {
 }
 
 variable "upstream_timeout_seconds" {
-  type        = number
+  type = number
   # 600, matching what the laptop launcher already grants the same build
   # (PORTAL_UPSTREAM_TIMEOUT=600 in scripts/run_journeys.py) and the e2e's own 600s
   # dossier wait: the three surfaces that time one dossier build now agree.

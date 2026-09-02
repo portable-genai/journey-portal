@@ -1,15 +1,15 @@
 output "rm_url" {
-  value       = "https://${var.rm_domain}"
+  value       = var.production_edge_enabled ? "https://${var.rm_domain}" : ""
   description = "IAP-protected RM journey URL."
 }
 
 output "ops_url" {
-  value       = "https://${var.ops_domain}"
+  value       = var.production_edge_enabled ? "https://${var.ops_domain}" : ""
   description = "IAP-protected Ops journey URL."
 }
 
 output "load_balancer_address" {
-  value       = google_compute_global_address.portal.address
+  value       = try(google_compute_global_address.portal[0].address, "")
   description = "Address to publish in external DNS when dns_managed_zone is empty."
 }
 

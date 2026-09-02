@@ -86,6 +86,7 @@ resource "google_compute_backend_service" "ops_shell" {
 }
 
 resource "google_compute_url_map" "portal" {
+  count           = var.production_edge_enabled ? 1 : 0
   project         = var.project_id
   name            = "${var.name_prefix}-journeys"
   default_service = google_compute_backend_service.rm_shell.id
@@ -123,6 +124,7 @@ resource "google_compute_url_map" "portal" {
 # Without this, the first domain rotation fails with resourceInUseByAnotherResource
 # (observed 2026-08-29 swapping the bootstrap domains for the minted LB address).
 resource "random_id" "certificate" {
+  count       = var.production_edge_enabled ? 1 : 0
   byte_length = 3
   keepers = {
     domains = "${var.rm_domain}|${var.ops_domain}"
@@ -130,8 +132,9 @@ resource "random_id" "certificate" {
 }
 
 resource "google_compute_managed_ssl_certificate" "portal" {
+  count   = var.production_edge_enabled ? 1 : 0
   project = var.project_id
-  name    = "${var.name_prefix}-journeys-${random_id.certificate.hex}"
+  name    = "${var.name_prefix}-journeys-${random_id.certificate[0].hex}"
   managed {
     domains = [var.rm_domain, var.ops_domain]
   }
@@ -142,32 +145,35 @@ resource "google_compute_managed_ssl_certificate" "portal" {
 }
 
 resource "google_compute_target_https_proxy" "portal" {
+  count            = var.production_edge_enabled ? 1 : 0
   project          = var.project_id
   name             = "${var.name_prefix}-journeys"
-  url_map          = google_compute_url_map.portal.id
-  ssl_certificates = [google_compute_managed_ssl_certificate.portal.id]
+  url_map          = google_compute_url_map.portal[0].id
+  ssl_certificates = [google_compute_managed_ssl_certificate.portal[0].id]
 }
 
 resource "google_compute_global_address" "portal" {
+  count   = var.production_edge_enabled ? 1 : 0
   project = var.project_id
   name    = "${var.name_prefix}-journeys"
 }
 
 resource "google_compute_global_forwarding_rule" "portal_https" {
+  count                 = var.production_edge_enabled ? 1 : 0
   project               = var.project_id
   name                  = "${var.name_prefix}-https"
-  target                = google_compute_target_https_proxy.portal.id
-  ip_address            = google_compute_global_address.portal.address
+  target                = google_compute_target_https_proxy.portal[0].id
+  ip_address            = google_compute_global_address.portal[0].address
   port_range            = "443"
   load_balancing_scheme = "EXTERNAL_MANAGED"
 }
 
 resource "google_dns_record_set" "portal" {
-  for_each     = var.dns_managed_zone == "" ? toset([]) : toset([var.rm_domain, var.ops_domain])
+  for_each     = var.production_edge_enabled && var.dns_managed_zone != "" ? toset([var.rm_domain, var.ops_domain]) : toset([])
   project      = var.project_id
   managed_zone = var.dns_managed_zone
   name         = "${each.value}."
   type         = "A"
   ttl          = 300
-  rrdatas      = [google_compute_global_address.portal.address]
+  rrdatas      = [google_compute_global_address.portal[0].address]
 }
