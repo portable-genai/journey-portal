@@ -13,7 +13,12 @@ from pathlib import Path
 
 from hex_service_kit.identity import Principal
 
-from journey_portal.config import _BINDINGS, Settings, build_container
+from journey_portal.config import (
+    _BINDINGS,
+    Settings,
+    build_container,
+    load_journeys_mapping,
+)
 from journey_portal.domain.identity_injection import build_injection_plan, sanitize_request_headers
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -23,7 +28,12 @@ def main() -> int:
     assert (ROOT / "ui-rm" / "next.config.mjs").is_file()
     assert (ROOT / "ui-ops" / "angular.json").is_file()
     local = build_container(Settings(profile="local"))
-    assert {journey.key for journey in local.catalog.list_journeys()} == {"rm", "ops"}
+    # The catalog is CONFIG, so the expectation is read from the configured file rather than
+    # frozen here. A literal set named two journeys long after the config carried five, which
+    # made a green portability tour depend on nobody adding a journey.
+    configured = load_journeys_mapping(Settings(profile="local").journeys_path)["journeys"]
+    assert isinstance(configured, dict) and configured, "the journey catalog is empty"
+    assert {journey.key for journey in local.catalog.list_journeys()} == set(configured)
     assert all(
         set(bindings) == {"local", "gcp", "platform", "onprem"} for bindings in _BINDINGS.values()
     )
