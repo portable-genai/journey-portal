@@ -100,6 +100,7 @@ def _valid_values() -> dict[str, str]:
         "DEPLOY_RUN_MIN_INSTANCES": "1",
         "DEPLOY_LB_LOG_SAMPLE_RATE": "1",
         "DEPLOY_NAT_LOG_FILTER": "ALL",
+        "DEPLOY_PRODUCTION_EDGE_ENABLED": "true",
         "DEPLOY_TERRAFORM_STATE_BUCKET": "bank-hrz9-prod-state",
         "DEPLOY_TERRAFORM_STATE_PREFIX": "hrz9/production",
         "DEPLOYMENT_OWNER": "deployment@bank.internal",
@@ -518,12 +519,30 @@ def test_the_cost_posture_reaches_terraform_as_the_deployment_stated_it(tmp_path
     values["DEPLOY_RUN_MIN_INSTANCES"] = "0"
     values["DEPLOY_LB_LOG_SAMPLE_RATE"] = "0.1"
     values["DEPLOY_NAT_LOG_FILTER"] = "ERRORS_ONLY"
+    values["DEPLOY_PRODUCTION_EDGE_ENABLED"] = "false"
 
     config = _load(tmp_path, values)
 
     assert config.terraform_inputs["runtime_min_instances"] == 0
     assert config.terraform_inputs["lb_log_sample_rate"] == 0.1
     assert config.terraform_inputs["nat_log_filter"] == "ERRORS_ONLY"
+    assert config.terraform_inputs["production_edge_enabled"] is False
+
+
+def test_an_edge_the_deployment_declines_does_not_return_through_the_code_default(
+    tmp_path: Path,
+) -> None:
+    # The edge is the one cost-posture input whose Terraform default and whose declining value
+    # are the SAME literal (false), so an input that never reaches Terraform still produces the
+    # declined edge and the test above would pass while the wiring was missing. Asserting the
+    # accepted direction is what actually proves the value is carried: nothing but a real
+    # mapping can turn a stated true into a built edge.
+    values = _valid_values()
+    values["DEPLOY_PRODUCTION_EDGE_ENABLED"] = "true"
+
+    config = _load(tmp_path, values)
+
+    assert config.terraform_inputs["production_edge_enabled"] is True
 
 
 @pytest.mark.parametrize(

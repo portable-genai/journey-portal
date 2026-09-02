@@ -168,12 +168,18 @@ REQUIRED_NONSECRET_KEYS = frozenset(
         "DEPLOY_CLOUD_RUN_DELETION_PROTECTION",
         # The deployment's own cost posture. Required rather than optional, and required for
         # the reason the WORM lock next door was NOT: a default that a deployment never states
-        # is a decision nobody made. These three are the whole of this stack's standing spend
+        # is a decision nobody made. These four are the whole of this stack's standing spend
         # that a deployment can actually decline, so it declines them here or says it keeps
         # them.
+        #
+        # The edge joined them on 2026-09-02 and is the largest of the four. It used to be
+        # unconditional in Terraform, so it was standing spend no deployment could decline and
+        # none of them recorded -- the reference deployment tore it down by hand instead, which
+        # left the config still declaring an edge that no longer existed.
         "DEPLOY_RUN_MIN_INSTANCES",
         "DEPLOY_LB_LOG_SAMPLE_RATE",
         "DEPLOY_NAT_LOG_FILTER",
+        "DEPLOY_PRODUCTION_EDGE_ENABLED",
         "DEPLOY_TERRAFORM_STATE_BUCKET",
         "DEPLOY_TERRAFORM_STATE_PREFIX",
         "DEPLOYMENT_OWNER",
@@ -809,6 +815,7 @@ def load_deployment_config(env_file: Path, secrets_file: Path) -> DeploymentConf
         "runtime_min_instances": run_min_instances,
         "lb_log_sample_rate": lb_log_sample_rate,
         "nat_log_filter": nat_log_filter,
+        "production_edge_enabled": _boolean(values, "DEPLOY_PRODUCTION_EDGE_ENABLED"),
     }
     return DeploymentConfig(values=values, secrets=secrets, terraform_inputs=terraform_inputs)
 
