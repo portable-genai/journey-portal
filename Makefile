@@ -1,4 +1,4 @@
-.PHONY: test-managed help install lint format typecheck test eval check run-api run-rm run-ops journeys demo demo-selftest demo-browser-selftest e2e-local e2e-gcp portability deployment-check deployment-render docker-build docker-build-all tf-validate clean lock
+.PHONY: test-managed help install lint format typecheck test eval check run-api run-rm run-ops journeys demo demo-selftest demo-browser-selftest e2e-local e2e-gcp e2e-apps-local e2e-apps-gcp e2e-pair portability deployment-check deployment-render docker-build docker-build-all tf-validate clean lock
 
 PY ?= python3
 PY := $(if $(wildcard .venv/bin/python),.venv/bin/python,$(PY))
@@ -21,7 +21,11 @@ install: ## Editable install with the SDK-free dev toolchain.
 # stray restore reverted `scripts/demo_walkthrough.py` to an unformatted snapshot and
 # `make lint` reported success, because that file was one of the seven. All seven passed
 # unchanged the moment they were covered, which is what made the list look harmless.
-LINT_PATHS = src tests eval scripts ui-rm/static_server.py ui-ops/static_server.py
+# `e2e` joined the list on 2026-09-03, for the reason the paragraph above gives: it was outside
+# it, so the browser specs that produce this repository's deployment evidence were the one body
+# of code the gate never checked. They were clean when added, which is what made the gap
+# invisible -- an unchecked path and a passing one look identical from here.
+LINT_PATHS = src tests eval scripts e2e ui-rm/static_server.py ui-ops/static_server.py
 
 lint: ## ruff check + format check.
 	ruff check $(LINT_PATHS)
@@ -82,6 +86,21 @@ e2e-gcp: ## Drive the SAME journey against the deployment (needs gcloud and the 
 	PORTAL_E2E_IAP_AUDIENCE=$${PORTAL_E2E_IAP_AUDIENCE:?name the IAP OAuth client id} \
 	PORTAL_E2E_SERVICE_ACCOUNT=$${PORTAL_E2E_SERVICE_ACCOUNT:?name the e2e service account} \
 	$(PY) e2e/rm_journey.py
+
+e2e-apps-local: ## Embed and check EVERY app this laptop serves, across every journey shell.
+	PORTAL_E2E_TARGET=local $(PY) e2e/app_coverage.py
+
+e2e-apps-gcp: ## The same sweep against the deployment. Drives the shells it is given origins for.
+	@# PORTAL_E2E_BASE_URL is the RM origin, as it is for e2e-gcp. Every OTHER journey's shell is
+	@# named with PORTAL_E2E_SHELL_<JOURNEY>_BASE_URL (e.g. ..._OPS_BASE_URL), and a journey the
+	@# deployment serves but this run has no origin for is REPORTED as never opened rather than
+	@# passed over: on a deployment publishing one host per persona, those two must not print the
+	@# same. e2e/README.md says where each value comes from.
+	PORTAL_E2E_TARGET=gcp \
+	PORTAL_E2E_BASE_URL=$${PORTAL_E2E_BASE_URL:?name the deployed RM origin} \
+	PORTAL_E2E_IAP_AUDIENCE=$${PORTAL_E2E_IAP_AUDIENCE:?name the IAP OAuth client id} \
+	PORTAL_E2E_SERVICE_ACCOUNT=$${PORTAL_E2E_SERVICE_ACCOUNT:?name the e2e service account} \
+	$(PY) e2e/app_coverage.py
 
 test-managed: ## Managed trust-boundary suite against a NAMED deployment (needs gcloud).
 	@# Three states, never two: PORTAL_MANAGED_TEST_BASE_URL unset skips (so the offline gate is
