@@ -1,8 +1,17 @@
-# `e2e/`: the RM journey, driven in a real browser
+# `e2e/`: the portal, driven in a real browser
 
-One suite, two targets. The same assertions run against the portal on a laptop and against the
-portal deployed on Google Cloud behind Identity-Aware Proxy, because a demo that only works in
+Two specs, two targets each. The same assertions run against the portal on a laptop and against
+the portal deployed on Google Cloud behind Identity-Aware Proxy, because a demo that only works in
 one of those proves the wrong thing.
+
+| Spec | Make | What it proves |
+|---|---|---|
+| `rm_journey.py` | `e2e-local`, `e2e-gcp` | ONE journey, DEEP: a real CDD dossier built inside the embed, captured off the wire and pairable across profiles |
+| `app_coverage.py` | `e2e-apps-local`, `e2e-apps-gcp` | EVERY app the installation serves, WIDE: each one framed same-origin under its mount, rendering, with its API reaching its backend through the portal |
+
+The deep spec is where a workflow is proved. The wide one is where composition is: sixteen apps
+mount through this portal, and until it existed exactly one of them had ever been opened by a
+test. The two are complementary and neither replaces the other.
 
 | Target | Origin | Identity |
 |---|---|---|
@@ -22,6 +31,12 @@ PORTAL_PROFILE=local python scripts/run_journeys.py --journey rm --built
 make e2e-local        # needs the launcher above already up
 make e2e-gcp          # needs gcloud, and the three inputs below
 make e2e-pair         # F4: assert the two agree. Needs both runs above to have happened.
+
+# The wide sweep. Drop --journey above to launch all five journeys, or narrow the sweep instead:
+PORTAL_PROFILE=local python scripts/run_journeys.py --built
+make e2e-apps-local                        # every journey the portal serves
+PORTAL_E2E_SHELLS=rm,ops make e2e-apps-local   # only these two shells, and it says so
+make e2e-apps-gcp                          # the same sweep against the deployment
 ```
 
 **`--built`, not the default dev launch.** Behind the portal's reverse proxy a `next dev` embed
@@ -82,6 +97,36 @@ source of wealth, a screen that one profile silently did not run, or a claim gro
 different kind of source. One tolerance runs in a single direction: the laptop may report that it
 did not search the public web, and the managed profile may not, so a managed search that
 disappears is a divergence rather than a reduction.
+
+## The wide sweep: one shell per journey, one origin per shell
+
+A journey is served by its own shell on its own origin — the React shell serves every journey but
+`ops`, which keeps the Angular one — so a sweep across journeys is a sweep across origins.
+
+| Journey | Local origin | Cloud origin |
+|---|---|---|
+| `rm` | `PORTAL_E2E_BASE_URL`, default `http://localhost:3000` | `PORTAL_E2E_BASE_URL` |
+| every other | the port `scripts/run_journeys.py` assigns it (`mkt` 3001, `gov` 3002, `svc` 3003, `ops` 4200) | `PORTAL_E2E_SHELL_<JOURNEY>_BASE_URL`, or it is not driven |
+
+**A journey the portal serves but this run has no origin for is reported as NEVER OPENED, not
+skipped.** On a deployment publishing one host per persona, "we did not open the ops shell" and
+"the ops shell is fine" must not print the same, and a run that quietly narrowed itself is how a
+coverage number stops meaning coverage. `PORTAL_E2E_SHELLS=rm,ops` narrows it deliberately, and
+that choice lands in the report too.
+
+**The app list is never written down here.** It comes from the target's own `/v1/journeys`, which
+is that installation's statement of what it mounts. So the same command sweeps sixteen apps on a
+laptop and one app on the deployment, and `coverage.json` records
+`apps_in_this_checkout_not_served_by_target` — the fifteen — rather than reporting a green sweep
+of one app as if it were the portfolio.
+
+What each app must do to pass is a property of the PORTAL, not of the app: framed from the
+portal's own origin under the mount the catalog gives it, a document rather than a proxy error,
+and its own API call answered through `<mount>/api/`. That last one is the hop that separates a
+composed app from a link, and it is checked for every app rather than assumed from one.
+
+What the sweep deliberately does not do is press each console's buttons. Sixteen workflows behind
+one name would be sixteen brittle specs; `rm_journey.py` is where a workflow is proved.
 
 ## Why the GCP target never types a password
 
