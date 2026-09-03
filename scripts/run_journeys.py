@@ -91,9 +91,6 @@ _PORTAL_UPSTREAM_TIMEOUT_ENV = "PORTAL_UPSTREAM_TIMEOUT"
 # CDD_PROFILE=local, and a stale export must not silently turn --live into a no-op).
 _LIVE_DOC1_PROFILE = "live"
 _LIVE_DOC1_DEFAULTS: dict[str, str] = {
-    # The default triage model (gemini-3.1-flash-lite) is not served in the pinned
-    # asia-southeast1 region, so grounded adverse-media and registry research 404s without this.
-    "CDD_TRIAGE_MODEL": "gemini-3.5-flash",
     # 32 MiB: real PDF uploads must not be rejected by the request-body cap.
     "CDD_MAX_BODY_BYTES": "33554432",
 }
@@ -897,7 +894,6 @@ def _print_live_plan(plan: dict[str, tuple[int, int]]) -> None:
         f"  cdd-sow-research profile      {doc1_env['CDD_PROFILE']}"
         " (Gemini API + grounded research)"
     )
-    print(f"  cdd-sow-research triage model {doc1_env['CDD_TRIAGE_MODEL']}")
     print(f"  cdd-sow-research body cap     {doc1_env['CDD_MAX_BODY_BYTES']} bytes")
     print(f"  portal proxy      {_PORTAL_UPSTREAM_TIMEOUT_ENV}={portal_timeout}s")
     if _GOOGLE_PROJECT_ENV in doc1_env:

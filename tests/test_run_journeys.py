@@ -147,7 +147,6 @@ def test_live_flag_adds_only_doc1_live_overrides(
     monkeypatch.setattr(launcher_module, "_APP_REPOS", {"cdd-sow-research": "cdd-sow-research"})
     monkeypatch.setenv("JOURNEY_DEMO_S2S_TOKEN", "synthetic-test-token")
     monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "fictional-demo-project")
-    monkeypatch.delenv("CDD_TRIAGE_MODEL", raising=False)
     monkeypatch.delenv("CDD_MAX_BODY_BYTES", raising=False)
     launcher = launcher_module.Launcher(with_shells=False, live=True)
     launcher._spawn = Mock()
@@ -163,7 +162,6 @@ def test_live_flag_adds_only_doc1_live_overrides(
         "CDD_LOCAL_REVIEW_OUTBOX": str(launcher_module._CDD_REVIEW_OUTBOX),
         "CDD_S2S_TOKEN": "synthetic-test-token",
         "CDD_PROFILE": "live",
-        "CDD_TRIAGE_MODEL": "gemini-3.5-flash",
         "CDD_MAX_BODY_BYTES": "33554432",
         "GOOGLE_CLOUD_PROJECT": "fictional-demo-project",
     }
@@ -278,13 +276,11 @@ def test_secure_doc1_child_does_not_inherit_local_demo_acknowledgement(
 def test_live_overrides_yield_to_an_operator_export(
     launcher_module: ModuleType, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("CDD_TRIAGE_MODEL", "gemini-3.5-flash-operator-pin")
     monkeypatch.setenv("CDD_MAX_BODY_BYTES", "1048576")
     monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
 
     environment = launcher_module.Launcher._live_doc1_environment()
 
-    assert environment["CDD_TRIAGE_MODEL"] == "gemini-3.5-flash-operator-pin"
     assert environment["CDD_MAX_BODY_BYTES"] == "1048576"
     # Never invented: an unset project is reported by the launch plan instead.
     assert "GOOGLE_CLOUD_PROJECT" not in environment
