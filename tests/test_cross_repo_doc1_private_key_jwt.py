@@ -1,21 +1,20 @@
-"""Cross-repo proof: an assertion minted HERE verifies against Doc1's ACTUAL verifier.
+"""Cross-repo proof: an assertion minted HERE verifies against cdd-sow-research's ACTUAL verifier.
 
-This is the acceptance criterion for the Mode 5 service-identity slice. Everything else in this
-repo can be green while the two halves still disagree about a header member, a claim name or a
-signature encoding, and the only way to find that out before a deployment is to run Doc1's real
+This is the acceptance criterion for the Mode 5 service-identity slice. Everything else in this repo
+can be green while the two halves still disagree about a header member, a claim name or a signature
+encoding, and the only way to find that out before a deployment is to run cdd-sow-research's real
 ``PrivateKeyJwtVerifier`` over bytes this repo produced.
 
 How it stays honest:
 
-* the verifier is IMPORTED from the sibling ``cdd-sow-research`` working tree, not vendored, so
-  a change to Doc1's rules shows up here as a failure rather than as drift;
-* it runs in Doc1's own virtualenv (``PyJWT`` plus ``cryptography`` live there, and this repo
-  stays SDK-free and dependency-free by design), through a subprocess and a JSON channel;
-* the assertion is signed by the repo's REAL local adapter with a pinned generated key, not by a
-  test helper that reimplements the encoding;
-* the negative cases matter as much as the positive one: a replayed JTI, a tampered signature,
-  a wrong expected client and an expired assertion must all be REFUSED. A fixture that only ever
-  observed acceptance would pass against a verifier that accepted everything.
+* the verifier is IMPORTED from the sibling ``cdd-sow-research`` working tree, not vendored, so a
+  change to cdd-sow-research's rules shows up here as a failure rather than as drift; * it runs in
+  cdd-sow-research's own virtualenv (``PyJWT`` plus ``cryptography`` live there, and this repo stays
+  SDK-free and dependency-free by design), through a subprocess and a JSON channel; * the assertion
+  is signed by the repo's REAL local adapter with a pinned generated key, not by a test helper that
+  reimplements the encoding; * the negative cases matter as much as the positive one: a replayed
+  JTI, a tampered signature, a wrong expected client and an expired assertion must all be REFUSED. A
+  fixture that only ever observed acceptance would pass against a verifier that accepted everything.
 
 Skipped, with a reason, where the sibling checkout or its virtualenv is absent.
 """
@@ -56,7 +55,9 @@ def _doc1_python(repo: Path) -> Path | None:
 
 
 def _doc1_env(repo: Path) -> dict[str, str]:
-    """The subprocess environment: Doc1's source on the path, nothing of this repo's leaking in."""
+    """The subprocess environment: cdd-sow-research's source on the path, nothing of this repo's
+    leaking in.
+    """
     return {
         "PYTHONPATH": str(repo / "src"),
         "PATH": os.environ.get("PATH", ""),
@@ -65,7 +66,7 @@ def _doc1_env(repo: Path) -> dict[str, str]:
 
 
 def _verifier_importable(interpreter: Path, repo: Path) -> bool:
-    """Can Doc1's verifier actually be imported in that interpreter?
+    """Can cdd-sow-research's verifier actually be imported in that interpreter?
 
     The interpreter merely EXISTING is not evidence its dependencies are installed: a clean clone
     can find a sibling ``.venv`` that never had the ``oidc`` extra (``PyJWT`` + ``cryptography``),
@@ -104,12 +105,14 @@ def _run_doc1_verifier(request: dict[str, Any]) -> dict[str, Any]:
     interpreter = _doc1_python(repo)
     if interpreter is None:
         pytest.skip(
-            f"{repo}/.venv/bin/python is absent, so Doc1's PyJWT and cryptography are not "
+            f"{repo}/.venv/bin/python is absent, so cdd-sow-research's PyJWT and cryptography are "
+            f"not "
             "available to verify a portal-minted assertion"
         )
     if not _verifier_importable(interpreter, repo):
         pytest.skip(
-            f"{repo}/.venv cannot import Doc1's private_key_jwt verifier (its 'oidc' extra, "
+            f"{repo}/.venv cannot import cdd-sow-research's private_key_jwt verifier (its 'oidc' "
+            f"extra, "
             "PyJWT + cryptography, is not installed in that virtualenv), so the cross-repo proof "
             "cannot run; install the extra there to enable it"
         )
@@ -123,7 +126,8 @@ def _run_doc1_verifier(request: dict[str, Any]) -> dict[str, Any]:
         check=False,
     )
     assert completed.returncode == 0, (
-        f"Doc1's verifier driver failed:\nstdout={completed.stdout}\nstderr={completed.stderr}"
+        f"cdd-sow-research's verifier driver "
+        f"failed:\nstdout={completed.stdout}\nstderr={completed.stderr}"
     )
     document: dict[str, Any] = json.loads(completed.stdout)
     return document

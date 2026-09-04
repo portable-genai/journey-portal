@@ -19,11 +19,11 @@ installed.
 ``--built`` makes embedded UIs production-shaped: it builds each UI once, then serves it with
 ``next start``. The default remains ``next dev`` for fast local iteration.
 
-``--fresh-state`` removes only the launcher-owned synthetic Doc1 delivery outbox and Hrz7 review
-queue before processes start.  Their paths live under ``scripts/out/presenter-state`` so this
-never resets either sibling repo's general local data.
+``--fresh-state`` removes only the launcher-owned synthetic cdd-sow-research delivery outbox and
+human-review-console review queue before processes start.  Their paths live under
+``scripts/out/presenter-state`` so this never resets either sibling repo's general local data.
 
-``--live`` runs the Doc1 backend in its ``live`` profile: real uploaded documents, with
+``--live`` runs the cdd-sow-research backend in its ``live`` profile: real uploaded documents, with
 generation, page transcription and the ``google_search`` grounded research all on the Gemini
 API (which needs Google ADC plus ``GOOGLE_CLOUD_PROJECT``; org decision 2026-08-30 — no local
 model in an outbound-grounded system).  The remaining local-model live apps still share one
@@ -85,9 +85,11 @@ _S2S_SECRET_ENVIRONMENTS = frozenset(
 _INSECURE_DOC1_ACK_ENV = "CDD_ALLOW_INSECURE_DEMO"
 _GOOGLE_PROJECT_ENV = "GOOGLE_CLOUD_PROJECT"
 _PORTAL_UPSTREAM_TIMEOUT_ENV = "PORTAL_UPSTREAM_TIMEOUT"
-# ``--live`` overrides for the Doc1 backend, applied on top of its ordinary demo environment.
+# ``--live`` overrides for the cdd-sow-research backend, applied on top of its ordinary demo
+# environment.
 # An operator who already exported one of these keeps their own value; only the profile itself is
-# forced, because selecting it is what the flag means (Doc1's own docs tell operators to export
+# forced, because selecting it is what the flag means (cdd-sow-research's own docs tell operators to
+# export
 # CDD_PROFILE=local, and a stale export must not silently turn --live into a no-op).
 _LIVE_DOC1_PROFILE = "live"
 _LIVE_DOC1_DEFAULTS: dict[str, str] = {
@@ -97,14 +99,16 @@ _LIVE_DOC1_DEFAULTS: dict[str, str] = {
 # A live dossier makes several Gemini calls plus a transcription per scanned page, so the
 # proxy must outlive the default 30s.
 _LIVE_PORTAL_UPSTREAM_TIMEOUT = "600"
-# The REAL synced watchlist snapshot Doc1's sibling repo writes (scripts/sync_sanctions.py).
-# When present it becomes Doc1's screening list under --live; without it screening would
+# The REAL synced watchlist snapshot cdd-sow-research's sibling repo writes
+# (scripts/sync_sanctions.py).
+# When present it becomes cdd-sow-research's screening list under --live; without it screening would
 # silently run against the bundled FICTIONAL fixture, which a live demo must not do.
 _LIVE_SANCTIONS_ENV = "CDD_LOCAL_SANCTIONS"
 _LIVE_SANCTIONS_SNAPSHOT = "scripts/out/sanctions/current.json"
 # The local OpenAI-compatible model server the remaining local-model live apps call
-# (the _LOCAL_MODEL_APPS set below, which is down to trade-finance-checker; Doc1, Rsk1,
-# Doc2 and the CIO advisor all left it for the Gemini API, 2026-08-30).
+# (the _LOCAL_MODEL_APPS set below, which is down to trade-finance-checker; cdd-sow-research,
+# compliance-advisory,
+# credit-memo-drafting and the CIO advisor all left it for the Gemini API, 2026-08-30).
 # The env var keeps its historical name: it is the one endpoint mirrored into each
 # app's own URL variable, and the launcher reads it to learn which port must answer
 # and derives the health URL from it. Its launch command is machine-specific (the
@@ -115,7 +119,7 @@ _MODEL_SERVER_URL_ENV = "CDD_LIVE_LLM_URL"
 _MODEL_SERVER_CMD_ENV = "JOURNEY_MODEL_SERVER_CMD"
 _DEFAULT_MODEL_SERVER_URL = "http://127.0.0.1:8001/chat/completions"
 
-# ``--live`` covers every journey app, not only Doc1: each of these runs its own live
+# ``--live`` covers every journey app, not only cdd-sow-research: each of these runs its own live
 # profile (real data sources, no fictional seeds). The tuple is (profile env var, the
 # app's own model-server URL env var, or None). The launcher always forces the profile --
 # selecting it is what the flag means -- and mirrors the one model-server endpoint into
@@ -123,7 +127,7 @@ _DEFAULT_MODEL_SERVER_URL = "http://127.0.0.1:8001/chat/completions"
 #
 # ``None`` is the Gemini-only shape and it is now the majority (org decision, 2026-08-30:
 # a system whose use case requires outbound grounding is only implemented for customers
-# who permit leaving the data centre, so a local-model profile there is a fiction). Doc1
+# who permit leaving the data centre, so a local-model profile there is a fiction). cdd-sow-research
 # left the roster entirely on the same decision; these three stay on it because the
 # launcher still forces their profile, they just no longer want a model server.
 # ``trade-finance-checker`` is the one that keeps its local model, because on-prem is its
@@ -139,7 +143,7 @@ _LIVE_APP_PROFILES: dict[str, tuple[str, str | None]] = {
 _LOCAL_MODEL_APPS: frozenset[str] = frozenset(
     app_id for app_id, (_, url_env) in _LIVE_APP_PROFILES.items() if url_env is not None
 )
-# Doc2's EDGAR traffic must be declared with a contact (SEC fair-access policy).
+# credit-memo-drafting's EDGAR traffic must be declared with a contact (SEC fair-access policy).
 _EDGAR_CONTACT_ENV = "SEC_EDGAR_CONTACT"
 _PRESENTER_STATE_DIR = _REPO_ROOT / "scripts" / "out" / "presenter-state"
 _CDD_REVIEW_OUTBOX = _PRESENTER_STATE_DIR / "cdd-sow-research-review-outbox.sqlite3"
@@ -272,7 +276,8 @@ def _ui_environment(app_id: str) -> dict[str, str]:
         "NEXT_PUBLIC_EMBED": "1",
         "NEXT_PUBLIC_FRAME_ANCESTORS": "'self'",
     }
-    # Hrz7 predates the shared API variable and still consumes its specific name. Keep the
+    # human-review-console predates the shared API variable and still consumes its specific name.
+    # Keep the
     # generic variable too so it can migrate without changing the production-shaped launcher.
     if app_id == "human-review-console":
         environment["NEXT_PUBLIC_REVIEW_API_URL"] = f"/apps/{app_id}/api"
@@ -300,12 +305,14 @@ class Launcher:
 
     @staticmethod
     def _local_demo_s2s_token() -> str:
-        """Return the launcher-only credential for the Doc1 -> Hrz7 service hop."""
+        """Return the launcher-only credential for the cdd-sow-research -> human-review-console
+        service hop.
+        """
         return _defaulted_setting(_LOCAL_DEMO_S2S_TOKEN_ENV, _DEFAULT_LOCAL_DEMO_S2S_TOKEN)
 
     @staticmethod
     def _doc1_security_environment() -> dict[str, str]:
-        """Make Hrz9's native channel and identity choice explicit.
+        """Make journey-portal's native channel and identity choice explicit.
 
         This launcher is loopback-first, so it defaults to the acknowledged local persona.
         A hosted/IAP rehearsal opts in with JOURNEY_DOC1_IDENTITY_PROFILE=iap.
@@ -321,11 +328,11 @@ class Launcher:
 
     @staticmethod
     def _doc1_identity_selection() -> tuple[str, str]:
-        """Return one validated Doc1/portal identity-profile pair.
+        """Return one validated cdd-sow-research/portal identity-profile pair.
 
-        The portal is the identity trust boundary for native embedding. A secure Doc1
+        The portal is the identity trust boundary for native embedding. A secure cdd-sow-research
         child therefore cannot run behind the portal's persona adapter, and a local
-        Doc1 child cannot accidentally inherit the IAP portal adapter.
+        cdd-sow-research child cannot accidentally inherit the IAP portal adapter.
         """
         identity = _defaulted_setting(_DOC1_IDENTITY_ENV, _DOC1_LOCAL_IDENTITY)
         if identity not in {_DOC1_LOCAL_IDENTITY, _DOC1_HOSTED_IDENTITY}:
@@ -348,7 +355,9 @@ class Launcher:
 
     @staticmethod
     def _live_doc1_environment() -> dict[str, str]:
-        """Return the ``--live`` overrides for Doc1, letting an exported value win the defaults."""
+        """Return the ``--live`` overrides for cdd-sow-research, letting an exported value win the
+        defaults.
+        """
         environment = {
             "CDD_PROFILE": _LIVE_DOC1_PROFILE,
             **{
@@ -373,9 +382,12 @@ class Launcher:
 
     @staticmethod
     def _live_app_environment(app_id: str) -> dict[str, str]:
-        """The ``--live`` overrides for a non-Doc1 journey app (operator exports win)."""
+        """The ``--live`` overrides for a non-cdd-sow-research journey
+        app (operator exports win).
+        """
         if app_id == "loan-document-intelligence":
-            # Doc5 has no hybrid live profile. Its managed extraction path is the
+            # loan-document-intelligence has no hybrid live profile. Its managed extraction path is
+            # the
             # production-shaped real-data path; its local path stays credential-free.
             return {"LOAN_DOC_PROFILE": "gcp"}
         profile_env, llm_url_env = _LIVE_APP_PROFILES[app_id]
@@ -392,7 +404,7 @@ class Launcher:
                 environment[_EDGAR_CONTACT_ENV] = contact
         if llm_url_env is None:
             # Every model call in these profiles is the Gemini API, so each needs the
-            # project the same way Doc1 does. cio-advisory needed it already, for its
+            # project the same way cdd-sow-research does. cio-advisory needed it already, for its
             # grounded house-view research; the other two need it now for generation.
             project = _optional_setting(_GOOGLE_PROJECT_ENV)
             if project:
@@ -400,7 +412,7 @@ class Launcher:
         return environment
 
     def refresh_live_corpus(self) -> None:
-        """Ingest/refresh Rsk1's REAL regulatory corpus before its backend starts.
+        """Ingest/refresh compliance-advisory's REAL regulatory corpus before its backend starts.
 
         Idempotent and cheap when fresh: the refresh job re-fetches only expired or
         never-ingested sources (7-day TTL ledger), so a warm re-run is a series of
@@ -638,7 +650,8 @@ class Launcher:
         profile_env = _APP_PROFILE_ENVS.get(app_id)
         if profile_env is not None:
             backend_env[profile_env] = _PORTAL_LOCAL_PROFILE
-        # The CDD assessment must reach Hrz7 as a service producer, never by borrowing the
+        # The CDD assessment must reach human-review-console as a service producer, never by
+        # borrowing the
         # browser's portal identity.  This remains entirely local: both endpoints bind loopback
         # and the shared synthetic token is present only in their backend process environments.
         if app_id == "cdd-sow-research":
@@ -900,7 +913,8 @@ def _print_live_plan(plan: dict[str, tuple[int, int]]) -> None:
         print(f"  google project    {doc1_env[_GOOGLE_PROJECT_ENV]}")
     else:
         print(
-            f"  warning {_GOOGLE_PROJECT_ENV} is not set: every Doc1 live model call is the "
+            f"  warning {_GOOGLE_PROJECT_ENV} is not set: every cdd-sow-research live "
+            f"model call is the "
             "Gemini API, so generation, transcription and the grounded research will all "
             "fail. Export it before starting a live run."
         )
@@ -908,7 +922,7 @@ def _print_live_plan(plan: dict[str, tuple[int, int]]) -> None:
         print(f"  cdd-sow-research watchlist    {doc1_env[_LIVE_SANCTIONS_ENV]}")
     else:
         print(
-            f"  warning no real watchlist snapshot: screening would use Doc1's bundled "
+            f"  warning no real watchlist snapshot: screening would use cdd-sow-research's bundled "
             f"FICTIONAL fixture. Run scripts/sync_sanctions.py in {_APP_REPOS['cdd-sow-research']} "
             f"(writes {_LIVE_SANCTIONS_SNAPSHOT}) before a live run."
         )
@@ -923,7 +937,7 @@ def _print_live_plan(plan: dict[str, tuple[int, int]]) -> None:
             print(f"  {app_id} profile      live (Gemini API)")
             gemini_only.append(app_id)
     if gemini_only and not _optional_setting(_GOOGLE_PROJECT_ENV):
-        # Same failure as Doc1's, reported for the apps that just joined it. Without the
+        # Same failure as cdd-sow-research's, reported for the apps that just joined it. Without the
         # project these start clean and fail at the first generation, which is the worst
         # moment to discover it.
         print(
@@ -938,7 +952,8 @@ def _print_live_plan(plan: dict[str, tuple[int, int]]) -> None:
     if not _optional_setting(_EDGAR_CONTACT_ENV):
         print(
             f"  warning {_EDGAR_CONTACT_ENV} is not set: the SEC fair-access policy wants "
-            "identified traffic; export it (an email) so Doc2's EDGAR grounding is not blocked."
+            "identified traffic; export it (an email) so credit-memo-drafting's EDGAR grounding is "
+            "not blocked."
         )
 
 
@@ -955,7 +970,8 @@ def main() -> int:
         "--fresh-state",
         action="store_true",
         help=(
-            "Reset only the launcher's synthetic Doc1 review outbox and Hrz7 review queue "
+            "Reset only the launcher's synthetic cdd-sow-research review outbox and "
+            "human-review-console review queue "
             "before startup."
         ),
     )
@@ -1031,15 +1047,17 @@ def main() -> int:
         print("\nstarting processes:")
         # The model server (live only, and only for the apps still on a local model)
         # starts first so a cold model load overlaps app startup. Only
-        # trade-finance-checker is among them now: on-prem is its point. Doc1, Rsk1,
-        # Doc2 and the CIO advisor all serve every model call from the Gemini API
+        # trade-finance-checker is among them now: on-prem is its point. cdd-sow-research,
+        # compliance-advisory,
+        # credit-memo-drafting and the CIO advisor all serve every model call from the Gemini API
         # (org decision, 2026-08-30).
         if args.live and any(app_id in _LOCAL_MODEL_APPS for app_id in plan):
             launcher.launch_model_server()
-        # Rsk1's corpus refresh is NOT nested under the model server. It used to be, and
-        # that was only correct while Rsk1 needed one: the refresh is about the real
+        # compliance-advisory's corpus refresh is NOT nested under the model server. It used to be,
+        # and
+        # that was only correct while compliance-advisory needed one: the refresh is about the real
         # regulator corpus, not about generation, and folding it under the server would
-        # have silently stopped it the moment Rsk1 went Gemini-only.
+        # have silently stopped it the moment compliance-advisory went Gemini-only.
         if args.live and "compliance-advisory" in plan:
             launcher.refresh_live_corpus()
         for app_id, (api_port, ui_port) in plan.items():

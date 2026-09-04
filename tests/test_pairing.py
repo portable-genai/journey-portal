@@ -183,7 +183,8 @@ def _pair(mutate) -> Any:
 # The fixture is the wire, or nothing below this line means anything.
 # --------------------------------------------------------------------------------------- #
 def _doc1_schemas() -> Any:
-    """Doc1's own response models, imported from the sibling working tree rather than copied.
+    """cdd-sow-research's own response models, imported from the sibling working tree rather than
+    copied.
 
     Copying the field names here would let the two drift apart exactly the way the comparator
     and the wire already did once, silently and for months.
@@ -234,7 +235,8 @@ def test_the_fixture_is_the_wire() -> None:
             f"missing {sorted(set(model.model_fields) - set(node))}"
         )
 
-    # And the values type-check against the real models, so the fixture is a response Doc1 could
+    # And the values type-check against the real models, so the fixture is a response
+    # cdd-sow-research could
     # actually have sent rather than the right keys holding the wrong things.
     dossier["screening"]["alerts"] = [alert]
     schemas.CddCaseResponse.model_validate(dossier)

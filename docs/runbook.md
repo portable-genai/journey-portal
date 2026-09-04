@@ -1,4 +1,4 @@
-# Runbook: Hrz9 Journey Portal
+# Runbook: `journey-portal`
 
 ## Ownership and prerequisites
 
@@ -112,7 +112,7 @@ closed with `frame-ancestors 'none'` if their Host does not resolve exactly once
    verification succeeds in the portal and each embedded app against the same computed edge
    audience, and retain the matching Cloud NAT log entry for IAP public-key retrieval. Treat
    key-fetch timeout or verifier failure as a deployment blocker.
-12. Run every configured journey through the shell, BFF, embedded UI and API. Confirm Doc1 at
+12. Run every configured journey through the shell, BFF, embedded UI and API. Confirm `cdd-sow-research` at
    `/agent`, `/agent/api` and the `/apps/cdd-sow-research` redirect.
 13. Record both plans/applies, computed audience, state serial, service revisions, image digests,
    backend-scoped IAP policy, VPC connectivity evidence, DNS and certificate status, browser
@@ -137,8 +137,8 @@ No source-controlled fixture is live apply evidence.
   certificate expiry, Secret Manager denial and unexpected revision creation.
 - The production `platform` profile sends every content-free portal event to the exact
   `PORTAL_OBSERVABILITY_URL` using a token minted for
-  `PORTAL_OBSERVABILITY_AUDIENCE`. Alert on Hrz5 delivery failures; the portal fails closed
-  before forwarding when Hrz5 or workload-token acquisition is unavailable.
+  `PORTAL_OBSERVABILITY_AUDIENCE`. Alert on `agent-observability` delivery failures; the portal fails closed
+  before forwarding when `agent-observability` or workload-token acquisition is unavailable.
 
 ## Rollout and rollback
 
@@ -165,9 +165,9 @@ values stay in Secret Manager and are referenced by name. Test state recovery an
 access before locking retention. Rehearse remote-state restore, DNS rollback, prior-image
 redeploy, IAP member revocation and notification escalation at least once per release.
 
-## The Doc1 Mode 5 BFF signing key
+## The `cdd-sow-research` Mode 5 BFF signing key
 
-The portal authenticates to Doc1's grant endpoint with `private_key_jwt`. Under every managed
+The portal authenticates to `cdd-sow-research`'s grant endpoint with `private_key_jwt`. Under every managed
 profile the signer is a Cloud KMS key version: the private key is non-exportable, and the only
 thing recorded anywhere is `PORTAL_BFF_SIGNING_KEY_VERSION` plus the `kid`
 (`PORTAL_BFF_SIGNING_KID`) that the published JWK set and every assertion header carry.
@@ -212,6 +212,6 @@ Grant the
 `serviceAccount:` member in `DEPLOY_IAP_MEMBERS_JSON`; do not grant project-wide IAP access.
 
 Live completion requires institution-provided project/IAM, images, IAP/WIF, DNS/TLS, secrets,
-users, notification channels and apply approval. It also requires the Hrz5 URL and audience plus
+users, notification channels and apply approval. It also requires the `agent-observability` URL and audience plus
 a backend-scoped invoker/caller grant for the portal service account. Per-hop OBO and
 tenant-specific issuer/audience variants remain deferred.

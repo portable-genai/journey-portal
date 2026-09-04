@@ -1,4 +1,4 @@
-"""FastAPI application for the Hrz9 Journey Portal Shell (the BFF).
+"""FastAPI application for the journey-portal (the BFF).
 
 Import-safe (the Container is built at request time, never at import). The portal is a same-origin
 reverse proxy in front of the built P1 apps: most use ``/apps/<id>/*`` while fixed portable
@@ -106,8 +106,10 @@ _CHOICE = resolve_profile()
 _EXPOSURE = _CHOICE.exposure_profile
 _PERSONA_COOKIE = "portal_persona"
 _PROXY_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]
-#: Doc1 pins this portal's ``private_key_jwt`` client against the JWK set published here. The
-#: path is the one recorded in Doc1's named-deployment dossier, so changing it breaks a reviewed
+#: cdd-sow-research pins this portal's ``private_key_jwt`` client against the JWK set published
+#: here. The
+#: path is the one recorded in cdd-sow-research's named-deployment dossier, so changing it breaks a
+#: reviewed
 #: registration; treat it as part of the deployment contract, not an internal detail.
 BFF_JWKS_PATH = "/.well-known/cdd-sow-research-bff-jwks.json"
 # On a UI (non-API) proxy hop no identity is injected, but the client-spoofable identity headers
@@ -226,7 +228,7 @@ async def _record_grant_decision(
     principal: Principal,
     action: str,
 ) -> None:
-    """Record one content-free decision on the Doc1 grant path (allowed or refused)."""
+    """Record one content-free decision on the cdd-sow-research grant path (allowed or refused)."""
 
     def append() -> None:
         access_audit = _container().access_audit
@@ -259,7 +261,7 @@ async def _lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
 
 
 app = FastAPI(
-    title="Hrz9 Journey Portal Shell",
+    title="journey-portal",
     version="0.1.0",
     description="Persona-journey host portal: composes the built P1 app UIs into one UI per user "
     "(RM and Ops journeys) via same-origin reverse-proxy embedding, with portal-verified identity "
@@ -383,7 +385,8 @@ def versioned_healthz() -> HealthResponse:
 
 @app.get(BFF_JWKS_PATH, response_model=JwkSetResponse, tags=["ops"])
 def bff_jwks(response: Response) -> JwkSetResponse:
-    """Publish the BFF's public signing keys so Doc1 can pin the ``private_key_jwt`` client.
+    """Publish the BFF's public signing keys so cdd-sow-research can pin the ``private_key_jwt``
+    client.
 
     Unauthenticated and cacheable by design: a JWK set is public key material, it is what a
     relying party fetches before it has any credential of ours, and a login wall in front of it
@@ -598,7 +601,7 @@ async def proxy_canonical_agent_ui_root(
     principal: Annotated[Principal, Depends(get_principal)],
     upstream: Annotated[UpstreamClientPort, Depends(_upstream)],
 ) -> Response:
-    """Expose the fixed Doc1 artifact root without rewriting its emitted paths."""
+    """Expose the fixed cdd-sow-research artifact root without rewriting its emitted paths."""
     return await _proxy_ui_request(_canonical_agent_mount(), "/agent", request, principal, upstream)
 
 

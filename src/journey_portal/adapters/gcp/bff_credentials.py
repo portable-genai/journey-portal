@@ -44,7 +44,7 @@ class KmsBffSigningKeyAdapter:
         if not self._key_version:
             raise SigningKeyUnavailable(
                 "PORTAL_BFF_SIGNING_KEY_VERSION is not set, so the portal holds no reviewed "
-                "service identity and must not authenticate to the Doc1 grant endpoint"
+                "service identity and must not authenticate to the cdd-sow-research grant endpoint"
             )
         modulus, exponent = parse_rsa_public_key_der(pem_to_der(self._fetch_public_key_pem()))
         provisional = rsa_public_jwk(modulus=modulus, exponent=exponent, kid="pending")

@@ -1,4 +1,5 @@
-"""The RFC 7523 client assertion: every bound Doc1's verifier enforces, asserted here first.
+"""The RFC 7523 client assertion: every bound cdd-sow-research's verifier enforces, asserted here
+first.
 
 These are the near-side mirror of ``tests/test_cross_repo_doc1_private_key_jwt.py``. The
 cross-repo fixture proves the two halves agree; these prove the minter refuses a bad assertion

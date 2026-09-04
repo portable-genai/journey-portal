@@ -42,7 +42,8 @@ _MAKER_PERSONA_ID = "analyst"
 _CHECKER_PERSONA_ID = "approver"
 _SPOOFED_PERSONA_ID = "other-tenant"
 # The profiles an embedded app may report through the portal: ``local`` is the offline demo
-# stack, ``live`` is a real run (Doc1 under ``run_journeys.py --live``). Anything else, such as a
+# stack, ``live`` is a real run (cdd-sow-research under ``run_journeys.py --live``). Anything else,
+# such as a
 # cloud profile reached by accident, still fails the smoke.
 _ALLOWED_PROFILES = ("local", "live")
 

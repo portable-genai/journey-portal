@@ -1,4 +1,4 @@
-# ARCHITECTURE: Hrz9 Journey Portal Shell
+# ARCHITECTURE: `journey-portal`
 
 Hexagonal (ports-and-adapters), exactly like the rest of the catalog: a pure-stdlib domain core,
 typed ports, swappable adapter families selected by one profile env var, and a green offline gate.
@@ -20,7 +20,7 @@ The runtime profiles are `local`, `gcp`, `platform` and the fail-fast `onprem` s
                        │    IdentityPort ───────  identity            │
                        │    UpstreamClientPort ─  upstream (proxy)    │
                        │    AccessAuditPort ─────  access evidence     │
-                       │    BffSigningKeyPort ──  Doc1 Mode 5 identity │
+                       │    BffSigningKeyPort ──  `cdd-sow-research` Mode 5 identity │
                        │    SubjectTokenPort ───  end-user grant token │
                        └─────────────────────────────────────────────┘
                                     │                    │
@@ -33,7 +33,7 @@ The runtime profiles are `local`, `gcp`, `platform` and the fail-fast `onprem` s
   deterministic and fully unit-tested.
 - **`ports/`** names `UpstreamClientPort` for the reverse-proxy edge, `AccessAuditPort` for
   content-free access evidence, `BffSigningKeyPort` for the portal's own service identity (the
-  `private_key_jwt` credential Doc1's Mode 5 broker verifies) and `SubjectTokenPort` for the
+  `private_key_jwt` credential `cdd-sow-research`'s Mode 5 broker verifies) and `SubjectTokenPort` for the
   end-user token that grant exchanges. Identity uses the shared commons port
   `hex_service_kit.identity.IdentityPort`, so it is not re-declared here. `ports/__init__.py`
   `__all__` and the parity contract test together are the source of truth for what exists.
@@ -111,8 +111,8 @@ See `SPEC.md` for the invariant and `docs/embedding-and-identity.md` for the dep
 
 ## What is deliberately not here
 
-- No Hrz9 cross-origin loader / postMessage bus / Web Component host. Doc1 proves modes 4/5
-  independently; Hrz9 remains the canonical same-origin mode-1 host.
+- No `journey-portal` cross-origin loader / postMessage bus / Web Component host. `cdd-sow-research` proves modes 4/5
+  independently; `journey-portal` remains the canonical same-origin mode-1 host.
 - No shared session store or tenant-specific IAP issuer registry. Host-bound tenant framing/CORS
   policy is implemented; the named IAP deployment still uses one reviewed audience and issuer
   contract.
@@ -121,7 +121,7 @@ See `SPEC.md` for the invariant and `docs/embedding-and-identity.md` for the dep
   `PORTAL_LOCAL_AUDIT_DB`. Request bodies, queries, credentials and identity assertions are
   excluded. The keyed actor and tenant references remain pseudonymous personal data and receive
   the same access and retention controls. The standalone `gcp` profile writes the bounded event
-  to Cloud Logging; the production `platform` profile maps it to the Hrz5 wire contract and posts
+  to Cloud Logging; the production `platform` profile maps it to the `agent-observability` wire contract and posts
   it with an audience-bound workload identity token. Both fail closed if delivery is not
   acknowledged.
 - No per-hop OBO token exchange. It remains an explicit deferred item.

@@ -1,11 +1,12 @@
-"""Port for the portal's own service-identity signing key (the Doc1 Mode 5 BFF credential).
+"""Port for the portal's own service-identity signing key (the cdd-sow-research Mode 5 BFF
+credential).
 
-The portal authenticates to Doc1's embedded-grant endpoint with ``private_key_jwt`` (RFC 7523),
-so it holds a signing key and publishes the matching public JWK set. Custody differs completely
-by profile, which is exactly why this is a port: the ``local`` family keeps a generated key in a
-gitignored file so the offline gate and the demo can sign, the managed families sign through
-Cloud KMS where the private key is non-exportable and only a key VERSION is ever named, and the
-on-premises family refuses so the seam is visible rather than pretended.
+The portal authenticates to cdd-sow-research's embedded-grant endpoint with ``private_key_jwt`` (RFC
+7523), so it holds a signing key and publishes the matching public JWK set. Custody differs
+completely by profile, which is exactly why this is a port: the ``local`` family keeps a generated
+key in a gitignored file so the offline gate and the demo can sign, the managed families sign
+through Cloud KMS where the private key is non-exportable and only a key VERSION is ever named, and
+the on-premises family refuses so the seam is visible rather than pretended.
 
 The port deliberately never returns private key material. A caller gets the public key it may
 publish, and a signature over bytes it supplies.

@@ -2,7 +2,7 @@
   "name": "ops-journey-shell",
   "version": "0.1.0",
   "private": true,
-  "description": "Ops Journey portal shell (Angular): composes the Ops journey apps into one same-origin UI over the Hrz9 BFF. The second host framework, proving the agents drop into any stack.",
+  "description": "Ops Journey portal shell (Angular): composes the Ops journey apps into one same-origin UI over the journey-portal BFF. The second host framework, proving the agents drop into any stack.",
   "scripts": {
     "start": "ng serve",
     "build": "ng build",

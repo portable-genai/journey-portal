@@ -1,4 +1,4 @@
-"""The Doc1 grant-initiating routes and the JWKS publication, at the HTTP boundary.
+"""The cdd-sow-research grant-initiating routes and the JWKS publication, at the HTTP boundary.
 
 The load-bearing assertion in this module is negative: on a cross-site or CSRF-less request the
 recording upstream must have recorded NOTHING. A route that refused with a 403 after already
@@ -50,7 +50,7 @@ def grant_client(
     monkeypatch: pytest.MonkeyPatch,
     recording_upstream: RecordingUpstream,
 ) -> Iterator[tuple[TestClient, RecordingUpstream]]:
-    """A local-profile client whose Doc1 registration and signing key are test-owned."""
+    """A local-profile client whose cdd-sow-research registration and signing key are test-owned."""
     monkeypatch.setenv("PORTAL_PUBLIC_ORIGIN", ORIGIN)
     monkeypatch.setenv("PORTAL_TENANT_EMBED_POLICIES_JSON", TENANT_POLICIES)
     monkeypatch.setenv("PORTAL_SESSION_SIGNING_KEY", "portal-session-signing-key-fixture")
@@ -239,7 +239,9 @@ def test_an_authorized_request_sends_the_proof_and_the_assertion_to_the_broker(
 def test_each_authorized_request_carries_a_fresh_jti_and_user_intent_id(
     grant_client: tuple[TestClient, RecordingUpstream],
 ) -> None:
-    """Doc1 consumes the JTI, so a reused one would make the second grant fail as a replay."""
+    """cdd-sow-research consumes the JTI, so a reused one would make the second grant fail as a
+    replay.
+    """
     client, upstream = grant_client
     for _ in range(2):
         response = client.post(

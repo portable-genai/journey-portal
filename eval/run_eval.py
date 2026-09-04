@@ -1,24 +1,22 @@
 #!/usr/bin/env python3
-"""Evaluation gate for the Hrz9 Journey Portal Shell.
+"""Evaluation gate for the journey-portal.
 
 Two named layers via ``--mode`` (the scaffold is ``agent_eval_kit.eval_main``):
 
 * **smoke** (default) - the offline pre-merge check CI runs on every change. It scores the pure,
-  deterministic portal core against one golden set with SDK-free code, in five metrics:
-    - ``journey_integrity``: the catalog builder ACCEPTS every well-formed config and REJECTS
-      every malformed one (unknown app ref, non-http upstream, bad id, duplicate). Safety-ish
-      config correctness; threshold 0.99.
-    - ``identity_isolation``: for every (principal, profile, inbound) case the forwarded headers
-      carry the portal-resolved identity and NEVER a browser-asserted one. This is THE security
-      invariant of a portal that fronts many apps, so its threshold is 0.99.
-    - ``routing_correctness``: the reverse-proxy target URLs (api prefix stripped, ui full path)
-      match the hand-computed golden; threshold 0.99.
-    - ``tenant_policy_isolation``: exact host, verified tenant and Origin inputs match the
-      independently declared allow/deny and framing outcomes; threshold 0.99.
-    - ``observability_audit_isolation``: central audit mapping preserves keyed references and bounded
-      metadata while emitting no prompt, response or citation content; threshold 1.00.
-* **gate** - the promotion verdict from the shared Hrz4 authority (requires the platform / gcp
-  profile), via ``agent_eval_kit.PromotionGateClient``.
+  deterministic portal core against one golden set with SDK-free code, in five metrics: -
+  ``journey_integrity``: the catalog builder ACCEPTS every well-formed config and REJECTS every
+  malformed one (unknown app ref, non-http upstream, bad id, duplicate). Safety-ish config
+  correctness; threshold 0.99. - ``identity_isolation``: for every (principal, profile, inbound)
+  case the forwarded headers carry the portal-resolved identity and NEVER a browser-asserted one.
+  This is THE security invariant of a portal that fronts many apps, so its threshold is 0.99. -
+  ``routing_correctness``: the reverse-proxy target URLs (api prefix stripped, ui full path) match
+  the hand-computed golden; threshold 0.99. - ``tenant_policy_isolation``: exact host, verified
+  tenant and Origin inputs match the independently declared allow/deny and framing outcomes;
+  threshold 0.99. - ``observability_audit_isolation``: central audit mapping preserves keyed
+  references and bounded metadata while emitting no prompt, response or citation content; threshold
+  1.00. * **gate** - the promotion verdict from the shared model-quality-gate authority (requires
+  the platform / gcp profile), via ``agent_eval_kit.PromotionGateClient``.
 
 Exit is ``0`` iff every metric meets its threshold (and, in gate mode, the authority agrees).
 Each metric selects its cases by the dataset ``kind`` named in ``METRIC_KINDS``, and both ends of

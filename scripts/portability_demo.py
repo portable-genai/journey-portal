@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Executable, bounded Hrz9 portability evidence.
+"""Executable, bounded journey-portal portability evidence.
 
 This proves channel composition over two host frameworks, complete adapter bindings, the
 offline-to-managed runtime seam, and fail-fast on-prem placeholders. It does not claim data,

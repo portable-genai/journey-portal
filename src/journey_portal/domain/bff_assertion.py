@@ -1,11 +1,11 @@
-"""Mint the RFC 7523 ``private_key_jwt`` client assertion Doc1's Mode 5 broker verifies.
+"""Mint the RFC 7523 ``private_key_jwt`` client assertion cdd-sow-research's Mode 5 broker verifies.
 
 Pure: the clock and the JTI are arguments, so one call replays byte for byte and the whole
 module is testable with no key, no network and no time source. The only impure edge is the
 signature itself, taken through :class:`~journey_portal.ports.bff_credentials.BffSigningKeyPort`.
 
-Every bound below is copied from what Doc1's ``PrivateKeyJwtVerifier`` actually enforces, read
-before this module was written rather than after (``cdd-sow-research``,
+Every bound below is copied from what cdd-sow-research's ``PrivateKeyJwtVerifier`` actually
+enforces, read before this module was written rather than after (``cdd-sow-research``,
 ``src/cdd_sow_research/adapters/oidc/private_key_jwt.py``):
 
 * ``iss`` and ``sub`` both equal the registered BFF client id, and nothing else;
@@ -35,14 +35,16 @@ from .jose import compact_jws, jws_signing_input
 #: message is legible, rather than as an opaque 401 from the broker.
 JTI_PATTERN = re.compile(r"^[A-Za-z0-9._~-]{22,256}$")
 
-#: Doc1's ``PrivateKeyJwtClientPolicy.max_lifetime_seconds`` upper bound.
+#: cdd-sow-research's ``PrivateKeyJwtClientPolicy.max_lifetime_seconds`` upper bound.
 MAX_LIFETIME_SECONDS = 60
 
 CLIENT_ASSERTION_TYPE = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
 
 
 class AssertionPolicyError(ValueError):
-    """The configured client assertion policy cannot produce an assertion Doc1 would accept."""
+    """The configured client assertion policy cannot produce an assertion cdd-sow-research would
+    accept.
+    """
 
 
 @dataclass(frozen=True, slots=True)

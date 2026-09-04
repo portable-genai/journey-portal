@@ -1,4 +1,4 @@
-# SPEC: Hrz9 Journey Portal Shell
+# SPEC: `journey-portal`
 
 Locked decisions, pinned stack, and contracts. The deepest authority on intent; where this and
 prose elsewhere disagree, this wins.
@@ -17,7 +17,7 @@ app. It is the catalog's first runnable proof of the embeddable-micro-frontend c
    accident; the shells share no UI code and both compose the identical portal.
 2. **Mode-1 same-origin embedding only.** The portal is the cooperative reverse-proxy host the
    per-app embedding guides assume. The cross-origin loader / postMessage SDK (modes 4/5) stays out
-   of scope for Hrz9. Doc1 demonstrates those portable modes independently. Content-driven iframe
+   of scope for `journey-portal`. `cdd-sow-research` demonstrates those portable modes independently. Content-driven iframe
    height therefore uses a sized
    container, not a resize protocol.
 3. **Journeys are config.** `config/journeys.yaml` maps journeys to apps and apps to upstreams,
@@ -68,26 +68,26 @@ app. It is the catalog's first runnable proof of the embeddable-micro-frontend c
   before it holds any credential of ours. Only public JWK members are ever emitted.
 - `GET /v1/cdd-sow-research/embed/csrf` -> one short-lived CSRF token bound to this session and to the exact
   grant action. Private, no-store.
-- `POST /v1/cdd-sow-research/embed/grant {instance_id}` -> the Doc1 Mode 5 brokered grant. The client names
+- `POST /v1/cdd-sow-research/embed/grant {instance_id}` -> the `cdd-sow-research` Mode 5 brokered grant. The client names
   the embed instance and nothing else; the client id, the scopes and the whole host authorization
   proof come from reviewed policy and the portal's verified session. Private, no-store.
 
-### The Doc1 Mode 5 contract (the service-identity boundary)
+### The `cdd-sow-research` Mode 5 contract (the service-identity boundary)
 
-The portal is the BFF half of Doc1's cross-origin embedded grant. What it owns:
+The portal is the BFF half of `cdd-sow-research`'s cross-origin embedded grant. What it owns:
 
 - it holds the ONLY service identity in the exchange, and mints an RFC 7523 `private_key_jwt`
   client assertion whose issuer and subject are the BFF client id, whose audience is the exact
   grant endpoint, whose lifetime is at most 60 seconds and whose JTI is fresh per assertion,
-  matching what Doc1's `PrivateKeyJwtVerifier` validates including its replay store;
-- it publishes the matching public keys so Doc1 can pin the client;
+  matching what `cdd-sow-research`'s `PrivateKeyJwtVerifier` validates including its replay store;
+- it publishes the matching public keys so `cdd-sow-research` can pin the client;
 - it refuses a grant request unless the exact `Origin`, the `Sec-Fetch-Site` value and a
   session-bound CSRF token all check out, and it does so BEFORE minting a credential or calling
-  the broker, so a forged request never consumes a JTI on Doc1;
+  the broker, so a forged request never consumes a JTI on `cdd-sow-research`;
 - the host authorization proof carries the PORTAL-VERIFIED principal's subject, a hashed session
   binding and a fresh opaque user-intent id. Nothing the browser asserts enters the proof.
 
-A cross-repo fixture verifies a portal-minted assertion against Doc1's actual verifier, imported
+A cross-repo fixture verifies a portal-minted assertion against `cdd-sow-research`'s actual verifier, imported
 from the sibling checkout rather than vendored, with the replay, tamper, expiry, wrong-audience
 and unregistered-client negatives all refused.
 
@@ -118,7 +118,7 @@ headers and record `embed-policy:allowed`.
 
 `PORTAL_PROFILE`: `local` (SDK-free offline; seeded personas, httpx proxy), `gcp`
 (standalone managed deployment with IAP and Cloud Logging), `platform` (the managed deployment
-with the same IAP/private upstream transport plus synchronous Hrz5 `/v1/audit` delivery), and
+with the same IAP/private upstream transport plus synchronous `agent-observability` `/v1/audit` delivery), and
 `onprem` (fail-fast placeholders for identity, audit and egress). Every port binds in every
 profile; local and onprem import with no cloud SDK.
 
@@ -134,8 +134,8 @@ restrictions. Every shipped path sets the variable explicitly: `.env.example`, t
 Cloud Run service and CI.
 
 The platform access adapter deterministically maps each content-free `PortalAccessEvent` to the
-Hrz5 contract. Actor and tenant remain deployment-keyed pseudonyms; prompt, response and citation
-fields are empty; workload identity supplies the Hrz5 audience-bound bearer. Delivery failure
+`agent-observability` contract. Actor and tenant remain deployment-keyed pseudonyms; prompt, response and citation
+fields are empty; workload identity supplies the `agent-observability` audience-bound bearer. Delivery failure
 fails the portal request closed.
 
 ## The gate (green before anything lands)

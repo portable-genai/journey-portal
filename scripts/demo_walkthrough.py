@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the headed, presenter-paced Hrz9 journey demonstration.
+"""Run the headed, presenter-paced journey-portal journey demonstration.
 
 This is deliberately a demo-time script, not an application dependency. Install its browser
 driver separately with ``pip install playwright && playwright install chromium``.
@@ -35,7 +35,7 @@ _ACTIVE_JOURNEY = "both"
 # True when the presenter asked to hold after every form is filled, before submitting
 # (``--confirm-inputs``), so the audience can read exactly what is about to be sent.
 _CONFIRM_INPUTS = False
-# App id -> same-origin API base, discovered once per run from /v1/journeys. Doc1's
+# App id -> same-origin API base, discovered once per run from /v1/journeys. cdd-sow-research's
 # canonical mount is /agent on every target; /apps/cdd-sow-research is only a local compatibility
 # route, so hardcoding either would break one target.
 _APP_API_BASES: dict[str, str] = {}
@@ -105,7 +105,7 @@ def configure_origins(rm_origin: str, ops_origin: str) -> None:
 
 
 # Every application step runs on REAL or audience-provided data, so each requires its
-# app to be hosting the live profile (and Doc1 additionally its prepared evidence
+# app to be hosting the live profile (and cdd-sow-research additionally its prepared evidence
 # packs). All of it is checked up front and refused with the exact command to fix,
 # never silently degraded to fixture data (a fixture artifact looks like a demo of
 # nothing).
@@ -147,7 +147,7 @@ _APP_ORIGINS: dict[str, tuple[str, str]] = {
     "model-quality-gate": (GOV_ORIGIN, "AI Governance Journeys"),
     "complaints-review": (SVC_ORIGIN, "Service Journeys"),
 }
-# The audience-registered demo client Doc3's briefing runs on (opaque id, never PII).
+# The audience-registered demo client cio-advisory's briefing runs on (opaque id, never PII).
 _DOC3_DEMO_CLIENT = {
     "client_id": "client-live-demo-0001",
     "risk_appetite": "balanced",
@@ -162,9 +162,9 @@ _DOC3_DEMO_CLIENT = {
         {"name": "Cash Reserve", "asset_class": "cash", "value": 250000, "weight": 0.25},
     ],
 }
-# The real listed borrower Doc2's memo grounds on (SEC EDGAR public record).
+# The real listed borrower credit-memo-drafting's memo grounds on (SEC EDGAR public record).
 _DOC2_BORROWER = {"name": "Apple Inc", "sector": "technology hardware", "jurisdiction": "US"}
-# The audience-entered LC number Doc4 claims and checks during the walkthrough.
+# The audience-entered LC number trade-finance-checker claims and checks during the walkthrough.
 _DOC4_DEMO_LC = "LC-LIVE-DEMO-0001"
 # A grounded compliance question the REAL corpus can answer (MAS + APRA instruments
 # ingest directly; the HKMA sources are browser-gated and may be absent).
@@ -182,7 +182,7 @@ _DOSSIER_TIMEOUT_MS = 900_000
 # Other live artifacts (memo, briefing, grounded answer) make fewer calls but still
 # reach real sources and a local model; the first run also pays cold caches.
 _LIVE_STEP_TIMEOUT_MS = 300_000
-# Doc1's form wraps each <select> in its <label>, so the label's text is the caption
+# cdd-sow-research's form wraps each <select> in its <label>, so the label's text is the caption
 # followed by every option ("Typeentityindividual"). get_by_label reads that raw text, so
 # an exact match on the visible caption never matches; anchor at the start instead. The
 # anchor also keeps the two selects apart: a loose "Type" would also hit "Document type".
@@ -194,7 +194,7 @@ _PRINCIPLE_ID = re.compile(r"^\s*P-\d{2}\s*$")
 
 
 def _case_slug(name: str) -> str:
-    """Mirror the Doc1 UI's case id derivation so review source keys can be matched."""
+    """Mirror the cdd-sow-research UI's case id derivation so review source keys can be matched."""
     return re.sub(r"^-+|-+$", "", re.sub(r"[^a-z0-9]+", "-", name.lower()))[:64]
 
 
@@ -1143,7 +1143,8 @@ def _ops_hrz7(page: Any) -> None:
     page.get_by_role("button", name="Human-Review Console", exact=True).click()
     frame = page.frame_locator('iframe[title="Human-Review Console"]')
     frame.locator("body").wait_for()
-    # Doc1 delivers this CDD escalation directly to Hrz7's trusted service intake.  The runner
+    # cdd-sow-research delivers this CDD escalation directly to human-review-console's trusted
+    # service intake.  The runner
     # deliberately refuses to invent a queue item: start from rm-cdd-sow-research-cdd after
     # a fresh launch.
     # Query the authoritative API before interpreting the UI. The UI initially renders an empty
@@ -1167,7 +1168,7 @@ def _ops_hrz7(page: Any) -> None:
     clean_items = [i for i in pending if clean_slug in str(i.get("source_key", ""))]
     if not clean_items:
         raise RuntimeError(
-            f"no pending Doc1 cdd_dossier for the clean subject (case {clean_slug!r}); "
+            f"no pending cdd-sow-research cdd_dossier for the clean subject (case {clean_slug!r}); "
             f"run the rm-cdd-sow-research-cdd step first. Pending: {pending!r}"
         )
     target = clean_items[0]

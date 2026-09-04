@@ -1,7 +1,7 @@
 # Journey Portal configuration: journeys are CONFIG, not code.
 #
 # A "journey" is a persona-scoped set of embedded apps composed into one UI. An "app" is a built
-# catalog vertical mounted same-origin under the portal. Most artifacts use /apps/<id>; Doc1 keeps
+# catalog vertical mounted same-origin under the portal. Most artifacts use /apps/<id>; cdd-sow-research keeps
 # /agent as its canonical mount, because that artifact is fixed and portable.
 # Each app declares its Next.js UI and FastAPI backend. The portal reverse-proxies:
 #   <canonical_mount>/*       -> ui_upstream  (canonical path forwarded unchanged)

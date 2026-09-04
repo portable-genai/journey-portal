@@ -1,12 +1,12 @@
-"""The Doc1 Mode 5 grant-initiating routes: CSRF issue, then the brokered grant.
+"""The cdd-sow-research Mode 5 grant-initiating routes: CSRF issue, then the brokered grant.
 
 This is the portal half of the cross-origin embedded grant. The browser never sees a credential:
 it asks the BFF for a launch code, and the BFF is the only thing that holds the service identity,
-mints the ``private_key_jwt`` assertion, and speaks to Doc1's broker.
+mints the ``private_key_jwt`` assertion, and speaks to cdd-sow-research's broker.
 
 Order is the security property. Everything that can reject a forged request happens BEFORE any
-credential is minted and before the broker is called, so a cross-site request never consumes a
-JTI, never reaches Doc1 and never appears in Doc1's rate-limit or replay state:
+credential is minted and before the broker is called, so a cross-site request never consumes a JTI,
+never reaches cdd-sow-research and never appears in cdd-sow-research's rate-limit or replay state:
 
 1. resolve the VERIFIED principal (the identity port; a browser-asserted actor is discarded);
 2. exact-``Origin`` and Fetch Metadata checks against the portal's reviewed public origin;
@@ -14,8 +14,8 @@ JTI, never reaches Doc1 and never appears in Doc1's rate-limit or replay state:
 4. only then derive the session binding, mint a fresh user-intent id, obtain the subject token,
    mint the assertion, and call the broker.
 
-Doc1 re-validates all of it. The duplication is deliberate: a proof only the far side checks is
-a proof the near side can be tricked into signing.
+cdd-sow-research re-validates all of it. The duplication is deliberate: a proof only the far side
+checks is a proof the near side can be tricked into signing.
 """
 
 # NOTE: deliberately no ``from __future__ import annotations`` here. The routes are defined
@@ -62,7 +62,7 @@ from ..ports.upstream import UpstreamClientPort
 
 GRANT_PATH = "/v1/cdd-sow-research/embed/grant"
 CSRF_PATH = "/v1/cdd-sow-research/embed/csrf"
-#: Doc1 answers a grant in well under a second; a longer body than this is not one.
+#: cdd-sow-research answers a grant in well under a second; a longer body than this is not one.
 _MAX_BROKER_BODY = 8192
 
 
@@ -79,7 +79,8 @@ class CsrfTokenResponse(BaseModel):
 
 
 class GrantRequestModel(BaseModel):
-    """What the embedded loader supplies: the instance it registered with Doc1, and nothing else.
+    """What the embedded loader supplies: the instance it registered with cdd-sow-research, and
+    nothing else.
 
     Every other field of the broker request comes from reviewed policy or from the portal's own
     verified session. A client that could name the client id, the scopes or the proof would be
@@ -169,7 +170,7 @@ def create_doc1_grant_router(
         except BrokerPolicyError as exc:
             raise HTTPException(
                 status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"the Doc1 brokered grant is not configured: {exc}",
+                detail=f"the cdd-sow-research brokered grant is not configured: {exc}",
             ) from exc
 
         # --- refuse a forged request before any credential exists -----------------
@@ -263,14 +264,15 @@ def _session_secret(configured: str) -> bytes:
 def _broker_response(status_code: int, body: bytes) -> Response:
     """Relay the broker's answer without echoing an unbounded or unexpected body.
 
-    A non-2xx broker answer is reported as a bounded, fixed message: Doc1's own error bodies are
+    A non-2xx broker answer is reported as a bounded, fixed message: cdd-sow-research's own error
+    bodies are
     deliberately opaque, and re-emitting them would make the portal a probe for the broker's
     internal state.
     """
     if status_code != status.HTTP_200_OK or len(body) > _MAX_BROKER_BODY:
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY,
-            detail="the Doc1 broker rejected or could not answer the grant request",
+            detail="the cdd-sow-research broker rejected or could not answer the grant request",
         )
     try:
         document = json.loads(body)
@@ -278,7 +280,7 @@ def _broker_response(status_code: int, body: bytes) -> Response:
     except (ValueError, TypeError) as exc:
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY,
-            detail="the Doc1 broker returned an unrecognized grant response",
+            detail="the cdd-sow-research broker returned an unrecognized grant response",
         ) from exc
     return JSONResponse(content=model.model_dump())
 

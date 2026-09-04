@@ -1,4 +1,4 @@
-"""Deterministic mapping from portal access evidence to the Hrz5 wire contract."""
+"""Deterministic mapping from portal access evidence to the agent-observability wire contract."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from .models import PortalAccessEvent
 
 
 def to_observability_audit_event(event: PortalAccessEvent) -> dict[str, object]:
-    """Map one content-free portal event to Hrz5 without introducing user content."""
+    """Map one content-free portal event to agent-observability without introducing user content."""
     decision = (
         "blocked"
         if event.action in {"embed-policy:denied", "embed-policy:denied-preflight"}
