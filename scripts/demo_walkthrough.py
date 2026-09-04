@@ -182,6 +182,11 @@ _DOSSIER_TIMEOUT_MS = 900_000
 # Other live artifacts (memo, briefing, grounded answer) make fewer calls but still
 # reach real sources and a local model; the first run also pays cold caches.
 _LIVE_STEP_TIMEOUT_MS = 300_000
+# Filing a document is not instant either: against a deployment the file crosses the edge,
+# the API may be cold at minScale=0, and a PDF is parsed by the managed document service in
+# another region. A bare 30s here was the one long wait in this file without a named budget,
+# and it timed out on the hosted target while the upload was still in flight.
+_UPLOAD_TIMEOUT_MS = 180_000
 # cdd-sow-research's form wraps each <select> in its <label>, so the label's text is the caption
 # followed by every option ("Typeentityindividual"). get_by_label reads that raw text, so
 # an exact match on the visible caption never matches; anchor at the start instead. The
@@ -214,9 +219,16 @@ def _require_profile(page: Any, app_id: str, expected: str) -> None:
     """Refuse to run a step against a profile that is not the one it was written for."""
     health = page.evaluate(
         """async (apiBase) => {
-        const response = await fetch(`${apiBase}/healthz`);
-        if (!response.ok) throw new Error(`${apiBase} healthz failed: ${response.status}`);
-        return response.json();
+        // The API mounts its routes under /v1, so the health probe lives at
+        // <apiBase>/v1/healthz. Older builds served it at the root; try the versioned
+        // path first and fall back, so one probe fits a deployment and a laptop alike.
+        const tried = [];
+        for (const path of [`${apiBase}/v1/healthz`, `${apiBase}/healthz`]) {
+            const response = await fetch(path);
+            if (response.ok) return response.json();
+            tried.push(`${path} -> ${response.status}`);
+        }
+        throw new Error(`healthz failed: ${tried.join(', ')}`);
     }""",
         _api_base(page, app_id),
     )
@@ -237,9 +249,16 @@ def _require_live(page: Any, app_id: str) -> None:
     """
     health = page.evaluate(
         """async (apiBase) => {
-        const response = await fetch(`${apiBase}/healthz`);
-        if (!response.ok) throw new Error(`${apiBase} healthz failed: ${response.status}`);
-        return response.json();
+        // The API mounts its routes under /v1, so the health probe lives at
+        // <apiBase>/v1/healthz. Older builds served it at the root; try the versioned
+        // path first and fall back, so one probe fits a deployment and a laptop alike.
+        const tried = [];
+        for (const path of [`${apiBase}/v1/healthz`, `${apiBase}/healthz`]) {
+            const response = await fetch(path);
+            if (response.ok) return response.json();
+            tried.push(`${path} -> ${response.status}`);
+        }
+        throw new Error(`healthz failed: ${tried.join(', ')}`);
     }""",
         _api_base(page, app_id),
     )
@@ -324,7 +343,7 @@ def _prepare_doc1_case(
     except Exception:  # noqa: BLE001 - not uploaded yet is the normal first-run case
         frame.get_by_label(_DOC_TYPE_LABEL).select_option(doc_type)
         frame.locator('input[type="file"]').set_input_files(str(file_path))
-        uploaded.first.wait_for(timeout=30_000)
+        uploaded.first.wait_for(timeout=_UPLOAD_TIMEOUT_MS)
 
 
 #: Spoken before the first step. The demonstration exists to answer one question at three
@@ -1698,9 +1717,13 @@ def _mint_hosted_headers() -> dict[str, str]:
     if spec is None or spec.loader is None:
         raise RuntimeError(f"cannot load {targets_path}")
     targets = importlib.util.module_from_spec(spec)
+    # Register before executing: targets.py defines a dataclass, and on 3.12 the dataclasses
+    # machinery resolves the defining module through sys.modules. Without this, building that
+    # dataclass raises AttributeError on a None module and --iap-impersonate cannot mint at all.
+    sys.modules[spec.name] = targets
     spec.loader.exec_module(targets)
-    audience = targets._setting("PORTAL_E2E_IAP_AUDIENCE")
-    service_account = targets._setting("PORTAL_E2E_SERVICE_ACCOUNT")
+    audience = targets.setting("PORTAL_E2E_IAP_AUDIENCE")
+    service_account = targets.setting("PORTAL_E2E_SERVICE_ACCOUNT")
     missing = [
         name
         for name, value in (
