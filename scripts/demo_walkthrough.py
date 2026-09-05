@@ -1062,7 +1062,12 @@ def _rm_approver(page: Any) -> None:
 
 def _ops_open(page: Any) -> None:
     _open_shell(page, OPS_ORIGIN, "Ops Journey")
-    page.get_by_text("Demo identity", exact=False).wait_for()
+    # Same persona-picker rule as _rm_open: it is a local-profile affordance, and on the
+    # deployment identity is whoever signed in through IAP, so no picker is rendered. Without
+    # this guard the hosted run hangs here waiting for text that never appears -- _rm_open was
+    # fixed for this and _ops_open was left behind.
+    if not _HOSTED:
+        page.get_by_text("Demo identity", exact=False).wait_for()
 
 
 def _ops_doc2(page: Any) -> None:
