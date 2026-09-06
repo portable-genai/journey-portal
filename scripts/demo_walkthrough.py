@@ -1111,9 +1111,9 @@ def _ops_doc2(page: Any) -> None:
     # The built memo is headed by the borrower's own name. Waiting on the words "Credit memo"
     # no longer identifies a result: they also appear on the submit button and in the layout's
     # standing provenance banner, so the wait passed before anything was built.
-    frame.get_by_role(
-        "heading", name=_DOC2_BORROWER["name"]
-    ).first.wait_for(timeout=_LIVE_STEP_TIMEOUT_MS)
+    frame.get_by_role("heading", name=_DOC2_BORROWER["name"]).first.wait_for(
+        timeout=_LIVE_STEP_TIMEOUT_MS
+    )
     # The grounding must be the real public record, visibly cited.
     frame.get_by_text("SEC EDGAR", exact=False).first.wait_for()
 
