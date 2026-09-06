@@ -378,7 +378,7 @@ def main(argv: list[str] | None = None) -> int:
     except LiveCheckError as exc:
         print(f"FAIL {exc}", file=sys.stderr)
         return 1
-    print("PASS hosted Hrz9 live-profile check completed")
+    print("PASS hosted journey-portal live-profile check completed")
     return 0
 
 

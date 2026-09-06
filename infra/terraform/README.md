@@ -1,4 +1,4 @@
-# Complete Hrz9 journey deployment
+# Complete `journey-portal` journey deployment
 
 This stack provisions the reusable, input-independent production shape. It does not claim a live
 deployment. A named institution must still provide a target project, reviewed image digests,
@@ -71,7 +71,7 @@ automatic or override files. It sanitizes ambient Terraform variables, initializ
 reviewed GCS bucket/prefix, verifies the resulting backend metadata, and uses one fixed ignored
 generated input file.
 
-Each embedded app entry must declare `ui_build_base_path`: `/agent` for Doc1 and `/apps/<id>`
+Each embedded app entry must declare `ui_build_base_path`: `/agent` for `cdd-sow-research` and `/apps/<id>`
 for the other five apps. This is a reviewed build-time image contract, not a runtime environment
 override. Build and test each UI for that path before recording its immutable digest.
 UI/API plain and secret environment maps cannot overlap within a container. Every surface rejects
@@ -118,8 +118,8 @@ The CMEK rotation period uses the Cloud KMS duration format and must be between 
   BFF reaches each internal-only destination through Direct VPC egress, proof that its verifier
   retrieves current IAP signing keys through logged Cloud NAT, rollback and browser evidence.
 
-`observability_url` is the exact Hrz5 HTTPS origin; `observability_audience` is the independently
-reviewed audience Hrz5 verifies. The BFF runs the `platform` profile and acquires an
+`observability_url` is the exact `agent-observability` HTTPS origin; `observability_audience` is the independently
+reviewed audience `agent-observability` verifies. The BFF runs the `platform` profile and acquires an
 audience-bound workload token before posting each content-free access event. The adopter must
-grant the portal service account Cloud Run invoke access and enroll it in Hrz5's allowed-caller
+grant the portal service account Cloud Run invoke access and enroll it in `agent-observability`'s allowed-caller
 policy. Per-hop OBO and tenant-specific issuer/audience variants remain deferred.

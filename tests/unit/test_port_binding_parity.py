@@ -1,6 +1,6 @@
 """Every port binds every profile, and every binding names a real port.
 
-The audit that swept this fleet recorded Hrz9 as carrying no parity test over its
+The audit that swept this fleet recorded journey-portal as carrying no parity test over its
 bindings. That absence is the same shape as the defects this catalog has already paid
 for: a port bound in settings but absent from the protocol map is unenforced with a
 fully green build, and the build stays green precisely because nothing compares the two

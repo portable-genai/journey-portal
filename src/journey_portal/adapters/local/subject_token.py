@@ -6,8 +6,8 @@ fictional string derived from the verified persona so the offline gate and the d
 whole grant path (provenance checks, CSRF verification, proof assembly, assertion minting, the
 outbound call) without inventing something that looks like a genuine token.
 
-It is not a credential and no verifier accepts it: the prefix says so, and it carries no
-signature. A real Doc1 installation rejects it, which is the correct outcome for a demo token.
+It is not a credential and no verifier accepts it: the prefix says so, and it carries no signature.
+A real cdd-sow-research installation rejects it, which is the correct outcome for a demo token.
 """
 
 from __future__ import annotations

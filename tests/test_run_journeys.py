@@ -128,7 +128,8 @@ def test_launcher_wires_doc1_to_hrz7_as_a_loopback_service_producer(
     assert "CDD_LOCAL_REVIEW_URL" not in doc1_backend.kwargs["env"]
     assert hrz7_backend.kwargs["env"] == {
         "PYTHONPATH": "src",
-        # Named, never inherited: Hrz7 refuses a seeded persona whose profile it was not
+        # Named, never inherited: human-review-console refuses a seeded persona whose profile it was
+        # not
         # given, and it refuses it on the write path while healthz still reads green, so a
         # launcher that omits this produces a queue that lists and disposes of nothing.
         "REVIEW_PROFILE": launcher_module._PORTAL_LOCAL_PROFILE,

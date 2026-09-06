@@ -1,10 +1,11 @@
 """Stateless, session-bound CSRF tokens for the portal's grant-initiating route.
 
-Modelled on Doc1's ``api/csrf.py``, which is the reference implementation in this programme, and
-kept deliberately close to it so a reviewer comparing the two sees one design rather than two.
-The differences are the two things the portal owns rather than Doc1: the binding is derived from
-the portal's VERIFIED principal (there is no first-party session ``jti`` here), and the token is
-bound to the exact unsafe method and path of the grant route rather than to a set of routes.
+Modelled on cdd-sow-research's ``api/csrf.py``, which is the reference implementation in this
+programme, and kept deliberately close to it so a reviewer comparing the two sees one design rather
+than two. The differences are the two things the portal owns rather than cdd-sow-research: the
+binding is derived from the portal's VERIFIED principal (there is no first-party session ``jti``
+here), and the token is bound to the exact unsafe method and path of the grant route rather than to
+a set of routes.
 
 Properties that carry the security argument:
 
@@ -44,8 +45,10 @@ class CsrfError(ValueError):
 def session_binding(secret: bytes, *, subject: str, tenant: str) -> str:
     """Derive the hashed session binding the broker proof carries.
 
-    A SHA-256 hex digest keyed on the deployment secret, so the value Doc1 records correlates a
-    session without ever revealing the subject: Doc1's host-proof validation requires exactly
+    A SHA-256 hex digest keyed on the deployment secret, so the value cdd-sow-research records
+    correlates a
+    session without ever revealing the subject: cdd-sow-research's host-proof validation requires
+    exactly
     ``^[0-9a-f]{64}$``, and a raw subject would put an identifier in another service's records.
     """
     if not secret:

@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "journey-portal"
 version = "0.0.1"
-description = "Hrz9 Journey Portal Shell: a persona-journey host that composes the built P1 app UIs into one UI per user (an RM Journey and an Ops Journey) via same-origin reverse-proxy embedding. A FastAPI BFF owns the proxy, the journey config, local persona-to-header identity injection and cloud IAP passthrough; two thin UI shells (React and Angular) prove host-framework agnosticism. Built ports-and-adapters on the catalog commons (GCP, asia-southeast1)."
+description = "journey-portal: the Journey Portal Shell, a persona-journey host that composes the built P1 app UIs into one UI per user (an RM Journey and an Ops Journey) via same-origin reverse-proxy embedding. A FastAPI BFF owns the proxy, the journey config, local persona-to-header identity injection and cloud IAP passthrough; two thin UI shells (React and Angular) prove host-framework agnosticism. Built ports-and-adapters on the catalog commons (GCP, asia-southeast1)."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "Apache-2.0" }

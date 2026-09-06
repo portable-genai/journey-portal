@@ -56,7 +56,8 @@ _LOCAL_AUDIT_CHECKPOINT_ENV = "PORTAL_LOCAL_AUDIT_CHECKPOINT"
 _TENANT_EMBED_POLICIES_ENV = "PORTAL_TENANT_EMBED_POLICIES_JSON"
 _OBSERVABILITY_URL_ENV = "PORTAL_OBSERVABILITY_URL"
 _OBSERVABILITY_AUDIENCE_ENV = "PORTAL_OBSERVABILITY_AUDIENCE"
-# The Doc1 Mode 5 BFF service identity: the signing key, its published rotation window, and the
+# The cdd-sow-research Mode 5 BFF service identity: the signing key, its published rotation window,
+# and the
 # reviewed broker registration. Every one of these is deployment-owned; none has a permissive
 # default, and an unconfigured value makes the grant route refuse rather than guess.
 _BFF_SIGNING_KEY_FILE_ENV = "PORTAL_BFF_SIGNING_KEY_FILE"
@@ -85,7 +86,8 @@ _DEPLOYED_APPS_ENV = "PORTAL_APPS"
 #: Removing it would make the running deployment fail its own residency validation. It is a
 #: default, never
 #: a ceiling. Residency is a deploy-time decision in every other repository in
-#: this catalog — Doc1 takes DOC1_ALLOWED_REGIONS — and hardcoding a fixed set here made the
+#: this catalog — cdd-sow-research takes DOC1_ALLOWED_REGIONS — and hardcoding a fixed set here made
+#: the
 #: portal the one component that could not follow a portfolio region decision without a code
 #: change, which is precisely the coupling the portability thesis argues against.
 DEFAULT_ALLOWED_REGIONS = frozenset(
@@ -135,7 +137,8 @@ _DEFAULT_JOURNEYS = "config/journeys.yaml"
 _DEFAULT_UPSTREAM_TIMEOUT = 30.0
 _DEFAULT_LOCAL_AUDIT_DB = ".local/portal-access-audit.sqlite3"
 _DEFAULT_BFF_SIGNING_KEY_FILE = ".local/portal-bff-signing-key.json"
-#: The offline demo's own values for the Doc1 brokered grant. Granted ONLY to a deliberately
+#: The offline demo's own values for the cdd-sow-research brokered grant. Granted ONLY to a
+#: deliberately
 #: chosen ``local`` profile (never to an unconsented run), because they are a relaxation: they
 #: let the grant route run end to end with a fictional registration and no reviewed policy.
 _LOCAL_DOC1_GRANT_ENDPOINT = "http://127.0.0.1:8090/v1/embed/grants"
@@ -450,7 +453,8 @@ def _defaulted_setting(name: str, default: str) -> str:
 
 
 def _demo_default(name: str, exposure_profile: str, local_default: str) -> str:
-    """Read one Doc1 broker setting, granting the demo fallback only to a CHOSEN local profile.
+    """Read one cdd-sow-research broker setting, granting the demo fallback only to a CHOSEN local
+    profile.
 
     The fallbacks are fictional registration values that let the offline demo run the grant path
     end to end. They are a relaxation, so they key off the exposure profile: an unconsented run
@@ -555,7 +559,8 @@ class Settings:
     tenant_by_domain: Mapping[str, str] = field(default_factory=dict)
     observability_url: str = ""
     observability_audience: str = ""
-    # --- Doc1 Mode 5 BFF service identity and brokered-grant registration ---------------
+    # --- cdd-sow-research Mode 5 BFF service identity and brokered-grant registration
+    # ---------------
     # Key custody: a gitignored local file for the offline profile, a Cloud KMS key VERSION for
     # the managed ones. The private key is never a setting, in either shape.
     bff_signing_key_file: str = _DEFAULT_BFF_SIGNING_KEY_FILE
@@ -609,7 +614,8 @@ class Settings:
 
     @property
     def doc1_broker_policy(self) -> Doc1BrokerPolicy:
-        """The reviewed Doc1 brokered-grant registration; raises when it is unconfigured.
+        """The reviewed cdd-sow-research brokered-grant registration; raises when it is
+        unconfigured.
 
         Every member is deployment-owned, so an incomplete registration is a refusal rather than
         a default: the alternative is a portal that authenticates to some endpoint under some

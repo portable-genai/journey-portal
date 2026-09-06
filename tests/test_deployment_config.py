@@ -579,7 +579,8 @@ def test_bootstrap_requires_empty_members_when_audience_is_empty(tmp_path: Path)
         _load(tmp_path, values)
 
 
-# --------------------------------------------------------------------------- Doc1 Mode 5
+# --------------------------------------------------------------------------- cdd-sow-research Mode
+# 5
 _MODE5_VALUES = {
     "PORTAL_PUBLIC_ORIGIN": "https://portal.bank.internal",
     "PORTAL_DOC1_GRANT_ENDPOINT": "https://cdd-sow-research.bank.internal/agent/api/v1/embed/grants",
@@ -611,7 +612,9 @@ def _load_with_mode5(
 
 
 def test_a_deployment_without_a_mode5_registration_still_validates(tmp_path: Path) -> None:
-    """An Hrz9 deployment that fronts no Doc1 Mode 5 installation has nothing to register."""
+    """An journey-portal deployment that fronts no cdd-sow-research Mode 5 installation has nothing
+    to register.
+    """
     assert _load(tmp_path, _valid_values()) is not None
 
 
@@ -624,7 +627,7 @@ def test_a_complete_mode5_registration_validates(tmp_path: Path) -> None:
 def test_a_partial_mode5_registration_is_refused(tmp_path: Path, omitted: str) -> None:
     values = {**_valid_values(), **_MODE5_VALUES}
     values.pop(omitted)
-    with pytest.raises(DeploymentConfigError, match="Doc1 Mode 5 registration"):
+    with pytest.raises(DeploymentConfigError, match="cdd-sow-research Mode 5 registration"):
         _load_with_mode5(tmp_path, values)
 
 

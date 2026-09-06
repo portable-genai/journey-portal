@@ -1,6 +1,6 @@
 """The trust boundary, asserted against the deployment rather than against a fixture.
 
-Track C item 4: Hrz9 was exercised against the real services by running it, which found
+Track C item 4: journey-portal was exercised against the real services by running it, which found
 defects no offline profile can reach. That proves those paths worked at the moment they were
 run, and nothing re-runs them.
 

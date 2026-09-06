@@ -12,7 +12,7 @@ Those guides describe how one app embeds into a cooperative host; this describes
 | On-prem | Placeholder | The client's own edge | The client binds its own IdP adapter and egress path (`docs/onprem-migration.md`). |
 
 The cross-origin loader / postMessage shapes (modes 4/5 in the reference guide) are out of scope:
-they are not Hrz9 host modes. Doc1 demonstrates them independently. The portal is the cooperative
+they are not `journey-portal` host modes. `cdd-sow-research` demonstrates them independently. The portal is the cooperative
 same-origin host those guides assume,
 which is why it needs no loader and no third-party-cookie handling.
 

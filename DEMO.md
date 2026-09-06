@@ -1,4 +1,4 @@
-# DEMO: Hrz9 Journey Portal Shell
+# DEMO: `journey-portal`
 
 Three ways to show it: a **zero-dependency offline audit view** (no repos, no network), the
 **full live portal on one machine** (the two shells hosting the real embedded apps), and the
@@ -23,7 +23,7 @@ It renders, from the real domain code:
   injected; and
 - two tenant policy decisions: an exact host/tenant/origin allow and a cross-tenant denial, with
   framing output, evidence id, finding and next action; and
-- the exact content-free event handed to Hrz5, with only keyed actor/tenant references and bounded
+- the exact content-free event handed to `agent-observability`, with only keyed actor/tenant references and bounded
   route metadata; and
 - a verified local portal-access ledger panel showing the record count and retained SHA-256 head
   hash without request bodies, queries, credentials or identity assertions.
@@ -76,7 +76,7 @@ The smoke discovers every configured mount from `/v1/journeys`, checks
 portal serves its whole static catalog whatever was started, so an unscoped smoke after a scoped
 launch checks apps that are not running.
 
-It then selects the `analyst` through `/v1/session/persona` and sends a real Hrz7 review request
+It then selects the `analyst` through `/v1/session/persona` and sends a real `human-review-console` review request
 through `/apps/human-review-console/api/v1/reviews`. The request intentionally carries a conflicting browser
 persona; the returned review maker must be the portal-selected analyst, proving the portal
 stripped the spoof and injected its verified identity. It then selects the `approver` and
@@ -86,15 +86,15 @@ withdrawal is itself a second identity proof, accepted only because the portal i
 different verified principal that the console checked against the item's maker. The two personas
 have to differ, because the console refuses a self-approval. The command exits non-zero on any
 failed assertion, the undisposed item included. This is deliberately a separate portal-identity
-check; it is not the Doc1 CDD handoff.
+check; it is not the `cdd-sow-research` CDD handoff.
 
-On a journey that does not mount Hrz7 (`rm`), the identity proof is unavailable rather than
+On a journey that does not mount `human-review-console` (`rm`), the identity proof is unavailable rather than
 failed: the smoke says it is skipping it and why.
 
 For the CDD review step, the launcher supplies a matching, synthetic local S2S credential only to
-the Doc1 and Hrz7 backend processes. Doc1 writes the CDD escalation to its local durable outbox
-and delivers it directly to `http://127.0.0.1:8087/v1/service/reviews`; Hrz9 neither proxies nor
-possesses that credential. Hrz7's persistent local queue then exposes the resulting
+the `cdd-sow-research` and `human-review-console` backend processes. `cdd-sow-research` writes the CDD escalation to its local durable outbox
+and delivers it directly to `http://127.0.0.1:8087/v1/service/reviews`; `journey-portal` neither proxies nor
+possesses that credential. `human-review-console`'s persistent local queue then exposes the resulting
 `cdd_dossier` item to the Ops journey for approval. Set `JOURNEY_DEMO_S2S_TOKEN` before launch
 only when a test needs a different synthetic value; it is not a browser-facing setting.
 
@@ -113,8 +113,8 @@ python scripts/run_journeys.py --built --fresh-state
 ```
 
 `--fresh-state` makes the approval sequence repeatable by removing only the launcher's synthetic
-Doc1 delivery outbox and Hrz7 review queue under `scripts/out/presenter-state/` before startup.
-It does not reset Doc1's knowledge, case, or audit stores, Hrz7's default local database, or any
+`cdd-sow-research` delivery outbox and `human-review-console` review queue under `scripts/out/presenter-state/` before startup.
+It does not reset `cdd-sow-research`'s knowledge, case, or audit stores, `human-review-console`'s default local database, or any
 other sibling-repo data. Omit the option when testing ordinary retry and restart durability. A
 `--dry-run --fresh-state` command reports the requested reset but does not change any files.
 
@@ -122,10 +122,10 @@ Use `--readiness-timeout 90` if the first local UI build needs longer than the d
 
 Open:
 
-- **RM Journey (React):** http://localhost:3000  - tabs for CDD onboarding (Doc1), loan and
-  mortgage document intelligence (Doc5), and CIO advisory (Doc3).
-- **Ops Journey (Angular):** http://localhost:4200  - tabs for credit memo (Doc2), trade finance
-  (Doc4), compliance (Rsk1), and the human-review queue (Hrz7).
+- **RM Journey (React):** http://localhost:3000  - tabs for CDD onboarding (`cdd-sow-research`), loan and
+  mortgage document intelligence (`loan-document-intelligence`), and CIO advisory (`cio-advisory`).
+- **Ops Journey (Angular):** http://localhost:4200  - tabs for credit memo (`credit-memo-drafting`), trade finance
+  (`trade-finance-checker`), compliance (`compliance-advisory`), and the human-review queue (`human-review-console`).
 
 ### Hosting the live profiles (every journey on real data)
 
@@ -141,24 +141,24 @@ and no fictional seeds:
 
 | App | Live data | The audience brings |
 |---|---|---|
-| Doc1 CDD | uploaded public filings, grounded research, the synced OFAC/UN watchlists | any subject name and its documents |
-| Doc2 Credit memo | the borrower's real SEC EDGAR record + real same-industry peers | any US-listed company, or uploaded financials for a private borrower |
-| Doc3 CIO advisory | grounded research over real published market outlooks | a registered client portfolio (JSON template in the UI) |
-| Doc4 Trade finance | the presentation the audience pastes (template downloadable) | their own LC + documents; the LC is claimed for their tenant on first check |
-| Rsk1 Compliance | the REAL regulator instruments (MAS, APRA, JFSA, BCBS, NIST), refreshed at launch | any compliance question; optionally their own policy document via corpus upload |
+| `cdd-sow-research` CDD | uploaded public filings, grounded research, the synced OFAC/UN watchlists | any subject name and its documents |
+| `credit-memo-drafting` Credit memo | the borrower's real SEC EDGAR record + real same-industry peers | any US-listed company, or uploaded financials for a private borrower |
+| `cio-advisory` CIO advisory | grounded research over real published market outlooks | a registered client portfolio (JSON template in the UI) |
+| `trade-finance-checker` Trade finance | the presentation the audience pastes (template downloadable) | their own LC + documents; the LC is claimed for their tenant on first check |
+| `compliance-advisory` Compliance | the REAL regulator instruments (MAS, APRA, JFSA, BCBS, NIST), refreshed at launch | any compliance question; optionally their own policy document via corpus upload |
 
-For Doc1 the flag also overrides the triage model with one served in the region this catalog
+For `cdd-sow-research` the flag also overrides the triage model with one served in the region this catalog
 pins (`asia-southeast1`) and raises the request-body cap to 32 MiB so real PDF uploads are not
 rejected. Identity injection, the journey config, and how apps are mounted are unchanged.
-Anything you have already exported wins over these defaults. Rsk1's regulatory corpus is
+Anything you have already exported wins over these defaults. `compliance-advisory`'s regulatory corpus is
 refreshed at startup (expired-only within its 7-day TTL, so a warm relaunch does no network
-work); Doc2 additionally wants `SEC_EDGAR_CONTACT` exported (an email) because the SEC's
+work); `credit-memo-drafting` additionally wants `SEC_EDGAR_CONTACT` exported (an email) because the SEC's
 fair-access policy asks automated traffic to identify itself.
 
 Two things must exist outside the portal:
 
 - ONE local OpenAI-compatible model server hosting a Gemma build, shared by the live apps
-  still on a local model (Doc1 is not among them: every one of its live model calls is the
+  still on a local model (`cdd-sow-research` is not among them: every one of its live model calls is the
   Gemini API, org decision 2026-08-30). It is called at
   `http://127.0.0.1:8001/chat/completions` unless `CDD_LIVE_LLM_URL` says otherwise (the
   launcher mirrors that endpoint into each app's own URL variable). Under `--live` the launcher
@@ -169,17 +169,17 @@ Two things must exist outside the portal:
   plan warns and the apps' model calls fail fast rather than hang. A cold model load can exceed
   the default readiness window, so raise `--readiness-timeout` when the launcher starts the
   server itself;
-- Google application default credentials and `GOOGLE_CLOUD_PROJECT`, for every Doc1 live model
+- Google application default credentials and `GOOGLE_CLOUD_PROJECT`, for every `cdd-sow-research` live model
   call (generation, page transcription, and the Gemini `google_search` grounding behind its
-  adverse media and corporate registry) and Doc3's house-view research. The launcher passes the
+  adverse media and corporate registry) and `cio-advisory`'s house-view research. The launcher passes the
   project through from your environment and never invents one; it prints a warning in the
-  launch plan when it is unset, and Doc1's live profile is entirely dead without it.
+  launch plan when it is unset, and `cdd-sow-research`'s live profile is entirely dead without it.
 
 One more thing should exist for real screening: the synced sanctions snapshot
 (`scripts/out/sanctions/current.json` in the `cdd-sow-research` repo, written by its
-`scripts/sync_sanctions.py`). When present, the launcher points Doc1's screening at it via
+`scripts/sync_sanctions.py`). When present, the launcher points `cdd-sow-research`'s screening at it via
 `CDD_LOCAL_SANCTIONS`; when absent it warns, because screening would otherwise run against
-Doc1's bundled fictional fixture, which a live demo must not do.
+`cdd-sow-research`'s bundled fictional fixture, which a live demo must not do.
 
 What is different in the room: you upload real documents and assess real subject names, and a
 dossier build makes several Gemini calls plus a transcription per scanned page, so it takes
@@ -216,15 +216,15 @@ flowchart TB
         OPS["Ops shell, Angular"]
     end
 
-    BFF["Hrz9 portal BFF<br/>reverse proxy + journey config<br/>strips browser identity claims,<br/>injects the verified one"]
+    BFF["`journey-portal` BFF<br/>reverse proxy + journey config<br/>strips browser identity claims,<br/>injects the verified one"]
 
     subgraph apps["Embedded apps (own repo, own deployment, own store)"]
-        DOC1["Doc1 CDD + SoW"]
-        DOC2["Doc2 Credit memo"]
-        DOC3["Doc3 CIO advisory"]
-        DOC4["Doc4 Trade finance"]
-        RSK1["Rsk1 Compliance"]
-        HRZ7["Hrz7 Human review"]
+        DOC1["`cdd-sow-research` CDD + SoW"]
+        DOC2["`credit-memo-drafting` Credit memo"]
+        DOC3["`cio-advisory` CIO advisory"]
+        DOC4["`trade-finance-checker` Trade finance"]
+        RSK1["`compliance-advisory` Compliance"]
+        HRZ7["`human-review-console` Human review"]
     end
 
     MODEL["Gen AI model endpoint<br/>one contract, shared by every app"]
@@ -232,7 +232,7 @@ flowchart TB
     RM -->|"/apps/*, /v1/*"| BFF
     OPS -->|"/apps/*, /v1/*"| BFF
     BFF ==>|"one reverse-proxy route per app"| apps
-    apps -->|"chat completions,<br/>every app but Hrz7"| MODEL
+    apps -->|"chat completions,<br/>every app but `human-review-console`"| MODEL
     DOC1 ==>|"escalation,<br/>service-to-service"| HRZ7
 
     classDef shell fill:#eaf1fd,stroke:#1a73e8,color:#0b1220
@@ -244,10 +244,10 @@ flowchart TB
 ```
 
 The two edges that touch the whole group are drawn once, at the group, rather than repeated per
-app: the BFF reverse-proxies each app under its own route, and every app except Hrz7 calls one
+app: the BFF reverse-proxies each app under its own route, and every app except `human-review-console` calls one
 shared model endpoint through the same port. Where an edge is specific to one module it starts at
-that module's own box, which is why the Doc1-to-Hrz7 escalation is the only arrow inside the group.
-That edge is deliberately **not** a browser path: Doc1 delivers it service-to-service with a
+that module's own box, which is why the `cdd-sow-research`-to-`human-review-console` escalation is the only arrow inside the group.
+That edge is deliberately **not** a browser path: `cdd-sow-research` delivers it service-to-service with a
 credential the portal never holds. Everything from the browser, by contrast, enters through one
 origin, and the BFF is the only thing that decides identity.
 
@@ -267,7 +267,7 @@ flowchart LR
     EDGAR["SEC EDGAR<br/>sec.gov + data.sec.gov"]
     SYNC["sync_sanctions.py"]
     PACK["build_demo_pack.py"]
-    DOC1["Doc1 CDD + SoW"]
+    DOC1["`cdd-sow-research` CDD + SoW"]
 
     OFAC --> SYNC
     UN --> SYNC
@@ -288,11 +288,11 @@ arrow below starts at the module that makes the call and says what that call is 
 
 ```mermaid
 flowchart LR
-    DOC1["Doc1 CDD + SoW"]
-    DOC2["Doc2 Credit memo"]
-    DOC3["Doc3 CIO advisory"]
-    RSK1["Rsk1 Compliance"]
-    DOC4["Doc4 Trade finance"]
+    DOC1["`cdd-sow-research` CDD + SoW"]
+    DOC2["`credit-memo-drafting` Credit memo"]
+    DOC3["`cio-advisory` CIO advisory"]
+    RSK1["`compliance-advisory` Compliance"]
+    DOC4["`trade-finance-checker` Trade finance"]
 
     GEMINI["Gemini google_search grounding<br/>Vertex AI, asia-southeast1"]
     EDGAR2["SEC EDGAR<br/>data.sec.gov"]
@@ -320,17 +320,17 @@ it is reused, is the table below.
 |---|---|---|---|
 | OFAC SDN + Consolidated CSV, UN Consolidated XML | `cdd-sow-research/scripts/sync_sanctions.py` | `scripts/out/sanctions/current.json` (dated snapshot) | `scripts/out/cache/`, 24 h |
 | SEC EDGAR submissions + company facts (evidence packs) | `cdd-sow-research/scripts/build_demo_pack.py` | `scripts/out/live-demo/*.pdf` + `manifest.json` | same fetch cache |
-| SEC EDGAR tickers, submissions, company facts, SIC peer feed | Doc2, at request time | `~/.credit_memo/edgar-cache/` | 24 h TTL |
+| SEC EDGAR tickers, submissions, company facts, SIC peer feed | `credit-memo-drafting`, at request time | `~/.credit_memo/edgar-cache/` | 24 h TTL |
 | Regulator PDFs (MAS, APRA, JFSA, BCBS, NIST) | `compliance_advisory.pipelines.refresh_job`, run by the launcher | `~/.compliance_advisory/local.db` + freshness ledger | 7-day TTL |
-| Gemini grounded market research | Doc3, at request time | `~/.cio_advisory/live-house-views.json` | 6 h TTL |
-| Gemini grounded adverse media / registry | Doc1, at request time | not cached | per assessment |
+| Gemini grounded market research | `cio-advisory`, at request time | `~/.cio_advisory/live-house-views.json` | 6 h TTL |
+| Gemini grounded adverse media / registry | `cdd-sow-research`, at request time | not cached | per assessment |
 | Documents the audience uploads | the app they upload to | that app's own governed store | until removed |
 
 Nothing above is committed to a repository. The caches exist so that a rehearsal, and the demo
 run minutes later, do not re-download the same 9 MB of sanctions lists or repeat the same
 research.
 
-### 3.3 Doc1, customer due diligence and source of wealth
+### 3.3 `cdd-sow-research`, customer due diligence and source of wealth
 
 ```mermaid
 flowchart TB
@@ -367,7 +367,7 @@ flowchart TB
     UP --> MODEL2["Gen AI model<br/>narrative + transcription"]
     MODEL2 --> DOSSIER
     DOSSIER --> RISK --> AUDIT
-    DOSSIER ==>|"escalation, service-to-service"| HRZ7X["Hrz7 review queue"]
+    DOSSIER ==>|"escalation, service-to-service"| HRZ7X["`human-review-console` review queue"]
 
     classDef out fill:#fbe9e7,stroke:#d93025,color:#0b1220
     classDef proc fill:#f5f7fb,stroke:#64748b,color:#0b1220
@@ -383,7 +383,7 @@ the machine; on Google Cloud it is the region and the service perimeter, and it 
 adapter making the same name-only call. The two groups separate what is prepared before the demo
 from what happens on the request the audience triggers.
 
-### 3.4 Doc2, credit memo
+### 3.4 `credit-memo-drafting`, credit memo
 
 ```mermaid
 flowchart TB
@@ -413,7 +413,7 @@ A borrower EDGAR does not know is left evidence-less on purpose: the memo then f
 rather than grounding on anything invented, and the uploaded-financials path is how a private
 name gets briefed.
 
-### 3.5 Doc3, CIO advisory
+### 3.5 `cio-advisory`, CIO advisory
 
 ```mermaid
 flowchart TB
@@ -433,7 +433,7 @@ flowchart TB
     class GEM3 out
 ```
 
-### 3.6 Doc4, trade finance
+### 3.6 `trade-finance-checker`, trade finance
 
 ```mermaid
 flowchart TB
@@ -454,7 +454,7 @@ verdicts are computed by plain code inside the deployment. The rule text is this
 paraphrase because the full UCP600 text is licensed by the ICC; each citation points at the
 official ICC publication page.
 
-### 3.7 Rsk1, compliance
+### 3.7 `compliance-advisory`, compliance
 
 ```mermaid
 flowchart TB
@@ -480,7 +480,7 @@ flowchart TB
 Redaction runs on extracted **text**, never on a PDF's raw bytes, which is what keeps the
 page-level citations intact.
 
-### 3.8 Hrz7, human review, and the identity path
+### 3.8 `human-review-console`, human review, and the identity path
 
 ```mermaid
 sequenceDiagram
@@ -488,8 +488,8 @@ sequenceDiagram
     actor A as Analyst (maker)
     participant SH as Shell (React or Angular)
     participant BFF as Portal BFF
-    participant D1 as Doc1
-    participant H7 as Hrz7
+    participant D1 as `cdd-sow-research`
+    participant H7 as `human-review-console`
     actor P as Approver (checker)
 
     A->>SH: build a dossier
@@ -519,7 +519,7 @@ itself is the same service with `PORTAL_PROFILE=gcp`.
 flowchart TB
     USER["Signed-in user, browser"]
     IAP["HTTPS load balancer<br/>+ Identity-Aware Proxy"]
-    BFF["Hrz9 portal BFF<br/>Cloud Run, internal ingress only<br/>verifies the assertion, passes it on"]
+    BFF["`journey-portal` BFF<br/>Cloud Run, internal ingress only<br/>verifies the assertion, passes it on"]
     APPS["The seven app services<br/>Agent Runtime / Cloud Run<br/>each re-verifies the assertion itself"]
     VERTEX["Vertex AI<br/>Gemini + Vertex AI Search"]
     STATE["Governed state<br/>Firestore, BigQuery, AlloyDB,<br/>CMEK buckets"]
@@ -559,21 +559,21 @@ What fills each box:
 |---|---|---|
 | End-user identity | seeded personas, picked in the shell | Identity-Aware Proxy assertion, re-verified per service |
 | Gen AI model | one OpenAI-compatible server hosting Gemma | Gemini on Vertex AI, region-pinned |
-| Grounded web research (Doc1 adverse media and registry, Doc3 grounding) | Gemini `google_search` on Vertex AI | the same adapter, unchanged |
+| Grounded web research (`cdd-sow-research` adverse media and registry, `cio-advisory` grounding) | Gemini `google_search` on Vertex AI | the same adapter, unchanged |
 | Document extraction | the file's text layer, else page transcription by the model | Document AI |
-| Knowledge and rules retrieval | SQLite FTS5 on disk | Vertex AI Search; Rsk1's ledger on AlloyDB; Doc4's rules from the shared governed rules service |
-| Doc1 case store | local SQLite | Firestore |
-| Doc2 evidence and peers | SEC EDGAR filings and SIC peer feed, fetched per request | the bank's governed index, peers from BigQuery |
-| Doc3 house views | grounded research over published outlooks | File Search over the firm's own published views |
+| Knowledge and rules retrieval | SQLite FTS5 on disk | Vertex AI Search; `compliance-advisory`'s ledger on AlloyDB; `trade-finance-checker`'s rules from the shared governed rules service |
+| `cdd-sow-research` case store | local SQLite | Firestore |
+| `credit-memo-drafting` evidence and peers | SEC EDGAR filings and SIC peer feed, fetched per request | the bank's governed index, peers from BigQuery |
+| `cio-advisory` house views | grounded research over published outlooks | File Search over the firm's own published views |
 | Sanctions snapshot | `sync_sanctions.py` writes `current.json` to disk | a Cloud Run job on a Cloud Scheduler cadence writes it to a CMEK-encrypted bucket |
 | Prompt-injection guardrail | local heuristic screen | Model Armor |
 | PII redaction | local regex pack | Cloud DLP |
 | Audit trail | append-only, hash-chained file | Cloud Logging with WORM retention |
-| Addresses | localhost: shells `:3000` / `:4200`, BFF `:8110`, apps `:8090` Doc1, `:8093` Doc2, `:8091` Doc3, `:8094` Doc4, `:8092` Doc5, `:8080` Rsk1, `:8087` Hrz7 | one external hostname behind IAP; the app services are internal only and reached through the BFF |
+| Addresses | localhost: shells `:3000` / `:4200`, BFF `:8110`, apps `:8090` `cdd-sow-research`, `:8093` `credit-memo-drafting`, `:8091` `cio-advisory`, `:8094` `trade-finance-checker`, `:8092` `loan-document-intelligence`, `:8080` `compliance-advisory`, `:8087` `human-review-console` | one external hostname behind IAP; the app services are internal only and reached through the BFF |
 
 Two rows in that table deserve saying out loud, because they cut opposite ways. The grounded
-research edge is literally the same adapter in both, so Doc1's "only the subject name ever leaves
-the building" claim holds identically on the cloud deployment. Doc2's evidence, on the other hand,
+research edge is literally the same adapter in both, so `cdd-sow-research`'s "only the subject name ever leaves
+the building" claim holds identically on the cloud deployment. `credit-memo-drafting`'s evidence, on the other hand,
 differs by design: on one machine it fetches a real listed borrower's SEC EDGAR record so an
 audience member can type any company and watch it ground, while on Google Cloud it reads the
 bank's own governed index and peer warehouse, which is what a bank would actually point it at. The
@@ -639,7 +639,7 @@ PYTHONPATH=src python scripts/build_demo_pack.py
 ```
 
 The first command downloads the published OFAC SDN, OFAC Consolidated, and UN Consolidated
-lists into a versioned snapshot (the `--live` launcher points Doc1's screening at it
+lists into a versioned snapshot (the `--live` launcher points `cdd-sow-research`'s screening at it
 automatically). The second renders two evidence packs from public records: a business and
 financial profile of a large listed company built from its SEC EDGAR filings (the clean
 subject), and the designation record of a real OFAC-listed entity rendered from the synced
@@ -720,8 +720,8 @@ python scripts/demo_walkthrough.py --target gcp --iap-impersonate \
 `--rm-origin` may be left off when `PORTAL_E2E_BASE_URL` already names the deployed origin.
 The org-level run sheets wrap all of this: see `org-metadata/docs/demos/`.
 
-Doc5 has its own four-state fixture walkthrough in the sibling repository for explaining its
-deterministic outcome states locally. For hosted evidence, use the Doc5 tab in this portal,
+`loan-document-intelligence` has its own four-state fixture walkthrough in the sibling repository for explaining its
+deterministic outcome states locally. For hosted evidence, use the `loan-document-intelligence` tab in this portal,
 enter the installation's reviewed synthetic GCS objects, and retain the resulting browser and
 audit evidence. Do not use its committed fictional local identifiers as GCS evidence.
 
@@ -729,8 +729,8 @@ Use `--slow-mo 250` to slow visible browser actions during a live narration. The
 does not fabricate production data or connections: the CDD steps assess real public subjects
 from real uploaded public records; the credit memo, CIO briefing, trade-finance check and
 compliance answer run on real public sources and audience-provided inputs exactly as a
-viewer would submit them after the demo; and the Hrz7 maker-checker step approves the real
-`cdd_dossier` delivered from Doc1's local durable outbox. A live dossier build makes several
+viewer would submit them after the demo; and the `human-review-console` maker-checker step approves the real
+`cdd_dossier` delivered from `cdd-sow-research`'s local durable outbox. A live dossier build makes several
 Gemini calls, so the two dossier steps take minutes each; the script waits.
 
 ### Showing each control decide both ways
@@ -744,9 +744,9 @@ evidence rather than decoration. The pairs are:
 | Control | The true negative (clears / allows) | The true positive (flags / refuses) |
 |---|---|---|
 | Portal identity boundary | `rm-whoami`: the portal reports the identity it verified | `rm-spoof-rejected`: the browser asserts `approver` on the same call and the answer does not change |
-| Doc1 sanctions screening | `rm-cdd-sow-research-cdd`: a genuinely clear listed company screens CLEAR against the current OFAC and UN lists | `rm-cdd-sow-research-flagged`: a genuinely OFAC-designated entity raises an open `PENDING` alert naming the matched list entry |
-| Doc1 safety guardrail | `rm-cdd-sow-research-cdd` / `rm-cdd-sow-research-flagged`: legitimate subjects produce full cited dossiers | `rm-cdd-sow-research-blocked`: a prompt-injection subject is screened out before any model, index or registry call, and no dossier is produced |
-| Hrz7 maker-checker (P-06) | `ops-human-review-console-review`: an independent approver records the decision | `ops-human-review-console-self-approval`: the maker's own approval is refused as a four-eyes breach, naming `self_approval` |
+| `cdd-sow-research` sanctions screening | `rm-cdd-sow-research-cdd`: a genuinely clear listed company screens CLEAR against the current OFAC and UN lists | `rm-cdd-sow-research-flagged`: a genuinely OFAC-designated entity raises an open `PENDING` alert naming the matched list entry |
+| `cdd-sow-research` safety guardrail | `rm-cdd-sow-research-cdd` / `rm-cdd-sow-research-flagged`: legitimate subjects produce full cited dossiers | `rm-cdd-sow-research-blocked`: a prompt-injection subject is screened out before any model, index or registry call, and no dossier is produced |
+| `human-review-console` maker-checker (P-06) | `ops-human-review-console-review`: an independent approver records the decision | `ops-human-review-console-self-approval`: the maker's own approval is refused as a four-eyes breach, naming `self_approval` |
 
 Both screening outcomes are real: the same code path and the same synced point-in-time
 snapshot produce CLEAR for one real name and an alert for the other, and the walkthrough
@@ -768,23 +768,23 @@ These images were captured from the production-shaped `--built --fresh-state` st
 CDD step assesses the fictional fixture subject shown below. Re-capture the images on the
 next full `--live` rehearsal.
 
-The RM shell hosts the live Doc1 CDD dossier, including citations and the human-review gate:
+The RM shell hosts the live `cdd-sow-research` CDD dossier, including citations and the human-review gate:
 
-![RM shell with the live Doc1 CDD dossier](docs/images/walkthrough/03-rm-cdd-sow-research-cdd.png)
+![RM shell with the live `cdd-sow-research` CDD dossier](docs/images/walkthrough/03-rm-cdd-sow-research-cdd.png)
 
-The Ops shell hosts the live Doc4 UCP600 result from its canonical fictional presentation:
+The Ops shell hosts the live `trade-finance-checker` UCP600 result from its canonical fictional presentation:
 
-![Ops shell with the live Doc4 UCP600 report](docs/images/walkthrough/08-ops-trade-finance-checker-ucp600.png)
+![Ops shell with the live `trade-finance-checker` UCP600 report](docs/images/walkthrough/08-ops-trade-finance-checker-ucp600.png)
 
-The same Ops shell renders Rsk1's complete grounded and cited answer:
+The same Ops shell renders `compliance-advisory`'s complete grounded and cited answer:
 
-![Ops shell with the live Rsk1 compliance answer](docs/images/walkthrough/09-ops-compliance-advisory-compliance.png)
+![Ops shell with the live `compliance-advisory` compliance answer](docs/images/walkthrough/09-ops-compliance-advisory-compliance.png)
 
-Step 10 records the genuine Hrz7 approval and visibly retains the Doc1 producer key. The
+Step 10 records the genuine `human-review-console` approval and visibly retains the `cdd-sow-research` producer key. The
 `cdd-sow-research:demo-bank:...:cdd_dossier` value proves this was the tenant-scoped escalation created by
 Step 3, not a fixture inserted by the walkthrough:
 
-![Ops shell with the approved Doc1 review in Hrz7](docs/images/walkthrough/10-ops-human-review-console-review.png)
+![Ops shell with the approved `cdd-sow-research` review in `human-review-console`](docs/images/walkthrough/10-ops-human-review-console-review.png)
 
 What to show:
 
@@ -804,7 +804,7 @@ What to show:
 ## What the demo deliberately does not claim
 
 The portal is the cooperative same-origin host (mode 1). Embedding into an arbitrary third-party
-SPA with no reverse proxy is Doc1's separate cross-origin loader path (modes 4/5). Doc1
+SPA with no reverse proxy is `cdd-sow-research`'s separate cross-origin loader path (modes 4/5). `cdd-sow-research`
 implements that path and passes its full local synthetic channel/identity gate, but this
-Hrz9 journey demo does not exercise it. Neither proof establishes named production
+`journey-portal` journey demo does not exercise it. Neither proof establishes named production
 hosting or whole-system portability.

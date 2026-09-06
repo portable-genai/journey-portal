@@ -1,6 +1,6 @@
-# Adopting Hrz9
+# Adopting `journey-portal`
 
-Hrz9 is a host contract, not a bank-specific portal. Keep the domain routing and identity
+`journey-portal` is a host contract, not a bank-specific portal. Keep the domain routing and identity
 boundary upstream-compatible, then own the journey composition, institution edge, and visual
 shells in the adopter repository.
 
@@ -13,7 +13,7 @@ shells in the adopter repository.
 | Local content-free access ledger, integrity view, demo self-test and bounded portability proof | Institution evidence-sink retention, target-host browser evidence and production evidence retention |
 
 The domain has two stable parts: `models.py` carries portable value objects, while
-`catalog.py` and `identity_injection.py` carry Hrz9's journey and trust-boundary behavior. A fork
+`catalog.py` and `identity_injection.py` carry `journey-portal`'s journey and trust-boundary behavior. A fork
 may add fields without weakening header stripping, secure upstream validation, or server-side
 identity resolution.
 
@@ -46,6 +46,6 @@ Review the file count and package move, rerun with `--apply`, then run `make che
 - fictional demo fixtures and the institution-owned browser/e2e golden journey.
 
 Keep OBO and tenant-specific issuer/audience variants as explicit decisions. Host-bound
-per-tenant framing/CORS policy and content-free Hrz5 access-log delivery are implemented. Supply
-the exact Hrz5 HTTPS origin and its verified token audience, then grant the portal service account
-Hrz5 invoke/caller access; do not replace the tenant policy with a union allowlist.
+per-tenant framing/CORS policy and content-free `agent-observability` access-log delivery are implemented. Supply
+the exact `agent-observability` HTTPS origin and its verified token audience, then grant the portal service account
+`agent-observability` invoke/caller access; do not replace the tenant policy with a union allowlist.

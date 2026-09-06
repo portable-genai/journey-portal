@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the exact deployed Hrz9 GCP control-plane resources."""
+"""Verify the exact deployed journey-portal GCP control-plane resources."""
 
 from __future__ import annotations
 
@@ -87,7 +87,7 @@ def verify(
     name_prefix: str,
     expected_images_json: str,
 ) -> None:
-    """Verify three IAP backends and every Hrz9 Cloud Run service by exact name."""
+    """Verify three IAP backends and every journey-portal Cloud Run service by exact name."""
 
     if not _NAME_PREFIX_RE.fullmatch(name_prefix):
         raise ControlPlaneError("name prefix is invalid")

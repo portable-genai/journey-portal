@@ -1,4 +1,4 @@
-"""Platform profile delivers content-free portal access evidence to Hrz5."""
+"""Platform profile delivers content-free portal access evidence to agent-observability."""
 
 from __future__ import annotations
 
@@ -51,18 +51,18 @@ def _exact_service_origin(
 
 
 class PlatformAccessAuditAdapter(GcpAccessAuditAdapter):
-    """Fail closed unless Hrz5 accepts the pseudonymized portal event."""
+    """Fail closed unless agent-observability accepts the pseudonymized portal event."""
 
     def __init__(self, settings: Settings) -> None:
         super().__init__(settings)
         self._base_url = _exact_service_origin(
             settings.observability_url,
-            service="Hrz5 observability sink",
+            service="agent-observability sink",
             allow_loopback_http=True,
         )
         self._token_audience = _exact_service_origin(
             settings.observability_audience,
-            service="Hrz5 token audience",
+            service="agent-observability token audience",
             allow_loopback_http=False,
         )
 
@@ -81,7 +81,9 @@ class PlatformAccessAuditAdapter(GcpAccessAuditAdapter):
     ) -> None:
         response = httpx.post(url, json=dict(payload), headers=dict(headers), timeout=_TIMEOUT)
         if response.status_code // 100 != 2:
-            raise AuditUnavailable(f"Hrz5 access audit returned HTTP {response.status_code}")
+            raise AuditUnavailable(
+                f"agent-observability access audit returned HTTP {response.status_code}"
+            )
 
     def append(self, event: PortalAccessEvent) -> None:
         payload = to_observability_audit_event(event)
@@ -95,4 +97,4 @@ class PlatformAccessAuditAdapter(GcpAccessAuditAdapter):
         except AuditUnavailable:
             raise
         except Exception as exc:
-            raise AuditUnavailable("Hrz5 access audit delivery failed") from exc
+            raise AuditUnavailable("agent-observability access audit delivery failed") from exc

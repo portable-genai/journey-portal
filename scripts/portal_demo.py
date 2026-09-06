@@ -275,7 +275,7 @@ def _render(
         cases="".join(cases_html),
         policies="".join(policy_panels),
         observability=(
-            "<div class='panel'><h3>Hrz5 WORM handoff "
+            "<div class='panel'><h3>agent-observability WORM handoff "
             "<span class='pill'>CONTENT-FREE</span></h3>"
             f"<p class='meta'>action <code>{html.escape(str(observability_view['action']))}</code> "
             f"&middot; decision <code>{html.escape(str(observability_view['decision']))}</code> "
@@ -316,7 +316,7 @@ _TEMPLATE = """<!doctype html>
  .findings{{color:#ffb3b3}} .evidence{{color:#9fb0cc;font-family:ui-monospace,monospace}}
  .integrity code{{word-break:break-all}}
 </style></head><body>
-<header><h1>Journey Portal Shell (Hrz9) - offline audit view</h1>
+<header><h1>Journey Portal Shell (journey-portal) - offline audit view</h1>
 <p>One UI per persona, composed from the built P1 apps via same-origin embedding, with the
 identity trust boundary shown per request.</p></header>
 <main>

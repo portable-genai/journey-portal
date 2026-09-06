@@ -1,4 +1,4 @@
-"""Hrz9 to Hrz5 content-free access-evidence contract."""
+"""journey-portal to agent-observability content-free access-evidence contract."""
 
 from __future__ import annotations
 

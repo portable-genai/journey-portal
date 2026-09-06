@@ -1,10 +1,9 @@
 """Local BffSigningKeyPort: an RS256 signer backed by a gitignored private JWK file.
 
-SDK-free by construction. RSASSA-PKCS1-v1_5 signing is one modular exponentiation over an
-encoding the domain already owns (:mod:`journey_portal.domain.jose`), so the offline profile
-signs a real, verifiable assertion with nothing but the standard library. That is what lets the
-cross-repo fixture verify a portal-minted assertion against Doc1's actual verifier on the offline
-gate.
+SDK-free by construction. RSASSA-PKCS1-v1_5 signing is one modular exponentiation over an encoding
+the domain already owns (:mod:`journey_portal.domain.jose`), so the offline profile signs a real,
+verifiable assertion with nothing but the standard library. That is what lets the cross-repo fixture
+verify a portal-minted assertion against cdd-sow-research's actual verifier on the offline gate.
 
 Key custody follows the pattern the local access-audit adapter already established in this repo:
 the key lives in a file under ``.local/`` (gitignored), created with 0600 permissions inside a

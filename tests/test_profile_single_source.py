@@ -1,6 +1,6 @@
 """The profile has ONE source of truth, and it fails closed on an unset variable.
 
-Mirrors Hrz7 (``human-review-console/tests/test_profile_single_source.py``) as the
+Mirrors human-review-console (``human-review-console/tests/test_profile_single_source.py``) as the
 standing gate for the absence-read-as-consent class. This repo is the reason the guard is worth
 porting rather than trusting: ``api/app.py`` carried its own
 ``os.environ.get("PORTAL_PROFILE", "local")`` beside ``config.Settings.load``'s, and that copy was

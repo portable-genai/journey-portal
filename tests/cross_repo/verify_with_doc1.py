@@ -1,10 +1,11 @@
-"""Verify a portal-minted client assertion with Doc1's OWN verifier, in Doc1's OWN interpreter.
+"""Verify a portal-minted client assertion with cdd-sow-research's OWN verifier, in
+cdd-sow-research's OWN interpreter.
 
 Run by ``tests/test_cross_repo_doc1_private_key_jwt.py`` as a subprocess under the sibling
 ``cdd-sow-research`` checkout's virtualenv, because that is where ``PyJWT`` and ``cryptography``
 live. Nothing is copied or re-implemented: this imports
 ``cdd_sow_research.adapters.oidc.private_key_jwt`` from that repo's working tree, so the proof
-tracks Doc1's real verifier rather than a snapshot of it.
+tracks cdd-sow-research's real verifier rather than a snapshot of it.
 
 Reads one JSON request on stdin and writes one JSON result on stdout. Entirely offline.
 """

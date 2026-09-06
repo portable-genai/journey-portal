@@ -1,4 +1,4 @@
-# Hrz9 FAQ
+# `journey-portal` FAQ
 
 - [Features and boundaries](features.md)
 - [Security and identity](security.md)

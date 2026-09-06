@@ -2,7 +2,7 @@
   "name": "rm-journey-shell",
   "version": "0.1.0",
   "private": true,
-  "description": "RM Journey portal shell (React / Next.js): composes the RM journey apps into one same-origin UI over the Hrz9 BFF.",
+  "description": "RM Journey portal shell (React / Next.js): composes the RM journey apps into one same-origin UI over the journey-portal BFF.",
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",

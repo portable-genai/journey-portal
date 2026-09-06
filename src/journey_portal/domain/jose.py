@@ -6,7 +6,7 @@ without a clock and without an SDK. The half that touches a private key lives in
 behind :mod:`journey_portal.ports.bff_credentials` (a local file-backed signer, a Cloud KMS
 signer whose key is non-exportable, and the fail-fast on-premises placeholder).
 
-The encodings are pinned to what Doc1's ``PrivateKeyJwtVerifier`` accepts and to what
+The encodings are pinned to what cdd-sow-research's ``PrivateKeyJwtVerifier`` accepts and to what
 ``jwt.PyJWK`` can rebuild a public key from, so an assertion minted here verifies there:
 unpadded base64url, compact JSON with sorted keys, a protected header carrying ``alg``/``kid``
 and ``typ=JWT``, and RSASSA-PKCS1-v1_5 with SHA-256 (RFC 8017 EMSA-PKCS1-v1_5).
@@ -23,7 +23,8 @@ from typing import Any
 #: DER ``DigestInfo`` prefix for SHA-256 (RFC 8017 section 9.2, note 1).
 SHA256_DIGEST_INFO = bytes.fromhex("3031300d060960864801650304020105000420")
 
-#: The one signature algorithm this repo mints. Doc1 registers RS256 or ES256; RS256 is chosen
+#: The one signature algorithm this repo mints. cdd-sow-research registers RS256 or ES256; RS256 is
+#: chosen
 #: because Cloud KMS publishes an RSA public key this module can render as a JWK with no
 #: cryptography dependency, keeping the local profile SDK-free.
 RS256 = "RS256"

@@ -2,9 +2,9 @@
 
 The portal is a host shell: a :class:`Journey` is a persona-scoped ordered set of embedded
 :class:`AppMount` s. Compatibility entries live under ``/apps/<app_id>`` while a portable artifact
-may declare a fixed canonical mount such as Doc1's ``/agent``. :class:`UpstreamResponse` is the
-framework-free result of a reverse-proxied call, and :class:`InjectionPlan` describes how identity
-headers are rewritten as a request crosses into an embedded app.
+may declare a fixed canonical mount such as cdd-sow-research's ``/agent``. :class:`UpstreamResponse`
+is the framework-free result of a reverse-proxied call, and :class:`InjectionPlan` describes how
+identity headers are rewritten as a request crosses into an embedded app.
 """
 
 from __future__ import annotations

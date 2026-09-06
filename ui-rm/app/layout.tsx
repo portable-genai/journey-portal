@@ -10,7 +10,7 @@ const journey = process.env.NEXT_PUBLIC_JOURNEY || "rm";
 
 export const metadata: Metadata = {
   title: `${journey.toUpperCase()} Journey`,
-  description: "Persona journey cockpit (Hrz9 journey portal, React shell).",
+  description: "Persona journey cockpit (journey-portal, React shell).",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

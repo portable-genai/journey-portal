@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate or render the named Hrz9 deployment environment contract."""
+"""Validate or render the named journey-portal deployment environment contract."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-# Hrz9 Journey Portal Shell
+# `journey-portal`
 
 **Compose the built P1 apps into one UI per user.** The Journey Portal is a persona-journey host:
 it drops the catalog's individual agent UIs into a single same-origin surface so a Relationship
@@ -41,9 +41,9 @@ browser ──▶ shell (Next.js rewrites / Angular proxy)  ──▶ BFF ──
 ```
 
 Most embedded apps are built with `NEXT_PUBLIC_BASE_PATH=/apps/<id>` and
-`NEXT_PUBLIC_EMBED=1`. Doc1 instead keeps its portable artifact fixed at `/agent`: Hrz9
+`NEXT_PUBLIC_EMBED=1`. `cdd-sow-research` instead keeps its portable artifact fixed at `/agent`: `journey-portal`
 exposes `/agent/*`, redirects the `/apps/cdd-sow-research` compatibility entry to `/agent/`, and
-reports `/agent/api` to the shell. The launcher selects Doc1's native channel plus
+reports `/agent/api` to the shell. The launcher selects `cdd-sow-research`'s native channel plus
 loopback `local-persona` or hosted IAP identity explicitly. Cross-repo build, proxy,
 asset, API, identity, and RM-journey tests cover this contract.
 
@@ -98,12 +98,12 @@ The shells install and run from their own folders (`ui-rm`, `ui-ops`); each has 
 ```
 src/journey_portal/    the BFF (hexagonal: domain / ports / adapters / api / cli)
   domain/              pure stdlib: journey, identity, tenant-embed, audit-integrity policy,
-                       plus the JOSE encodings, client-assertion minter, CSRF and Doc1 host proof
+                       plus the JOSE encodings, client-assertion minter, CSRF and `cdd-sow-research` host proof
   ports/               one Protocol per external edge, enumerated in ports/__init__.py __all__;
                        identity is the commons port
   adapters/            local | gcp | platform | onprem, one implementation per port per profile
   api/                 proxy routes + tenant security + reviewer-facing policy/audit views,
-                       the published BFF JWK set, and the Doc1 Mode 5 grant routes
+                       the published BFF JWK set, and the `cdd-sow-research` Mode 5 grant routes
 config/journeys.yaml   the journeys (config, not code)
 ui-rm/                 RM Journey shell (React / Next.js)
 ui-ops/                Ops Journey shell (Angular)
@@ -115,14 +115,14 @@ infra/terraform/       complete IAP edge, shells, embedded services and regional
 ```
 
 The production Terraform selects the `platform` profile: every content-free portal access and
-tenant-policy event is sent synchronously to Hrz5 `/v1/audit` with an audience-bound workload
+tenant-policy event is sent synchronously to `agent-observability` `/v1/audit` with an audience-bound workload
 identity token. The payload contains only keyed actor/tenant references and bounded route metadata.
 
 ## Where this sits in the catalog
 
-`Hrz9`, a P1 platform shell. It depends on the apps it composes (`Doc1`, `Doc2`, `Doc3`, `Doc4`,
-`Doc5`, `Rsk1`, `Hrz7`) but they do not depend on it: it is an additive host, so nothing else
-changes. The RM journey includes both onboarding systems: Doc1 CDD/source-of-wealth and Doc5
+`journey-portal`, a P1 platform shell. It depends on the apps it composes (`cdd-sow-research`, `credit-memo-drafting`, `cio-advisory`, `trade-finance-checker`,
+`loan-document-intelligence`, `compliance-advisory`, `human-review-console`) but they do not depend on it: it is an additive host, so nothing else
+changes. The RM journey includes both onboarding systems: `cdd-sow-research` CDD/source-of-wealth and `loan-document-intelligence`
 loan/mortgage document intelligence. It
 is the embeddable-micro-frontend claim made demonstrable. Build standard, conventions, and the
 hexagon are shared with the rest of the catalog (`SPEC.md`, `ARCHITECTURE.md`, `COMPLIANCE.md`).

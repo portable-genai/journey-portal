@@ -1,4 +1,4 @@
-"""Fail-closed loader for a named Hrz9 deployment configuration.
+"""Fail-closed loader for a named journey-portal deployment configuration.
 
 Non-secret deployment values belong in ``.env``. Secret values belong in
 ``.env.secrets``. The loader validates the complete contract before producing
@@ -23,7 +23,8 @@ _DIGEST_IMAGE_RE = re.compile(r"^[^@\s]+@sha256:[0-9a-f]{64}$")
 _AUDIENCE_RE = re.compile(r"^/projects/[0-9]+/global/backendServices/[0-9]+$")
 _CHANNEL_RE = re.compile(r"^projects/[a-z][a-z0-9-]{4,28}[a-z0-9]/notificationChannels/[0-9]+$")
 # ``pending``, ``tbd``, ``todo`` and ``changeme`` are here because the named-deployment dossier
-# uses them as the honest marker for a decision nobody has made yet. Doc1's preflight already
+# uses them as the honest marker for a decision nobody has made yet. cdd-sow-research's preflight
+# already
 # rejects the same set; without them a dossier row could be copied verbatim into `.env` and pass.
 _PLACEHOLDER_MARKERS = (
     "replace_me",
@@ -128,7 +129,8 @@ _OWNER_KEYS = (
 )
 
 SECRET_KEYS = frozenset({"DEPLOY_IAP_OAUTH_CLIENT_SECRET"})
-#: Secret payloads that exist only for a Doc1 Mode 5 registration, so they are demanded only when
+#: Secret payloads that exist only for a cdd-sow-research Mode 5 registration, so they are demanded
+#: only when
 #: one is configured. The BFF SIGNING key is never here: it is a non-exportable Cloud KMS key
 #: version, and the only thing the deployment names is that version.
 MODE5_SECRET_KEYS = frozenset({"PORTAL_SESSION_SIGNING_KEY"})
@@ -189,7 +191,8 @@ REQUIRED_NONSECRET_KEYS = frozenset(
         "EVIDENCE_APPROVER",
     }
 )
-# The Doc1 Mode 5 brokered-grant registration. All-or-nothing rather than required: a portal
+# The cdd-sow-research Mode 5 brokered-grant registration. All-or-nothing rather than required: a
+# portal
 # deployment that fronts no Mode 5 installation has nothing to register, while a HALF-configured
 # registration is exactly the shape that authenticates to the wrong endpoint or under a client
 # nobody reviewed. Naming any one of these therefore demands all of them.
@@ -327,7 +330,7 @@ def _validate_embedded_apps(apps: dict[str, Any]) -> None:
         )
     for app_id, app in apps.items():
         # 63, not 21: the old bound fitted the four-character catalog codes these ids used to
-        # be, so `loan-document-intelligence` was refused the moment ids became repository
+        # be, so loan-document-intelligence was refused the moment ids became repository
         # names. 63 is the label limit the ids must satisfy anyway as Cloud Run service-name
         # components, which is the real constraint. `domain/catalog.py` carries the same bound.
         if not isinstance(app_id, str) or not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,62}", app_id):
@@ -423,7 +426,7 @@ def _validate_mode5_registration(
     env_file: Path,
     secrets_file: Path,
 ) -> None:
-    """A Doc1 Mode 5 registration is complete or absent; a partial one is refused.
+    """A cdd-sow-research Mode 5 registration is complete or absent; a partial one is refused.
 
     Half a registration is worse than none: the portal would hold a service identity while
     pointing at an unreviewed endpoint, or publish a key id nothing signs with. The check is
@@ -436,12 +439,13 @@ def _validate_mode5_registration(
     missing = sorted(MODE5_NONSECRET_KEYS - named)
     if missing:
         raise DeploymentConfigError(
-            f"{env_file} configures a Doc1 Mode 5 registration but leaves these unset: "
+            f"{env_file} configures a cdd-sow-research Mode 5 registration but leaves these unset: "
             f"{', '.join(missing)}. Complete the registration or remove it entirely."
         )
     if not secrets.get("PORTAL_SESSION_SIGNING_KEY", "").strip():
         raise DeploymentConfigError(
-            f"a Doc1 Mode 5 registration requires PORTAL_SESSION_SIGNING_KEY in {secrets_file}: "
+            f"a cdd-sow-research Mode 5 registration requires PORTAL_SESSION_SIGNING_KEY in "
+            f"{secrets_file}: "
             "without it the portal can bind neither a CSRF token nor a session to a grant"
         )
     for key in sorted(MODE5_NONSECRET_KEYS | (MODE5_OPTIONAL_KEYS & values.keys())):
@@ -699,7 +703,7 @@ def load_deployment_config(env_file: Path, secrets_file: Path) -> DeploymentConf
     # portfolio"). Two stacks each creating their own perimeter over the same project is
     # therefore not a merge conflict, it is an API refusal: "A resource can be included in
     # exactly one regular service perimeter." Observed on the first real apply, 2026-08-24,
-    # where the Doc1 stack already had the project inside its perimeter.
+    # where the cdd-sow-research stack already had the project inside its perimeter.
     #
     # So a shared-project deployment names which stack owns the perimeter, rather than every
     # stack asserting one. The safety property is unchanged, because the perimeter still

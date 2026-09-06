@@ -1,22 +1,22 @@
-"""Build the host authorization proof and grant request Doc1's Mode 5 broker validates.
+"""Build the host authorization proof and grant request cdd-sow-research's Mode 5 broker validates.
 
 Pure: every check here is a deterministic function of the request's own provenance headers, the
 reviewed policy and the ALREADY-VERIFIED principal. Nothing a browser can assert becomes part of
 the proof; the browser only supplies the CSRF token it was issued, and that is verified before
 :func:`build_host_proof` is ever reached.
 
-The shape is copied from what Doc1 enforces in ``EmbedBrokerService._validate_host_proof``
-(``cdd-sow-research``, ``src/cdd_sow_research/api/embed.py``):
+The shape is copied from what cdd-sow-research enforces in
+``EmbedBrokerService._validate_host_proof`` (``cdd-sow-research``,
+``src/cdd_sow_research/api/embed.py``):
 
-* ``host_origin`` must be one of the installation's exact parent origins, so the portal compares
-  the browser's ``Origin`` against its own reviewed public origin before emitting it;
-* ``fetch_site`` must be ``same-origin``, so the portal requires the Fetch Metadata header to say
-  so rather than asserting it;
-* ``csrf_verified`` must be true, and the portal sets it only after actually verifying a token;
-* ``session_source_subject`` must equal the subject Doc1 independently derives from the subject
-  token, so the portal emits its VERIFIED principal's subject and nothing else;
-* ``session_binding`` must be a SHA-256 hex digest;
-* ``user_intent_id`` must match ``^[A-Za-z0-9._~:-]{16,256}$``.
+* ``host_origin`` must be one of the installation's exact parent origins, so the portal compares the
+  browser's ``Origin`` against its own reviewed public origin before emitting it; * ``fetch_site``
+  must be ``same-origin``, so the portal requires the Fetch Metadata header to say so rather than
+  asserting it; * ``csrf_verified`` must be true, and the portal sets it only after actually
+  verifying a token; * ``session_source_subject`` must equal the subject cdd-sow-research
+  independently derives from the subject token, so the portal emits its VERIFIED principal's subject
+  and nothing else; * ``session_binding`` must be a SHA-256 hex digest; * ``user_intent_id`` must
+  match ``^[A-Za-z0-9._~:-]{16,256}$``.
 
 The portal enforces the same rules on its own side first. That is deliberate duplication: a
 proof that only the far side checks is a proof the near side can be tricked into signing.
@@ -30,11 +30,12 @@ from typing import Any
 
 from .bff_assertion import CLIENT_ASSERTION_TYPE
 
-#: Doc1's own patterns, restated so a bad value fails here with a legible message.
+#: cdd-sow-research's own patterns, restated so a bad value fails here with a legible message.
 SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
 OPAQUE_BINDING = re.compile(r"^[A-Za-z0-9._~:-]{16,256}$")
 
-#: The RFC 8693 subject token type the reviewed Google installation accepts. Doc1 compares the
+#: The RFC 8693 subject token type the reviewed Google installation accepts. cdd-sow-research
+#: compares the
 #: request against its INSTALLATION policy, so this must match what that installation configured.
 ID_TOKEN_SUBJECT_TYPE = "urn:ietf:params:oauth:token-type:id_token"
 ACCESS_TOKEN_SUBJECT_TYPE = "urn:ietf:params:oauth:token-type:access_token"
@@ -45,7 +46,7 @@ REQUIRED_FETCH_SITE = "same-origin"
 
 
 class BrokerPolicyError(ValueError):
-    """The configured Doc1 broker policy is incomplete, so no grant may be requested."""
+    """The configured cdd-sow-research broker policy is incomplete, so no grant may be requested."""
 
 
 class HostProofRejected(ValueError):
@@ -54,7 +55,9 @@ class HostProofRejected(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class Doc1BrokerPolicy:
-    """The reviewed, deployment-owned facts about the Doc1 installation this portal fronts."""
+    """The reviewed, deployment-owned facts about the cdd-sow-research installation this portal
+    fronts.
+    """
 
     grant_endpoint: str
     installation_id: str
@@ -66,9 +69,9 @@ class Doc1BrokerPolicy:
     def __post_init__(self) -> None:
         for name in ("grant_endpoint", "installation_id", "bff_client_id", "portal_origin"):
             if not str(getattr(self, name)).strip():
-                raise BrokerPolicyError(f"Doc1 broker policy {name} must be configured")
+                raise BrokerPolicyError(f"cdd-sow-research broker policy {name} must be configured")
         if not self.grant_endpoint.startswith(("https://", "http://")):
-            raise BrokerPolicyError("Doc1 grant endpoint must be an absolute URL")
+            raise BrokerPolicyError("cdd-sow-research grant endpoint must be an absolute URL")
         if (
             self.portal_origin != self.portal_origin.rstrip("/")
             or "/" in self.portal_origin.split("//", 1)[-1]
@@ -77,7 +80,9 @@ class Doc1BrokerPolicy:
                 "portal origin must be a bare scheme and host with no path or trailing slash"
             )
         if not self.requested_scopes:
-            raise BrokerPolicyError("Doc1 broker policy must request at least one scope")
+            raise BrokerPolicyError(
+                "cdd-sow-research broker policy must request at least one scope"
+            )
         if len(set(self.requested_scopes)) != len(self.requested_scopes) or any(
             not scope or len(scope) > 128 or any(character.isspace() for character in scope)
             for scope in self.requested_scopes
@@ -89,7 +94,9 @@ class Doc1BrokerPolicy:
 
 @dataclass(frozen=True, slots=True)
 class HostAuthorizationProof:
-    """The evidence Doc1 requires that a real user, in a real session, asked for this."""
+    """The evidence cdd-sow-research requires that a real user, in a real
+    session, asked for this.
+    """
 
     host_origin: str
     fetch_site: str
@@ -132,7 +139,8 @@ def assess_browser_provenance(
     """Refuse anything that is not a same-origin, script-initiated call from the portal itself.
 
     Checked BEFORE any credential is minted and before the broker is called, so a cross-site
-    request never reaches Doc1 and never consumes a JTI. ``Origin`` is compared exactly: a
+    request never reaches cdd-sow-research and never consumes a JTI. ``Origin`` is compared exactly:
+    a
     prefix or suffix comparison would accept ``https://portal.your-institution.example.attacker.example``.
     """
     if origin != policy.portal_origin:
@@ -171,7 +179,7 @@ def build_grant_request(
     client_assertion: str,
     proof: HostAuthorizationProof,
 ) -> dict[str, Any]:
-    """The exact JSON body Doc1's ``POST /v1/embed/grants`` accepts."""
+    """The exact JSON body cdd-sow-research's ``POST /v1/embed/grants`` accepts."""
     if not 22 <= len(instance_id) <= 256:
         raise BrokerPolicyError("embed instance id must be 22 to 256 characters")
     if not subject_token or len(subject_token) > 16384:

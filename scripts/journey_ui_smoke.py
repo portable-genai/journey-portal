@@ -49,7 +49,8 @@ def _check_journey(browser: Any, journey: dict[str, Any], port: int) -> list[str
     failures: list[str] = []
     page = browser.new_page(viewport={"width": 1440, "height": 1000})
     # Every API call this page makes, in order. Each app is judged by whether one of them
-    # names its own mount, which works for both mount shapes (`/apps/<id>/api` and Doc1's
+    # names its own mount, which works for both mount shapes (`/apps/<id>/api` and
+    # cdd-sow-research's
     # `/agent/api`) without the script knowing which is which.
     api_calls: list[str] = []
     page.on(

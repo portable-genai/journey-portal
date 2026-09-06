@@ -209,7 +209,8 @@ def test_unsafe_tenant_policy_fails_at_settings_load(
         Settings.load()
 
 
-# --------------------------------------------------------------------------- Doc1 broker settings
+# --------------------------------------------------------------------------- cdd-sow-research
+# broker settings
 def test_a_chosen_local_profile_gets_the_fictional_doc1_registration(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

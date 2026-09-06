@@ -7,7 +7,7 @@ here. Read it first. This file carries only what is specific to this one.
 
 ## What this is
 
-**Hrz9**, the Journey Portal Shell: a persona-journey host that composes the built P1 app UIs into
+`journey-portal`, the Journey Portal Shell: a persona-journey host that composes the built P1 app UIs into
 one UI per user (an RM Journey and an Ops Journey) via same-origin reverse-proxy embedding. A
 FastAPI **BFF** owns the reverse proxy, the journey config, and the identity trust boundary; two
 thin UI shells consume it in two frameworks on purpose (`ui-rm` React/Next.js, `ui-ops` Angular).

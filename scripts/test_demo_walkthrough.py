@@ -29,7 +29,7 @@ class _FakeLocator:
 
 
 class _FakePage:
-    """A minimal Playwright page stand-in: reports one Doc1 healthz profile."""
+    """A minimal Playwright page stand-in: reports one cdd-sow-research healthz profile."""
 
     def __init__(self, profile: str) -> None:
         self._profile = profile
@@ -330,9 +330,10 @@ class WalkthroughSelectionTests(unittest.TestCase):
             walkthrough.selected_steps("rm", "ops-open")
 
     def test_select_label_patterns_match_the_real_wrapping_label_text(self) -> None:
-        """Doc1 wraps each select in its label, so the label text carries every option.
+        """cdd-sow-research wraps each select in its label, so the label text carries every option.
 
-        These are the exact strings the running Doc1 form produces. An exact match on the
+        These are the exact strings the running cdd-sow-research form produces. An exact match on
+        the
         visible caption ("Type") matches neither, which is what silently broke the CDD
         step; the anchored patterns match their own select and not the other one.
         """
@@ -407,7 +408,8 @@ class WalkthroughSelectionTests(unittest.TestCase):
         self.assertFalse(page.consulted, "a resume past the live steps must not be gated")
 
     def test_preflight_gates_an_ops_run_on_its_apps_live_profiles(self) -> None:
-        # An Ops run carries Doc2/Doc4/Rsk1 steps, which run on real or audience data:
+        # An Ops run carries credit-memo-drafting, trade-finance-checker, compliance-advisory steps,
+        # which run on real or audience data:
         # a non-live stack must fail before the first step.
         page = _FakePage(profile="local")
         with self.assertRaisesRegex(RuntimeError, r"profile 'local'"):
@@ -571,10 +573,13 @@ class HostedWalkthroughTests(unittest.TestCase):
         )
 
     def test_hosted_selection_excludes_apps_the_deployment_does_not_embed(self) -> None:
-        # The Ops journey's apps are not deployed, so a hosted ops run is only the close.
+        # credit-memo-drafting was deployed on 2026-09-05 and is served by the Ops shell, so a
+        # hosted ops run now drives it rather than falling through to the close. The exclusion
+        # this guards is unchanged and still asserted below: a step that is not hosted cannot be
+        # named on a hosted run.
         self.assertEqual(
             [step.id for step in walkthrough.selected_steps("ops", hosted=True)],
-            ["close"],
+            ["ops-open", "ops-credit-memo-drafting-credit-memo", "close"],
         )
         with self.assertRaisesRegex(ValueError, "unknown or excluded step"):
             walkthrough.selected_steps("rm", "rm-cdd-sow-research-flagged", hosted=True)
