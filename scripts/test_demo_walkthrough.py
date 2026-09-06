@@ -573,10 +573,13 @@ class HostedWalkthroughTests(unittest.TestCase):
         )
 
     def test_hosted_selection_excludes_apps_the_deployment_does_not_embed(self) -> None:
-        # The Ops journey's apps are not deployed, so a hosted ops run is only the close.
+        # credit-memo-drafting was deployed on 2026-09-05 and is served by the Ops shell, so a
+        # hosted ops run now drives it rather than falling through to the close. The exclusion
+        # this guards is unchanged and still asserted below: a step that is not hosted cannot be
+        # named on a hosted run.
         self.assertEqual(
             [step.id for step in walkthrough.selected_steps("ops", hosted=True)],
-            ["close"],
+            ["ops-open", "ops-credit-memo-drafting-credit-memo", "close"],
         )
         with self.assertRaisesRegex(ValueError, "unknown or excluded step"):
             walkthrough.selected_steps("rm", "rm-cdd-sow-research-flagged", hosted=True)

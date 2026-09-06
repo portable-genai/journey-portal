@@ -1431,9 +1431,9 @@ STEPS: tuple[Step, ...] = (
         requires_live=("credit-memo-drafting",),
         hosted=True,
         hosted_notes=(
-            "The same credit memo, now drafted on the managed deployment: the borrower's "
+            "The same credit memo, now drafted on the managed deployment. The borrower's "
             "filings are read in the pinned region and the narrative is written by the managed "
-            "model, with every figure still cited back to the public record it came from."
+            "model, and every figure is still cited back to the public record it came from."
         ),
     ),
     Step(
