@@ -722,7 +722,12 @@ _MKT_THEME = "everyday saver, higher rate"
 _MKT_OFFER = "4.10% p.a."
 #: Copy written to fail: an unqualified guarantee, and no risk warning attached.
 _MKT_NONCOMPLIANT_COPY = "Guaranteed 90% returns, risk free, the best savings account in the world."
-_MKT_ACCOUNT = "acct-sg-001"
+# The advertising account the performance report runs on. It must be one the warehouse
+# actually holds: until 2026-09-08 this read "acct-sg-001", which exists in no seed and no
+# BigQuery table, and the step passed anyway because the local metrics adapter ignored the
+# account entirely and returned the same rows for any string. The managed adapter has always
+# filtered on it, so the demo was showing a report the deployment could not produce.
+_MKT_ACCOUNT = "acct-sg-banking"
 #: A customer the recommendation engine actually holds a profile for.
 _MKT_CUSTOMER = "cust-sg-bank-1"
 
@@ -873,6 +878,15 @@ def _mkt_performance(page: Any) -> None:
         timeout=_LIVE_STEP_TIMEOUT_MS
     )
     frame.get_by_role("heading", name="Anomalies").first.wait_for()
+    # And a figure under them. Both headings render on an empty report, so waiting for them
+    # proves the page laid out rather than that anything was measured. The account name is
+    # the cheapest thing only a real result carries: a report for an account the warehouse
+    # does not hold is empty, and an empty one never names it back.
+    body = frame.locator("body").inner_text()
+    if _MKT_ACCOUNT not in body:
+        raise RuntimeError(f"the report does not name {_MKT_ACCOUNT}; it was built on nothing")
+    if "%" not in body:
+        raise RuntimeError("the report shows no rate at all, so nothing was computed")
 
 
 def _mkt_next_best_action(page: Any) -> None:
