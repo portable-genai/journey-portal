@@ -110,6 +110,13 @@ class _FakeConsole:
         return self._loc(hits, f"a {role} named {name!r}")
 
     def locator(self, selector: str) -> _FakeElementList:
+        # "body" is the whole rendered screen, which is what a step reads when it asserts on
+        # a FIGURE rather than on the presence of an element. Several steps do that now,
+        # because a heading renders whether or not anything was computed under it, so the
+        # fake has to model it or those assertions are the ones never exercised here.
+        if selector == "body":
+            joined = "\n".join(el.text for el in self._rendered)
+            return self._loc([_El(joined, tag="body")], "the rendered page")
         hits = [el for el in self._rendered if el.tag == selector]
         return self._loc(hits, f"the element {selector!r}")
 
@@ -144,6 +151,10 @@ class _FakeElementList:
     def click(self) -> None:
         self.wait_for()
         self._console.submit()
+
+    def inner_text(self) -> str:
+        """The matched elements' text, joined. Empty when nothing matched, like Playwright."""
+        return "\n".join(el.text for el in self._matches)
 
     def locator(self, selector: str) -> _FakeElementList:
         if selector != "xpath=../div/b":
@@ -238,12 +249,16 @@ class StepAssertionTests(unittest.TestCase):
             "significance, anomalies), generic across banking and online retail."
         )
         before = [sidebar, _El("", tag="input"), _El("Build cited report", role="button")]
+        # A REAL report: it names the account it was built for and shows computed rates.
         built = _FakeConsole(
             before,
             [
                 sidebar,
+                _El("Report for acct-sg-banking (SG / banking)"),
                 _El("A/B significance", role="heading"),
+                _El("variant B +3.2%, p = 0.04"),
                 _El("Anomalies", role="heading"),
+                _El("CPA up 41% against the trailing mean"),
             ],
         )
 
@@ -256,6 +271,22 @@ class StepAssertionTests(unittest.TestCase):
         with self.assertRaises(_Timeout) as raised:
             _run_step(walkthrough._mkt_performance, nothing)
         self.assertIn("A/B significance", str(raised.exception))
+
+        # And the case the headings alone could never catch: the layout renders, both
+        # headings are present, and the report was built for an account the warehouse does
+        # not hold, so there is nothing under them. This is the shape the step was in until
+        # the account it submitted was one that exists.
+        empty = _FakeConsole(
+            before,
+            [
+                sidebar,
+                _El("A/B significance", role="heading"),
+                _El("Anomalies", role="heading"),
+            ],
+        )
+        with self.assertRaises(RuntimeError) as built_on_nothing:
+            _run_step(walkthrough._mkt_performance, empty)
+        self.assertIn("built on nothing", str(built_on_nothing.exception))
 
     def test_the_architecture_step_fails_when_validation_returns_nothing(self) -> None:
         waiting = _El(
