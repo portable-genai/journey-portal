@@ -1018,6 +1018,50 @@ def _ops_hrz7_self_approval(page: Any) -> None:
         raise RuntimeError("a refused self-approval still resolved the item")
 
 
+def _rm_doc3_portfolio(page: Any) -> None:
+    """The client's portfolio against the allocation their risk profile calls for.
+
+    Shown BEFORE any briefing, and it is not a preamble: this is the panel that makes a
+    recommendation mean something. It also needs no model, so it is the one step of this
+    journey that returns instantly, which is worth saying out loud while it does.
+
+    The figures are asserted rather than admired. A panel that rendered the client's name
+    and no gaps would look almost identical from the back of a room.
+    """
+    _require_live(page, "cio-advisory")
+    _open_shell(page, RM_ORIGIN, "RM Journey")
+    registration = page.evaluate(
+        """async (client) => {
+        const response = await fetch('/apps/cio-advisory/api/v1/clients', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(client),
+        });
+        if (!response.ok) throw new Error(`client registration failed: ${response.status}`);
+        return response.json();
+    }""",
+        _DOC3_DEMO_CLIENT,
+    )
+    if registration.get("client_id") != _DOC3_DEMO_CLIENT["client_id"]:
+        raise RuntimeError(f"unexpected client registration outcome: {registration!r}")
+    frame = _select_tab(page, RM_ORIGIN, "RM Journey", "CIO Advisory Assistant", "cio-advisory")
+    client_id = str(_DOC3_DEMO_CLIENT["client_id"])
+    frame.get_by_placeholder("client-000042").fill(client_id)
+    _inputs_ready("the client whose portfolio is about to be read")
+    # Picking the client loads the summary; no button, because no model call is needed.
+    frame.get_by_role("button", name="Build briefing").wait_for()
+    frame.get_by_text("Portfolio against the client's risk profile", exact=False).wait_for(
+        timeout=_LIVE_STEP_TIMEOUT_MS
+    )
+    # A gap panel that computed nothing would still render its heading, so the assertion is
+    # on a status the engine had to derive from the holdings and the published band.
+    body = frame.locator("body").inner_text()
+    if "Under" not in body and "Over" not in body:
+        raise RuntimeError("the portfolio panel reported no allocation status at all")
+    if "measured against" not in body:
+        raise RuntimeError("the panel does not name the model portfolio it measured against")
+
+
 def _rm_doc3(page: Any) -> None:
     """A real briefing: an audience-registered portfolio against real published research.
 
@@ -1072,6 +1116,13 @@ def _rm_doc3(page: Any) -> None:
     frame.get_by_text("house view", exact=False).first.wait_for()
     if frame.get_by_text("example.test", exact=False).count():
         raise RuntimeError("a briefing cited the fictional corpus instead of real research")
+    # And the briefing is about THIS portfolio, not just grounded in real research. The
+    # report panel sets every theme against the client's holdings, which is the half that
+    # makes the citations worth reading; a briefing that lost it would still pass every
+    # assertion above.
+    body = frame.locator("body").inner_text()
+    if "opportunities and threats for this portfolio" not in body.lower():
+        raise RuntimeError("the briefing did not set the house view against this portfolio")
 
 
 def _rm_approver(page: Any) -> None:
@@ -1375,15 +1426,30 @@ STEPS: tuple[Step, ...] = (
         ),
     ),
     Step(
+        "rm-cio-advisory-portfolio-gaps",
+        "Read the client's portfolio before reading the house view",
+        "Before any research, the manager looks at what this client actually holds against "
+        "the allocation the bank publishes for their risk profile. The shortfalls are "
+        "arithmetic over the holdings and that published target, so they are the same "
+        "numbers on any run and a reviewer can redo them by hand. Nothing has been generated "
+        "yet, which is why this appears instantly: the part that decides what is missing "
+        "from a portfolio is not the part that writes the sentences.",
+        frozenset({"rm"}),
+        _rm_doc3_portfolio,
+        requires_live=("cio-advisory",),
+    ),
+    Step(
         "rm-cio-advisory-briefing",
         "Brief a registered client on real research",
-        "Here the manager registers a client portfolio and asks for a briefing ahead of the next "
-        "conversation. The investment themes come from current market commentary published by "
-        "major institutions, each talking point carries the source it was drawn from, and the "
-        "suitability verdict for this particular portfolio is computed in code. That split is "
-        "deliberate: the institution's knowledge stays in records it can export and inspect, "
-        "rather than being trained into a model's weights, where it could never be audited field "
-        "by field or rebuilt on another provider.",
+        "Now the same portfolio, read against the day's research. The investment themes come "
+        "from current market commentary published by major institutions, each talking point "
+        "carries the source it was drawn from, and each one is set against the gap it would "
+        "close in the portfolio just shown. The suitability verdict for this particular client "
+        "is computed in code, and a gap never overrides it: a theme that would close the "
+        "largest shortfall on screen is still dropped when the policy finds it unsuitable. "
+        "That split is deliberate. The institution's knowledge stays in records it can export "
+        "and inspect, rather than being trained into a model's weights, where it could never "
+        "be audited field by field or rebuilt on another provider.",
         frozenset({"rm"}),
         _rm_doc3,
         requires_live=("cio-advisory",),

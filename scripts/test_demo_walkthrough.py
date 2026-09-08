@@ -306,6 +306,7 @@ class WalkthroughSelectionTests(unittest.TestCase):
                 "rm-cdd-sow-research-cdd",
                 "rm-cdd-sow-research-flagged",
                 "rm-cdd-sow-research-blocked",
+                "rm-cio-advisory-portfolio-gaps",
                 "rm-cio-advisory-briefing",
                 "rm-switch-approver",
                 "close",
@@ -359,6 +360,7 @@ class WalkthroughSelectionTests(unittest.TestCase):
                 "rm-cdd-sow-research-cdd": ("cdd-sow-research",),
                 "rm-cdd-sow-research-flagged": ("cdd-sow-research",),
                 "rm-cdd-sow-research-blocked": ("cdd-sow-research",),
+                "rm-cio-advisory-portfolio-gaps": ("cio-advisory",),
                 "rm-cio-advisory-briefing": ("cio-advisory",),
                 "ops-credit-memo-drafting-credit-memo": ("credit-memo-drafting",),
                 "ops-trade-finance-checker-ucp600": ("trade-finance-checker",),
@@ -548,6 +550,10 @@ class WalkthroughSelectionTests(unittest.TestCase):
         self.assertIn("replace and a model you cannot", notes["ops-trade-finance-checker-ucp600"])
         # Knowledge in exportable records rather than welded into weights.
         self.assertIn("weights", notes["rm-cio-advisory-briefing"])
+        # The gap is arithmetic and the suitability check still outranks it: the two claims
+        # this pair of steps exists to make, picked up where each is actually on screen.
+        self.assertIn("arithmetic", notes["rm-cio-advisory-portfolio-gaps"])
+        self.assertIn("never overrides it", notes["rm-cio-advisory-briefing"])
         self.assertIn("weights", notes["ops-compliance-advisory-compliance"])
         # The index is derived; the source record is what is authoritative.
         self.assertIn(
@@ -651,6 +657,13 @@ class ConfirmInputsTests(unittest.TestCase):
             "ops-compliance-advisory-compliance",
             "ops-human-review-console-review",
         }
+        # The one step that fills a field and submits nothing: reading a portfolio needs no
+        # model call, so there is no button to hold before. It still holds, and the hold is
+        # asserted here rather than being silently out of scope.
+        gaps = inspect.getsource(walkthrough._rm_doc3_portfolio)
+        self.assertIn("_inputs_ready(", gaps)
+        self.assertNotIn('name="Build briefing").click()', gaps)
+
         for step in walkthrough.STEPS:
             if step.id not in submitting:
                 continue
