@@ -1,0 +1,24 @@
+# Scored by: eval/run_eval.py::observability_case_ok over the observability-audit event the portal
+# would emit.
+#
+# Already 1.0, and for the same reason the others now are: an audit record that leaks one
+# tenant's identity into another tenant's telemetry is not a lower-quality record, it is a
+# different kind of incident.
+metric: observability_audit_isolation
+description: >
+  The observability-audit event carries no cross-tenant identity and no raw subject.
+threshold: 1.0
+direction: maximize
+scoring:
+  scale: [0.0, 1.0]
+  pass_if: "score >= threshold"
+denominator:
+  # `all-or-nothing`: the bar is 1.0, so it already asks for no headroom and the denominator rule
+  # (agent_eval_kit.denominators) has nothing to say about it. What DOES matter is that the kind
+  # selects at least one case: `_fraction` scores an empty selection 0.0, never 1.0, and
+  # `_warn_unmeasured` names the metric on stderr so the zero explains itself.
+  kind: all-or-nothing
+  over: golden cases of kind 'observability-audit'
+falsified_by: >
+  tests/unit/test_not_falsely_green.py feeds each shipped predicate a case carrying exactly the
+  defect it exists to catch, and eval/run_eval.py refuses a dataset whose kind no metric scores.

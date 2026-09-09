@@ -31,11 +31,29 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from agent_eval_kit import EvalMetricResult, EvalReport, PromotionGateClient, eval_main
+from agent_eval_kit import (
+    EvalMetricResult,
+    EvalReport,
+    PromotionGateClient,
+    dataset_digest,
+    eval_main,
+    load_rubrics,
+)
 from hex_service_kit.identity import Principal
 from hex_service_kit.netdefaults import read_env_setting
 
 from journey_portal.domain.catalog import JourneyCatalog, api_target, ui_target
+from journey_portal.domain.csrf import (
+    CsrfError,
+    mint_csrf_token,
+    session_binding,
+    verify_csrf_token,
+)
+from journey_portal.domain.doc1_broker import (
+    Doc1BrokerPolicy,
+    HostProofRejected,
+    assess_browser_provenance,
+)
 from journey_portal.domain.embed_policy import TenantEmbedPolicyService
 from journey_portal.domain.errors import JourneyConfigError
 from journey_portal.domain.identity_injection import (
@@ -45,19 +63,24 @@ from journey_portal.domain.identity_injection import (
 from journey_portal.domain.models import AppMount, PortalAccessEvent, TenantEmbedPolicy
 from journey_portal.domain.observability_audit import to_observability_audit_event
 
-THRESHOLDS: dict[str, float] = {
-    "journey_integrity": 0.99,
-    "identity_isolation": 0.99,
-    "routing_correctness": 0.99,
-    "tenant_policy_isolation": 0.99,
-    "observability_audit_isolation": 1.0,
-}
+#: Where every bar lives. Not a dict here: a threshold written as a Python literal carries no
+#: argument, so a reviewer can read that identity isolation must clear 0.99 and cannot read why,
+#: who agreed it, or what moving it would mean. This repository had no rubric directory at all;
+#: it does now, and `agent_eval_kit.load_rubrics` reads it.
+RUBRICS = Path(__file__).resolve().parent / "rubrics"
+THRESHOLDS: dict[str, float] = load_rubrics(RUBRICS).thresholds()
+
+#: The metric bundle the promotion authority registers for this service. Named here so the
+#: documented default is a registered name rather than a plausible-looking one.
+DEFAULT_BUNDLE = "journey-portal"
 
 #: The dataset ``kind`` each metric scores. ``smoke()`` selects a metric's cases by exact kind
 #: string, so this table is the only place the two vocabularies meet, and it is what makes the
 #: two fail-closed checks below possible: a row whose kind names no metric is rejected by
 #: ``_load``, and a metric whose kind selects no row scores 0.0 in ``_fraction``.
 METRIC_KINDS: dict[str, str] = {
+    "csrf_token_integrity": "csrf",
+    "host_proof_integrity": "host-proof",
     "journey_integrity": "config",
     "identity_isolation": "identity",
     "routing_correctness": "routing",
@@ -90,6 +113,81 @@ def _load(dataset: Path) -> list[dict[str, Any]]:
 # --------------------------------------------------------------------------- #
 # Per-case predicates (reused by the not-falsely-green test)
 # --------------------------------------------------------------------------- #
+def csrf_case_ok(case: dict[str, Any]) -> bool:
+    """A CSRF token verifies for exactly the session and action it was minted for.
+
+    Scored through the SHIPPED ``mint_csrf_token`` / ``verify_csrf_token``, never a local
+    re-implementation: a proof against a copy shows the copy works while the gate stays blind.
+
+    The token is one of the two things standing between a hostile page and a grant made in a
+    signed-in user's name, and until now it was covered only by unit tests. A unit test can be
+    deleted in the same commit as the thing it guards.
+    """
+    secret = case["secret"].encode()
+    binding = session_binding(secret, subject=case["subject"], tenant=case["tenant"])
+    minted_binding = (
+        session_binding(secret, subject=case["mint_subject"], tenant=case["mint_tenant"])
+        if case.get("mint_subject")
+        else binding
+    )
+    token = (
+        ""
+        if case.get("token") == "absent"
+        else mint_csrf_token(
+            secret,
+            binding=minted_binding,
+            method=case["mint_method"],
+            path=case["mint_path"],
+            issued_at=case["issued_at"],
+            nonce=case["nonce"],
+        )
+    )
+    if case.get("token") == "tampered" and token:
+        encoded, _, signature = token.partition(".")
+        token = f"{encoded}.{'0' * len(signature)}"
+    try:
+        verify_csrf_token(
+            token,
+            secret,
+            binding=binding,
+            method=case["method"],
+            path=case["path"],
+            now=case["now"],
+        )
+        accepted = True
+    except CsrfError:
+        accepted = False
+    return accepted is bool(case["accept"])
+
+
+def host_proof_case_ok(case: dict[str, Any]) -> bool:
+    """Only an exact same-origin script call from the reviewed origin is accepted.
+
+    Scored through the SHIPPED ``assess_browser_provenance``. The refusals are the interesting
+    half: a look-alike origin, an unlabelled fetch site, a same-site rather than same-origin
+    call, and a navigation or document request are each a real way this check has been got wrong.
+    """
+    policy = Doc1BrokerPolicy(
+        grant_endpoint=case["grant_endpoint"],
+        installation_id=case["installation_id"],
+        bff_client_id=case["bff_client_id"],
+        portal_origin=case["portal_origin"],
+        requested_scopes=tuple(case["requested_scopes"]),
+    )
+    try:
+        assess_browser_provenance(
+            policy,
+            origin=case["origin"],
+            fetch_site=case["fetch_site"],
+            fetch_mode=case.get("fetch_mode", ""),
+            fetch_dest=case.get("fetch_dest", ""),
+        )
+        accepted = True
+    except HostProofRejected:
+        accepted = False
+    return accepted is bool(case["accept"])
+
+
 def config_case_ok(case: dict[str, Any]) -> bool:
     """The builder's accept/reject verdict matches the golden ``valid`` flag."""
     try:
@@ -213,6 +311,9 @@ def _warn_unmeasured(cases: list[dict[str, Any]]) -> None:
 
 
 def smoke(dataset: Path) -> EvalReport:
+    # The rubrics and the scored set must agree in BOTH directions before anything is scored.
+    # This repository had no rubric directory at all, so every bar was an unlabelled constant.
+    load_rubrics(RUBRICS).assert_covers(METRIC_KINDS)
     cases = _load(dataset)
     _warn_unmeasured(cases)
     config = [config_case_ok(c) for c in cases if c["kind"] == "config"]
@@ -224,6 +325,8 @@ def smoke(dataset: Path) -> EvalReport:
     observability_audit = [
         observability_case_ok(c) for c in cases if c["kind"] == "observability-audit"
     ]
+    csrf = [csrf_case_ok(c) for c in cases if c["kind"] == "csrf"]
+    host_proof = [host_proof_case_ok(c) for c in cases if c["kind"] == "host-proof"]
     results = (
         EvalMetricResult.scored(
             "journey_integrity", _fraction(config), THRESHOLDS["journey_integrity"]
@@ -244,8 +347,20 @@ def smoke(dataset: Path) -> EvalReport:
             _fraction(observability_audit),
             THRESHOLDS["observability_audit_isolation"],
         ),
+        EvalMetricResult.scored(
+            "csrf_token_integrity", _fraction(csrf), THRESHOLDS["csrf_token_integrity"]
+        ),
+        EvalMetricResult.scored(
+            "host_proof_integrity", _fraction(host_proof), THRESHOLDS["host_proof_integrity"]
+        ),
     )
-    return EvalReport(dataset=str(dataset), results=results, n_examples=len(cases))
+    return EvalReport(
+        dataset=str(dataset),
+        results=results,
+        n_examples=len(cases),
+        dataset_digest=dataset_digest(dataset),
+        evaluator="offline deterministic invariants (no cloud creds)",
+    )
 
 
 def gate(dataset: Path) -> tuple[EvalReport, bool]:
@@ -262,7 +377,11 @@ def gate(dataset: Path) -> tuple[EvalReport, bool]:
         )
     client = PromotionGateClient(
         base_url=gate_url.value,
-        bundle=bundle.value or "local",
+        # The DOCUMENTED default is the bundle the authority registers for this service. It used
+        # to be "local", which the authority does not register at all, so an unset PORTAL_BUNDLE_ID
+        # sent a name that fails closed on UnknownMetricError: not a loose gate, no gate. Nothing
+        # reported it, because the offline smoke path never touches this line.
+        bundle=bundle.value or DEFAULT_BUNDLE,
         model=model.value or "deterministic-portal-core",
     )
     report = client.evaluate(str(dataset))

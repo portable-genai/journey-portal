@@ -1,0 +1,29 @@
+# Scored by: eval/run_eval.py::identity_case_ok over the headers the portal would actually forward
+# upstream, built by the shipped `build_injection_plan` and `sanitize_request_headers`.
+#
+# Two halves, and the second is the one that matters. The injected identity must be present with
+# the exact value a reviewer expects, AND no forbidden value may survive: a spoofed inbound header
+# that the portal forwards is an upstream service trusting the caller's own claim about who they
+# are. A check that only asserted presence would pass while the spoof went through.
+#
+# 1.0, raised from 0.99: a per-case check over four cases, where a 0.99 bar passed only at four
+# out of four. A trust boundary that holds 99% of the time is a boundary with a hole in it.
+metric: identity_isolation
+description: >
+  The identity the portal forwards upstream is the one it verified, and no spoofed inbound header
+  survives sanitisation.
+threshold: 1.0
+direction: maximize
+scoring:
+  scale: [0.0, 1.0]
+  pass_if: "score >= threshold"
+denominator:
+  # `all-or-nothing`: the bar is 1.0, so it already asks for no headroom and the denominator rule
+  # (agent_eval_kit.denominators) has nothing to say about it. What DOES matter is that the kind
+  # selects at least one case: `_fraction` scores an empty selection 0.0, never 1.0, and
+  # `_warn_unmeasured` names the metric on stderr so the zero explains itself.
+  kind: all-or-nothing
+  over: golden cases of kind 'identity'
+falsified_by: >
+  tests/unit/test_not_falsely_green.py feeds each shipped predicate a case carrying exactly the
+  defect it exists to catch, and eval/run_eval.py refuses a dataset whose kind no metric scores.
