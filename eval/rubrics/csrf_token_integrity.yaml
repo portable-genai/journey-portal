@@ -1,0 +1,33 @@
+# Scored by: eval/run_eval.py::csrf_case_ok through the SHIPPED `mint_csrf_token` and
+# `verify_csrf_token`, against each golden case's own `accept` flag.
+#
+# Why this metric is new. The CSRF token is one of the two things standing between a hostile page
+# and a grant made in a signed-in user's name, and it was covered only by unit tests. A unit test
+# can be deleted in the same commit as the thing it guards, and a promotion that regressed this
+# should not be certifiable. The eval harness in this repository already scores deterministic
+# security invariants, which makes this exactly the kind of thing it is for.
+#
+# The corpus carries both directions deliberately. A token that verifies for the session and
+# action it was minted for must be ACCEPTED, and one from another session, for another action,
+# expired, tampered with, or absent must be REFUSED. A one-directional corpus would certify a
+# verifier that accepts everything or one that accepts nothing.
+metric: csrf_token_integrity
+description: >
+  A CSRF token verifies for exactly the session and action it was minted for, and is refused when
+  it comes from another session, names another action, has expired, was tampered with, or is
+  absent.
+threshold: 1.0
+direction: maximize
+scoring:
+  scale: [0.0, 1.0]
+  pass_if: "score >= threshold"
+denominator:
+  # `all-or-nothing`: the bar is 1.0, so it already asks for no headroom and the denominator rule
+  # (agent_eval_kit.denominators) has nothing to say about it. What DOES matter is that the kind
+  # selects at least one case: `_fraction` scores an empty selection 0.0, never 1.0, and
+  # `_warn_unmeasured` names the metric on stderr so the zero explains itself.
+  kind: all-or-nothing
+  over: golden cases of kind 'csrf'
+falsified_by: >
+  tests/unit/test_not_falsely_green.py feeds each shipped predicate a case carrying exactly the
+  defect it exists to catch, and eval/run_eval.py refuses a dataset whose kind no metric scores.

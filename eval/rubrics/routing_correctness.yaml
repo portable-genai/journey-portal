@@ -1,0 +1,26 @@
+# Scored by: eval/run_eval.py::routing_case_ok against the exact upstream target a reviewer wrote
+# down for each mount and argument.
+#
+# 1.0, raised from 0.99: a per-case exact-match check over four cases, where a 0.99 bar passed
+# only at four out of four. Routing is a lookup; there is no sampling here for a rate to describe,
+# and a portal that routes a request to the wrong tenant's application once in a hundred is not a
+# portal with a good score.
+metric: routing_correctness
+description: >
+  The API and UI targets the portal derives for a mounted application are exactly the ones the
+  golden case names.
+threshold: 1.0
+direction: maximize
+scoring:
+  scale: [0.0, 1.0]
+  pass_if: "score >= threshold"
+denominator:
+  # `all-or-nothing`: the bar is 1.0, so it already asks for no headroom and the denominator rule
+  # (agent_eval_kit.denominators) has nothing to say about it. What DOES matter is that the kind
+  # selects at least one case: `_fraction` scores an empty selection 0.0, never 1.0, and
+  # `_warn_unmeasured` names the metric on stderr so the zero explains itself.
+  kind: all-or-nothing
+  over: golden cases of kind 'routing'
+falsified_by: >
+  tests/unit/test_not_falsely_green.py feeds each shipped predicate a case carrying exactly the
+  defect it exists to catch, and eval/run_eval.py refuses a dataset whose kind no metric scores.

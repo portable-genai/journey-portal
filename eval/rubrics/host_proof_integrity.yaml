@@ -1,0 +1,30 @@
+# Scored by: eval/run_eval.py::host_proof_case_ok through the SHIPPED `assess_browser_provenance`,
+# against each golden case's own `accept` flag.
+#
+# Why this metric is new. Browser provenance is the other half of the pair above: it is what
+# distinguishes a script call from the portal's own origin from a navigation a hostile page
+# caused. It was covered only by unit tests, for the same reasons and with the same consequence.
+#
+# The corpus carries both directions, and the refusals are the interesting half: a look-alike
+# origin (`portal.example.attacker.test`), an unlabelled fetch site, a same-site rather than
+# same-origin call, and a navigation or document request. Each is a real way the check has been
+# got wrong elsewhere.
+metric: host_proof_integrity
+description: >
+  Only an exact same-origin script call from the reviewed origin is accepted; a look-alike origin,
+  a cross-site or unlabelled call, and a navigation or document request are all refused.
+threshold: 1.0
+direction: maximize
+scoring:
+  scale: [0.0, 1.0]
+  pass_if: "score >= threshold"
+denominator:
+  # `all-or-nothing`: the bar is 1.0, so it already asks for no headroom and the denominator rule
+  # (agent_eval_kit.denominators) has nothing to say about it. What DOES matter is that the kind
+  # selects at least one case: `_fraction` scores an empty selection 0.0, never 1.0, and
+  # `_warn_unmeasured` names the metric on stderr so the zero explains itself.
+  kind: all-or-nothing
+  over: golden cases of kind 'host-proof'
+falsified_by: >
+  tests/unit/test_not_falsely_green.py feeds each shipped predicate a case carrying exactly the
+  defect it exists to catch, and eval/run_eval.py refuses a dataset whose kind no metric scores.

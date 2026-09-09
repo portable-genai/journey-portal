@@ -49,8 +49,14 @@ test: ## Offline pytest suite (local profile).
 eval: ## Offline evaluation gate (smoke; exit non-zero on fail).
 	$(PY) eval/run_eval.py
 
+evals-doc: ## Regenerate docs/evals.md from the rubrics and the golden set.
+	$(PY) scripts/render_evals_doc.py
+
+evals-doc-check: ## Fail when docs/evals.md and the artifacts it describes disagree.
+	$(PY) scripts/render_evals_doc.py --check
+
 # The full offline hard gate (what CI runs).
-check: lint typecheck test eval ## Lint + typecheck + test + eval.
+check: lint typecheck test eval evals-doc-check ## Lint + typecheck + test + eval + the generated page.
 
 run-api: ## Serve the portal BFF locally (loopback, local profile).
 	uvicorn journey_portal.api.app:app --host $(API_HOST) --port $(PORT) --reload
