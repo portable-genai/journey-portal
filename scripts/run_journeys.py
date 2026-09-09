@@ -63,7 +63,7 @@ _WORKSPACE = _REPO_ROOT.parent
 #: Journey key -> the port its shell serves on. The React shell in `ui-rm` renders whichever
 #: journey it is told to, so every journey but `ops` (which keeps its own Angular shell, to
 #: prove two front-end stacks against one portal contract) is served by that one codebase.
-_SHELL_PORTS: dict[str, int] = {"rm": 3000, "mkt": 3001, "gov": 3002, "svc": 3003}
+_SHELL_PORTS: dict[str, int] = {"rm": 3000, "mkt": 3001, "gov": 3002, "svc": 3003, "risk": 3004}
 _OPS_SHELL_PORT = 4200
 _SHELL_ORIGINS = " ".join(
     f"http://localhost:{port}" for port in (*_SHELL_PORTS.values(), _OPS_SHELL_PORT)
@@ -188,6 +188,10 @@ _APP_REPOS: dict[str, str] = {
     "architecture-validator": "architecture-validator",
     "model-quality-gate": "model-quality-gate",
     "complaints-review": "complaints-review",
+    "credit-portfolio-early-warning": "credit-portfolio-early-warning",
+    "soc-fraud-fusion": "soc-fraud-fusion",
+    "control-room-handover": "control-room-handover",
+    "issue-remediation-capa": "issue-remediation-capa",
 }
 
 # app id -> the environment variable that app reads its profile from.
@@ -214,6 +218,10 @@ _APP_PROFILE_ENVS: dict[str, str] = {
     "performance-marketing-optimisation": "MKT_PERF_PROFILE",
     "next-best-action": "MKT_NBA_PROFILE",
     "marketing-compliance-gate": "MKT_GOV_PROFILE",
+    "credit-portfolio-early-warning": "CREDITEWS_PROFILE",
+    "soc-fraud-fusion": "FRAUDFUSION_PROFILE",
+    "control-room-handover": "CONTROLROOM_PROFILE",
+    "issue-remediation-capa": "CAPA_PROFILE",
 }
 
 
@@ -986,7 +994,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--journey",
-        choices=("rm", "ops", "mkt", "gov", "svc"),
+        choices=("rm", "ops", "mkt", "gov", "svc", "risk"),
         help="Launch only one journey's embedded apps and matching shell.",
     )
     parser.add_argument(

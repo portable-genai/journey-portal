@@ -31,6 +31,10 @@ journeys:
     label: "Service Journeys"
     blurb: "Complaints Handler Workbench: Intake, Outcome Assessment & Review"
     apps: [complaints-review, compliance-advisory, human-review-console]
+  risk:
+    label: "Risk & Control Journeys"
+    blurb: "Second-Line Workbench: Portfolio Early Warning, Fraud Fusion, Shift Handover, Issue Remediation & Review"
+    apps: [credit-portfolio-early-warning, soc-fraud-fusion, control-room-handover, issue-remediation-capa, human-review-console]
 
 apps:
   cdd-sow-research:
@@ -100,3 +104,23 @@ apps:
     label: "Complaints Review"
     ui_upstream: "${PORTAL_COMPLAINTS_REVIEW_UI:-http://127.0.0.1:3118}"
     api_upstream: "${PORTAL_COMPLAINTS_REVIEW_API:-http://127.0.0.1:8095}"
+  # The second-line family. Unlike the marketing one these four repositories all default to the
+  # template's own :8099, so they cannot be launched side by side on their own defaults: the
+  # portal assigns 8106 to 8109 and the launcher passes each as --port. Their UI ports continue
+  # the 31xx sequence.
+  credit-portfolio-early-warning:
+    label: "Credit Portfolio Early Warning"
+    ui_upstream: "${PORTAL_CREDIT_PORTFOLIO_EARLY_WARNING_UI:-http://127.0.0.1:3119}"
+    api_upstream: "${PORTAL_CREDIT_PORTFOLIO_EARLY_WARNING_API:-http://127.0.0.1:8106}"
+  soc-fraud-fusion:
+    label: "SOC / Fraud Fusion"
+    ui_upstream: "${PORTAL_SOC_FRAUD_FUSION_UI:-http://127.0.0.1:3120}"
+    api_upstream: "${PORTAL_SOC_FRAUD_FUSION_API:-http://127.0.0.1:8107}"
+  control-room-handover:
+    label: "Control-Room Handover"
+    ui_upstream: "${PORTAL_CONTROL_ROOM_HANDOVER_UI:-http://127.0.0.1:3121}"
+    api_upstream: "${PORTAL_CONTROL_ROOM_HANDOVER_API:-http://127.0.0.1:8108}"
+  issue-remediation-capa:
+    label: "Issue Remediation & CAPA"
+    ui_upstream: "${PORTAL_ISSUE_REMEDIATION_CAPA_UI:-http://127.0.0.1:3122}"
+    api_upstream: "${PORTAL_ISSUE_REMEDIATION_CAPA_API:-http://127.0.0.1:8109}"

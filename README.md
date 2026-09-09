@@ -26,6 +26,10 @@ UI repo but nothing in the workspace actually hosted one app inside another. Thi
 - A **launcher** (`scripts/run_journeys.py`) that brings the whole thing up: every embedded app's
   backend and UI, the BFF, and both shells, with one command.
 
+Six journeys ship today: `rm`, `ops`, `mkt`, `gov`, `svc` and `risk` (the second line: portfolio
+early warning, fraud fusion, the shift handover and issue remediation, ending in the same review
+console the other three persona workbenches end in).
+
 Journeys are **config, not code** (`config/journeys.yaml`): which apps compose into which journey,
 and where each app's UI and backend live.
 
