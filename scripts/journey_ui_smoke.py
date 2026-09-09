@@ -25,7 +25,14 @@ from urllib.error import URLError
 from urllib.request import urlopen
 
 # Journey key -> the shell port serving it. Mirrors run_journeys._SHELL_PORTS plus ops.
-_SHELL_PORTS: dict[str, int] = {"rm": 3000, "ops": 4200, "mkt": 3001, "gov": 3002, "svc": 3003}
+_SHELL_PORTS: dict[str, int] = {
+    "rm": 3000,
+    "ops": 4200,
+    "mkt": 3001,
+    "gov": 3002,
+    "svc": 3003,
+    "risk": 3004,
+}
 # How long one console gets to make its first call. A cold `next dev` route compiles on the
 # first request, which on a laptop is seconds rather than milliseconds.
 _APP_TIMEOUT_MS = 90_000

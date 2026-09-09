@@ -55,7 +55,7 @@ def test_the_versioned_readiness_path_needs_no_tenant_session(client: TestClient
 
 def test_journeys_feed(client: TestClient) -> None:
     journeys = {j["key"]: j for j in client.get("/v1/journeys").json()["journeys"]}
-    assert set(journeys) == {"rm", "ops", "mkt", "gov", "svc"}
+    assert set(journeys) == {"rm", "ops", "mkt", "gov", "svc", "risk"}
     rm_apps = [a["id"] for a in journeys["rm"]["apps"]]
     ops_apps = [a["id"] for a in journeys["ops"]["apps"]]
     assert rm_apps == ["cdd-sow-research", "loan-document-intelligence", "cio-advisory"]
@@ -84,6 +84,13 @@ def test_journeys_feed(client: TestClient) -> None:
     assert [a["id"] for a in journeys["svc"]["apps"]] == [
         "complaints-review",
         "compliance-advisory",
+        "human-review-console",
+    ]
+    assert [a["id"] for a in journeys["risk"]["apps"]] == [
+        "credit-portfolio-early-warning",
+        "soc-fraud-fusion",
+        "control-room-handover",
+        "issue-remediation-capa",
         "human-review-console",
     ]
     # An app appearing in two journeys is mounted once, so its route cannot diverge.

@@ -124,10 +124,12 @@ _HOSTED_PROFILE_HINT = (
 MKT_ORIGIN = "http://localhost:3001"
 GOV_ORIGIN = "http://localhost:3002"
 SVC_ORIGIN = "http://localhost:3003"
+RISK_ORIGIN = "http://localhost:3004"
 _JOURNEY_SHELLS: dict[str, tuple[str, str]] = {
     "mkt": (MKT_ORIGIN, "Marketing Journeys"),
     "gov": (GOV_ORIGIN, "AI Governance Journeys"),
     "svc": (SVC_ORIGIN, "Service Journeys"),
+    "risk": (RISK_ORIGIN, "Risk & Control Journeys"),
 }
 
 # Which shell origin proxies each profile-checked app (healthz goes through the shell).
@@ -146,6 +148,10 @@ _APP_ORIGINS: dict[str, tuple[str, str]] = {
     "architecture-validator": (GOV_ORIGIN, "AI Governance Journeys"),
     "model-quality-gate": (GOV_ORIGIN, "AI Governance Journeys"),
     "complaints-review": (SVC_ORIGIN, "Service Journeys"),
+    "credit-portfolio-early-warning": (RISK_ORIGIN, "Risk & Control Journeys"),
+    "soc-fraud-fusion": (RISK_ORIGIN, "Risk & Control Journeys"),
+    "control-room-handover": (RISK_ORIGIN, "Risk & Control Journeys"),
+    "issue-remediation-capa": (RISK_ORIGIN, "Risk & Control Journeys"),
 }
 # The audience-registered demo client cio-advisory's briefing runs on (opaque id, never PII).
 _DOC3_DEMO_CLIENT = {
@@ -982,6 +988,95 @@ def _svc_rules(page: Any) -> None:
     frame.get_by_text("Grounded answer", exact=False).first.wait_for(timeout=_LIVE_STEP_TIMEOUT_MS)
 
 
+# --------------------------------------------------------------------------------------- #
+# The second line: portfolio early warning, fraud fusion, the shift handover, the issue
+# --------------------------------------------------------------------------------------- #
+#: The obligor whose arrears floor, and not its composite, sets the grade. Named rather than
+#: defaulted, because the whole point of the step is a figure the audience can check.
+_RISK_OBLIGOR = "obl-delta-004"
+#: The alert scope the fused incident is built from. Another tenant owns a row inside it.
+_RISK_SCOPE = "ato-acme"
+#: The date the shipped handover book is written against. NOT today's: the window ends at the
+#: date the handover is for, and a wall clock would read an empty warehouse.
+_RISK_AS_OF = "2026-08-07"
+
+
+def _risk_open(page: Any) -> None:
+    _open_journey(page, "risk")
+
+
+def _risk_early_warning(page: Any) -> None:
+    """Review one obligor: the floor overrides the composite, and the figures are cited."""
+    _require_profile(page, "credit-portfolio-early-warning", _PORTAL_FIXTURE_PROFILE)
+    frame = _select_journey_tab(
+        page, "risk", "Credit Portfolio Early Warning", "credit-portfolio-early-warning"
+    )
+    obligor = frame.get_by_label("Obligor", exact=False).first
+    obligor.fill(_RISK_OBLIGOR)
+    _inputs_ready(f"the obligor under review ({_RISK_OBLIGOR})")
+    frame.get_by_role("button", name="Review this obligor", exact=True).click()
+    frame.get_by_text("Proposal", exact=False).first.wait_for(timeout=_LIVE_STEP_TIMEOUT_MS)
+    # A FIGURE, not a heading: a heading renders whether or not anything was computed. The
+    # composite score is the number the whole engine exists to produce.
+    frame.get_by_text("composite", exact=False).first.wait_for()
+    frame.get_by_text(_RISK_OBLIGOR, exact=False).first.wait_for()
+
+
+def _risk_fraud_fusion(page: Any) -> None:
+    """Fuse one incident, and see that the other tenant's alert in the same scope is absent."""
+    _require_profile(page, "soc-fraud-fusion", _PORTAL_FIXTURE_PROFILE)
+    frame = _select_journey_tab(page, "risk", "SOC / Fraud Fusion", "soc-fraud-fusion")
+    scope = frame.get_by_label("Scope", exact=False).first
+    scope.fill(_RISK_SCOPE)
+    _inputs_ready(f"the alert scope to fuse ({_RISK_SCOPE})")
+    frame.get_by_role("button", name="Fuse this incident", exact=True).click()
+    frame.get_by_text("severity", exact=False).first.wait_for(timeout=_LIVE_STEP_TIMEOUT_MS)
+    # The alert ids the incident was correlated from, which is where the tenant filter shows.
+    frame.get_by_text("A-1001", exact=False).first.wait_for()
+    body = frame.locator("pre.result").first.inner_text()
+    if "A-9001" in body:
+        raise RuntimeError(
+            "the fused incident carries another tenant's alert (A-9001). The scope is a label, "
+            "not an entitlement, and the feed must filter on the verified principal's tenant."
+        )
+
+
+def _risk_handover(page: Any) -> None:
+    """Build a shift handover for the date it is FOR, not for today."""
+    _require_profile(page, "control-room-handover", _PORTAL_FIXTURE_PROFILE)
+    frame = _select_journey_tab(page, "risk", "Control-Room Handover", "control-room-handover")
+    as_of = frame.get_by_label("As of", exact=False).first
+    as_of.fill(_RISK_AS_OF)
+    _inputs_ready(f"the shift the handover is for ({_RISK_AS_OF})")
+    frame.get_by_role("button", name="Build handover", exact=True).click()
+    frame.get_by_text("scorecard", exact=False).first.wait_for(timeout=_LIVE_STEP_TIMEOUT_MS)
+    # The window is measured from the requested date, so the queue depth is a real figure and
+    # not the empty scorecard a wall-clock window would have produced.
+    frame.get_by_text("queue_depth", exact=False).first.wait_for()
+    body = frame.locator("pre.result").first.inner_text()
+    if '"snapshots": []' in body or '"total_queue_depth": 0' in body:
+        raise RuntimeError(
+            "the handover is empty. The window must end at the requested as-of; measured from "
+            "a wall clock it reads past the end of the book and reports nothing."
+        )
+
+
+def _risk_issue(page: Any) -> None:
+    """Triage one issue, and see the malformed intake records dropped rather than defaulted."""
+    _require_profile(page, "issue-remediation-capa", _PORTAL_FIXTURE_PROFILE)
+    frame = _select_journey_tab(page, "risk", "Issue Remediation & CAPA", "issue-remediation-capa")
+    _inputs_ready("the issue register, drawn from five source feeds")
+    frame.get_by_role("button", name="Triage this case", exact=True).click()
+    frame.get_by_text("severity", exact=False).first.wait_for(timeout=_LIVE_STEP_TIMEOUT_MS)
+    body = frame.locator("pre.result").first.inner_text()
+    for dropped in ("F-2026-013", "C-5502"):
+        if dropped in body:
+            raise RuntimeError(
+                f"the malformed intake record {dropped} was admitted. A record missing a "
+                "required field must be DROPPED, never admitted on a default."
+            )
+
+
 def _persona_close(page: Any) -> None:
     page.bring_to_front()
 
@@ -1715,6 +1810,70 @@ STEPS: tuple[Step, ...] = (
         requires_fixture=("compliance-advisory",),
     ),
     Step(
+        "risk-open",
+        "Open the second-line workbench",
+        "A fourth persona: the risk and control officer who has to answer for what the first "
+        "line did. Four capabilities on one workbench, each with its own store and its own "
+        "release, and the same review console the other three journeys end in. Nothing here was "
+        "built for this workbench; it is four existing systems composed into one surface by a "
+        "line of configuration.",
+        frozenset({"risk"}),
+        _risk_open,
+    ),
+    Step(
+        "risk-early-warning",
+        "Grade an obligor, and see which rule set the grade",
+        "The engine reads a spread window and an arrears snapshot and proposes a watch grade. "
+        "The number to watch is the composite score beside the floor: for this borrower the "
+        "arrears floor overrides the composite, so the grade is not the one the score alone "
+        "would give. That distinction is arithmetic in plain code, not a model's opinion, and "
+        "every figure carries the warehouse row it came from. The same rows are in BigQuery on "
+        "the deployment and in an embedded database here, loaded from one set of files, so what "
+        "you are watching is what a deployment computes.",
+        frozenset({"risk"}),
+        _risk_early_warning,
+        requires_fixture=("credit-portfolio-early-warning",),
+    ),
+    Step(
+        "risk-fraud-fusion",
+        "Fuse an incident, and watch a tenant boundary hold",
+        "Five raw alerts correlate into one incident with ATT&CK techniques the engine maps "
+        "deterministically. Then look at what is NOT in it. Another institution owns an alert "
+        "inside this very scope, and a scope name is a label rather than an entitlement, so the "
+        "feed matches every row's data tag against the verified principal and returns nothing "
+        "else. This step fails if that row appears, which is the only way to demonstrate an "
+        "authorisation control: by showing the thing it withholds.",
+        frozenset({"risk"}),
+        _risk_fraud_fusion,
+        requires_fixture=("soc-fraud-fusion",),
+    ),
+    Step(
+        "risk-handover",
+        "Build a shift handover for the shift it is for",
+        "A control room hands over on a date, and this pack is built for that date rather than "
+        "for the moment somebody pressed the button. The window ends at the shift being handed "
+        "over and reaches back from it, so a pack rebuilt tomorrow for the same shift is the "
+        "same pack. Every derived number, the SLA breach rate and the drain ratio, is computed "
+        "in code from the feeds' own published exports, and the brief is routed for the "
+        "incoming lead's sign-off rather than filed as done.",
+        frozenset({"risk"}),
+        _risk_handover,
+        requires_fixture=("control-room-handover",),
+    ),
+    Step(
+        "risk-issue",
+        "Triage an issue, and watch two records refused",
+        "The register draws from five different source feeds, each publishing its own record "
+        "shape. Two of the records it was offered are malformed: one names a severity that does "
+        "not exist, one has no summary. They are DROPPED rather than admitted on a default, "
+        "because an issue admitted on a default is an issue nobody can act on that still counts "
+        "as open. What reaches the register is seven records, each traceable to the feed row "
+        "behind it, with a deadline computed in business days against the firm's own calendar.",
+        frozenset({"risk"}),
+        _risk_issue,
+        requires_fixture=("issue-remediation-capa",),
+    ),
+    Step(
         "persona-close",
         "Close on what stayed the same",
         "To close, notice what did not change across everything you have just watched. The "
@@ -1725,7 +1884,7 @@ STEPS: tuple[Step, ...] = (
         "surface for one person cost a line of configuration rather than an integration project. "
         "Those three properties are what let an institution add a team's workbench in an "
         "afternoon and still answer for every decision made on it.",
-        frozenset({"mkt", "gov", "svc"}),
+        frozenset({"mkt", "gov", "svc", "risk"}),
         _persona_close,
     ),
     Step(

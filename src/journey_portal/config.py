@@ -150,10 +150,12 @@ _DEFAULT_DOC1_SCOPES = ("cdd.embed", "cdd.read")
 # whose origin is missing here is refused by the tenant embedding policy, and the refusal
 # reaches the browser as a 403 on the embedded app's own assets rather than as a message
 # about origins, so the app renders its chrome and then reports its backend unreachable.
-# Ports: rm 3000, mkt 3001, gov 3002, svc 3003, ops 4200 (see scripts/run_journeys.py).
+# Ports: rm 3000, mkt 3001, gov 3002, svc 3003, risk 3004, ops 4200 (see
+# scripts/run_journeys.py). A journey whose shell port is missing here is a shell the BFF
+# refuses, which is the right failure and an unhelpful one to meet for the first time in a demo.
 _LOCAL_CORS_ORIGINS = tuple(
     f"http://{host}:{port}"
-    for port in (3000, 3001, 3002, 3003, 4200)
+    for port in (3000, 3001, 3002, 3003, 3004, 4200)
     for host in ("localhost", "127.0.0.1")
 )
 
