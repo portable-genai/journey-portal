@@ -41,32 +41,33 @@ _PLACEHOLDER_MARKERS = (
     ">",
     ".example.test",
 )
-# Every journey app id this portal knows how to mount. It is a VOCABULARY, not a shipping
-# list: a deployment names the subset it actually serves, and an id outside this set is a
-# typo rather than a new product.
+# Every journey app id this deployment can mount, with the two variables Terraform owns in its
+# API container: the profile the app reads (a deployment must set it to a managed profile) and
+# the IAP audience Terraform injects. It is a VOCABULARY, not a shipping list: a deployment
+# names the subset it actually serves.
 #
-# This was previously "exactly these seven", enforced on every deployment. That coupled seven
-# independently-released repositories into one atomic deployment: the portal could not be
-# stood up until all seven verticals were simultaneously deployable, and any one of them
-# lagging blocked the other six. It also made a single-journey installation — a bank
-# licensing one vertical — inexpressible, which is the opposite of the incremental adoption
-# this architecture argues for everywhere else.
+# The known ids are DERIVED from this map. They used to be a separate list, and in Terraform that
+# list grew to sixteen ids while the profile map beside it kept seven, so nine apps passed the id
+# check and failed the profile check by construction. An app is deployable when it has an entry
+# here and in `local.embedded_app_managed_env` (infra/terraform/embedded_apps.tf).
+# tests/test_terraform_source_contract.py fails when the two disagree.
 #
-# The safety properties that rule was carrying are kept, and they are the ones that matter:
-# the set may not be empty, every id must be known, every app must be complete and pinned to
-# an immutable digest, and the rollback map must cover exactly what is being deployed. What
-# is dropped is only the requirement that the portfolio be deployed all at once.
-_KNOWN_JOURNEY_APPS = frozenset(
-    {
-        "cdd-sow-research",
-        "credit-memo-drafting",
-        "cio-advisory",
-        "trade-finance-checker",
-        "loan-document-intelligence",
-        "compliance-advisory",
-        "human-review-console",
-    }
-)
+# The safety properties a partial deployment keeps: the set may not be empty, every id must be
+# known, every app must be complete and pinned to an immutable digest, and the rollback map must
+# cover exactly what is being deployed.
+_MANAGED_ENV_BY_APP: dict[str, tuple[str, str]] = {
+    "cdd-sow-research": ("CDD_PROFILE", "CDD_IAP_AUDIENCE"),
+    "credit-memo-drafting": ("CREDIT_MEMO_PROFILE", "CREDIT_MEMO_IAP_AUDIENCE"),
+    "cio-advisory": ("CIO_PROFILE", "CIO_IAP_AUDIENCE"),
+    "trade-finance-checker": ("TRADE_FINANCE_PROFILE", "TRADE_FINANCE_IAP_AUDIENCE"),
+    "loan-document-intelligence": ("LOAN_DOC_PROFILE", "LOAN_DOC_IAP_AUDIENCE"),
+    "compliance-advisory": ("COMPLIANCE_PROFILE", "COMPLIANCE_IAP_AUDIENCE"),
+    "human-review-console": ("REVIEW_PROFILE", "REVIEW_IAP_AUDIENCE"),
+    "marketing-compliance-gate": ("MKT_GOV_PROFILE", "MKT_GOV_IAP_AUDIENCE"),
+}
+_KNOWN_JOURNEY_APPS = frozenset(_MANAGED_ENV_BY_APP)
+_PROFILE_ENV_BY_APP = {app_id: envs[0] for app_id, envs in _MANAGED_ENV_BY_APP.items()}
+_IAP_AUDIENCE_ENV_BY_APP = {app_id: envs[1] for app_id, envs in _MANAGED_ENV_BY_APP.items()}
 _EMBEDDED_APP_KEYS = frozenset(
     {
         "ui_image",
@@ -80,33 +81,14 @@ _EMBEDDED_APP_KEYS = frozenset(
         "api_secret_env",
     }
 )
-_UI_BUILD_BASE_PATH_BY_APP = {
-    "cdd-sow-research": "/agent",
-    "credit-memo-drafting": "/apps/credit-memo-drafting",
-    "cio-advisory": "/apps/cio-advisory",
-    "trade-finance-checker": "/apps/trade-finance-checker",
-    "loan-document-intelligence": "/apps/loan-document-intelligence",
-    "compliance-advisory": "/apps/compliance-advisory",
-    "human-review-console": "/apps/human-review-console",
-}
-_PROFILE_ENV_BY_APP = {
-    "cdd-sow-research": "CDD_PROFILE",
-    "credit-memo-drafting": "CREDIT_MEMO_PROFILE",
-    "cio-advisory": "CIO_PROFILE",
-    "trade-finance-checker": "TRADE_FINANCE_PROFILE",
-    "loan-document-intelligence": "LOAN_DOC_PROFILE",
-    "compliance-advisory": "COMPLIANCE_PROFILE",
-    "human-review-console": "REVIEW_PROFILE",
-}
-_IAP_AUDIENCE_ENV_BY_APP = {
-    "cdd-sow-research": "CDD_IAP_AUDIENCE",
-    "credit-memo-drafting": "CREDIT_MEMO_IAP_AUDIENCE",
-    "cio-advisory": "CIO_IAP_AUDIENCE",
-    "trade-finance-checker": "TRADE_FINANCE_IAP_AUDIENCE",
-    "loan-document-intelligence": "LOAN_DOC_IAP_AUDIENCE",
-    "compliance-advisory": "COMPLIANCE_IAP_AUDIENCE",
-    "human-review-console": "REVIEW_IAP_AUDIENCE",
-}
+
+
+def _ui_build_base_path(app_id: str) -> str:
+    """The mount rule the Terraform variable validation also enforces: /apps/<id>, but /agent for
+    cdd-sow-research, whose artifact is fixed and portable."""
+    return "/agent" if app_id == "cdd-sow-research" else f"/apps/{app_id}"
+
+
 _CLOUD_RUN_MANAGED_ENV_NAMES = frozenset({"PORT", "K_SERVICE", "K_REVISION", "K_CONFIGURATION"})
 _ALL_PROFILE_ENV_NAMES = frozenset(_PROFILE_ENV_BY_APP.values())
 _ALL_IAP_AUDIENCE_ENV_NAMES = frozenset(_IAP_AUDIENCE_ENV_BY_APP.values())
@@ -351,7 +333,7 @@ def _validate_embedded_apps(apps: dict[str, Any]) -> None:
                 raise DeploymentConfigError(
                     f"embedded app {app_id} {image_key} must use an immutable @sha256 digest"
                 )
-        expected_base_path = _UI_BUILD_BASE_PATH_BY_APP[app_id]
+        expected_base_path = _ui_build_base_path(app_id)
         if app.get("ui_build_base_path") != expected_base_path:
             raise DeploymentConfigError(
                 f"embedded app {app_id} UI image must be built for {expected_base_path}"
@@ -371,13 +353,13 @@ def _validate_embedded_apps(apps: dict[str, Any]) -> None:
                         f"embedded app {app_id} {env_name} belongs in {secret_map_name}"
                     )
         api_env = app.get("api_env", {})
-        profile_env = _PROFILE_ENV_BY_APP.get(app_id)
-        if profile_env and api_env.get(profile_env) not in {"gcp", "platform"}:
+        profile_env = _PROFILE_ENV_BY_APP[app_id]
+        if api_env.get(profile_env) not in {"gcp", "platform"}:
             raise DeploymentConfigError(
                 f"embedded app {app_id} must set {profile_env} to gcp or platform"
             )
-        audience_env = _IAP_AUDIENCE_ENV_BY_APP.get(app_id)
-        if audience_env and audience_env in api_env:
+        audience_env = _IAP_AUDIENCE_ENV_BY_APP[app_id]
+        if audience_env in api_env:
             raise DeploymentConfigError(
                 f"embedded app {app_id} must not override Terraform-injected {audience_env}"
             )
@@ -397,8 +379,7 @@ def _validate_embedded_apps(apps: dict[str, Any]) -> None:
         ui_env = app.get("ui_env", {})
         ui_secret_env = app.get("ui_secret_env", {})
         api_secret_env = app.get("api_secret_env", {})
-        owning_profile = _PROFILE_ENV_BY_APP[app_id]
-        api_env_reserved = _ALL_MANAGED_ENV_NAMES - {owning_profile}
+        api_env_reserved = _ALL_MANAGED_ENV_NAMES - {profile_env}
         managed_collisions = sorted(
             (set(ui_env) | set(ui_secret_env) | set(api_secret_env)) & _ALL_MANAGED_ENV_NAMES
             | set(api_env) & api_env_reserved

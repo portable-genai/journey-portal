@@ -5,15 +5,6 @@ locals {
       "PORTAL_${upper(replace(id, "-", "_"))}_API" = google_cloud_run_v2_service.embedded_api[id].uri
     }
   ]...)
-  embedded_iap_audience_env = {
-    cdd-sow-research           = "CDD_IAP_AUDIENCE"
-    credit-memo-drafting       = "CREDIT_MEMO_IAP_AUDIENCE"
-    cio-advisory               = "CIO_IAP_AUDIENCE"
-    trade-finance-checker      = "TRADE_FINANCE_IAP_AUDIENCE"
-    loan-document-intelligence = "LOAN_DOC_IAP_AUDIENCE"
-    compliance-advisory        = "COMPLIANCE_IAP_AUDIENCE"
-    human-review-console       = "REVIEW_IAP_AUDIENCE"
-  }
 }
 
 resource "google_cloud_run_v2_service" "portal" {
@@ -334,7 +325,12 @@ resource "google_cloud_run_v2_service" "embedded_ui" {
       }
     }
   }
-  depends_on = [google_kms_crypto_key_iam_member.cloud_run, google_project_service.services, terraform_data.deployment_contract]
+  depends_on = [
+    google_kms_crypto_key_iam_member.cloud_run,
+    google_project_service.services,
+    terraform_data.deployment_contract,
+    terraform_data.embedded_app_contract,
+  ]
 }
 
 resource "google_cloud_run_v2_service" "embedded_api" {
@@ -385,9 +381,14 @@ resource "google_cloud_run_v2_service" "embedded_api" {
       dynamic "env" {
         # Same rule for the embedded apps: omit the audience rather than passing an empty
         # string, which their own config layers also treat as a rejected value.
+        #
+        # Indexed directly, never guarded by a membership test. The guard this replaces skipped
+        # the audience for any app missing from its own map, so an app could deploy with no
+        # audience at all and refuse every request. embedded_app_contract refuses an unmapped id
+        # at plan, and this service waits on it.
         for_each = (
-          contains(keys(local.embedded_iap_audience_env), each.key) && var.iap_jwt_audience != ""
-          ? { (local.embedded_iap_audience_env[each.key]) = var.iap_jwt_audience }
+          var.iap_jwt_audience != ""
+          ? { (local.embedded_app_managed_env[each.key].iap_audience) = var.iap_jwt_audience }
           : {}
         )
         content {
@@ -419,5 +420,10 @@ resource "google_cloud_run_v2_service" "embedded_api" {
       }
     }
   }
-  depends_on = [google_kms_crypto_key_iam_member.cloud_run, google_project_service.services, terraform_data.deployment_contract]
+  depends_on = [
+    google_kms_crypto_key_iam_member.cloud_run,
+    google_project_service.services,
+    terraform_data.deployment_contract,
+    terraform_data.embedded_app_contract,
+  ]
 }

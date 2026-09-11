@@ -175,95 +175,30 @@ variable "embedded_apps" {
     api_secret_env     = optional(map(string), {})
   }))
   description = "Reviewed embedded UI/API images and surface-specific runtime inputs keyed by app id."
-  # A deployment names the SUBSET of journeys it actually serves. Requiring all seven on every
-  # apply coupled seven independently-released repositories into one atomic deployment and made
-  # a single-journey installation inexpressible — the opposite of the incremental adoption this
-  # architecture argues for. The safety properties are unchanged: non-empty, known ids only,
-  # digest-pinned images, correct mount path, valid ports.
+  # A deployment names the SUBSET of journeys it actually serves. Requiring every app on every
+  # apply coupled independently-released repositories into one atomic deployment and made a
+  # single-journey installation inexpressible — the opposite of the incremental adoption this
+  # architecture argues for. These validations hold the shape of each entry. WHICH ids are
+  # deployable, their managed profiles and the environment names Terraform owns are checked in
+  # embedded_apps.tf, against the one map that names them.
   validation {
     condition = length(var.embedded_apps) > 0 && alltrue([
       for id, app in var.embedded_apps :
-      contains(["cdd-sow-research", "credit-memo-drafting", "cio-advisory", "trade-finance-checker",
-        "loan-document-intelligence", "complaints-review", "compliance-advisory",
-        "architecture-validator", "model-quality-gate", "human-review-console",
-        "market-intelligence", "campaign-planner", "creative-studio",
-        "performance-marketing-optimisation", "next-best-action",
-      "marketing-compliance-gate"], id) &&
       can(regex("@sha256:[0-9a-f]{64}$", app.ui_image)) &&
       can(regex("@sha256:[0-9a-f]{64}$", app.api_image)) &&
       app.ui_build_base_path == (id == "cdd-sow-research" ? "/agent" : "/apps/${id}") &&
       app.ui_port >= 1 && app.ui_port <= 65535 &&
       app.api_port >= 1 && app.api_port <= 65535
     ])
-    error_message = "embedded_apps must be a non-empty subset of cdd-sow-research, credit-memo-drafting, cio-advisory, trade-finance-checker, loan-document-intelligence, compliance-advisory, human-review-console, each with a digest-pinned UI/API image, its canonical mount path, and valid ports."
-  }
-  # Each journey API reads its profile from its OWN env var, so the check is per-app and
-  # applies only to the apps being deployed. Previously it dereferenced all seven directly,
-  # which meant a partial deployment failed here even once the set check allowed it.
-  validation {
-    condition = alltrue([
-      for id, app in var.embedded_apps :
-      contains(["gcp", "platform"], try(app.api_env[{
-        "cdd-sow-research"           = "CDD_PROFILE"
-        "credit-memo-drafting"       = "CREDIT_MEMO_PROFILE"
-        "cio-advisory"               = "CIO_PROFILE"
-        "trade-finance-checker"      = "TRADE_FINANCE_PROFILE"
-        "loan-document-intelligence" = "LOAN_DOC_PROFILE"
-        "compliance-advisory"        = "COMPLIANCE_PROFILE"
-        "human-review-console"       = "REVIEW_PROFILE"
-      }[id]], ""))
-    ])
-    error_message = "Every DEPLOYED journey API must explicitly use the gcp or platform managed profile."
+    error_message = "embedded_apps must be non-empty, and each entry needs a digest-pinned UI/API image, its canonical mount path (/apps/<id>, or /agent for cdd-sow-research), and valid ports."
   }
   validation {
     condition = alltrue([
       for id, app in var.embedded_apps :
-      length(setintersection(toset(keys(app.ui_env)), toset([
-        "PORT", "K_SERVICE", "K_REVISION", "K_CONFIGURATION",
-        "CDD_PROFILE", "CREDIT_MEMO_PROFILE", "CIO_PROFILE",
-        "TRADE_FINANCE_PROFILE", "LOAN_DOC_PROFILE", "COMPLIANCE_PROFILE", "REVIEW_PROFILE",
-        "CDD_IAP_AUDIENCE", "CREDIT_MEMO_IAP_AUDIENCE", "CIO_IAP_AUDIENCE",
-        "TRADE_FINANCE_IAP_AUDIENCE", "LOAN_DOC_IAP_AUDIENCE", "COMPLIANCE_IAP_AUDIENCE", "REVIEW_IAP_AUDIENCE",
-      ]))) == 0 &&
-      length(setintersection(toset(keys(app.ui_secret_env)), toset([
-        "PORT", "K_SERVICE", "K_REVISION", "K_CONFIGURATION",
-        "CDD_PROFILE", "CREDIT_MEMO_PROFILE", "CIO_PROFILE",
-        "TRADE_FINANCE_PROFILE", "LOAN_DOC_PROFILE", "COMPLIANCE_PROFILE", "REVIEW_PROFILE",
-        "CDD_IAP_AUDIENCE", "CREDIT_MEMO_IAP_AUDIENCE", "CIO_IAP_AUDIENCE",
-        "TRADE_FINANCE_IAP_AUDIENCE", "LOAN_DOC_IAP_AUDIENCE", "COMPLIANCE_IAP_AUDIENCE", "REVIEW_IAP_AUDIENCE",
-      ]))) == 0 &&
-      length(setintersection(toset(keys(app.api_secret_env)), toset([
-        "PORT", "K_SERVICE", "K_REVISION", "K_CONFIGURATION",
-        "CDD_PROFILE", "CREDIT_MEMO_PROFILE", "CIO_PROFILE",
-        "TRADE_FINANCE_PROFILE", "LOAN_DOC_PROFILE", "COMPLIANCE_PROFILE", "REVIEW_PROFILE",
-        "CDD_IAP_AUDIENCE", "CREDIT_MEMO_IAP_AUDIENCE", "CIO_IAP_AUDIENCE",
-        "TRADE_FINANCE_IAP_AUDIENCE", "LOAN_DOC_IAP_AUDIENCE", "COMPLIANCE_IAP_AUDIENCE", "REVIEW_IAP_AUDIENCE",
-      ]))) == 0 &&
-      length(setintersection(
-        toset(keys(app.api_env)),
-        setsubtract(
-          toset([
-            "PORT", "K_SERVICE", "K_REVISION", "K_CONFIGURATION",
-            "CDD_PROFILE", "CREDIT_MEMO_PROFILE", "CIO_PROFILE",
-            "TRADE_FINANCE_PROFILE", "LOAN_DOC_PROFILE", "COMPLIANCE_PROFILE", "REVIEW_PROFILE",
-            "CDD_IAP_AUDIENCE", "CREDIT_MEMO_IAP_AUDIENCE", "CIO_IAP_AUDIENCE",
-            "TRADE_FINANCE_IAP_AUDIENCE", "LOAN_DOC_IAP_AUDIENCE", "COMPLIANCE_IAP_AUDIENCE", "REVIEW_IAP_AUDIENCE",
-          ]),
-          toset([{
-            "cdd-sow-research"           = "CDD_PROFILE"
-            "credit-memo-drafting"       = "CREDIT_MEMO_PROFILE"
-            "cio-advisory"               = "CIO_PROFILE"
-            "trade-finance-checker"      = "TRADE_FINANCE_PROFILE"
-            "loan-document-intelligence" = "LOAN_DOC_PROFILE"
-            "compliance-advisory"        = "COMPLIANCE_PROFILE"
-            "human-review-console"       = "REVIEW_PROFILE"
-          }[id]])
-        )
-      )) == 0 &&
       length(setintersection(toset(keys(app.ui_env)), toset(keys(app.ui_secret_env)))) == 0 &&
       length(setintersection(toset(keys(app.api_env)), toset(keys(app.api_secret_env)))) == 0
     ])
-    error_message = "UI/API plain and secret env sources must not overlap or use Cloud Run-managed names, another app's profile, or Terraform-injected IAP audiences."
+    error_message = "UI/API plain and secret env sources must not overlap."
   }
 }
 
