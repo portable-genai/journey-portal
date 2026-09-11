@@ -269,6 +269,68 @@ def test_a_partial_journey_portfolio_is_deployable(tmp_path: Path) -> None:
     assert set(config.terraform_inputs["embedded_apps"]) == {"cdd-sow-research"}
 
 
+def _single_app_values(app_id: str, api_env: dict[str, str]) -> dict[str, str]:
+    """A complete config deploying one app, with a rollback map that covers it exactly."""
+    values = _valid_values()
+    app = {
+        "ui_image": _image(f"{app_id}-ui", "d"),
+        "api_image": _image(f"{app_id}-api", "e"),
+        "ui_build_base_path": f"/apps/{app_id}",
+        "api_env": api_env,
+    }
+    values["DEPLOY_EMBEDDED_APPS_JSON"] = json.dumps({app_id: app})
+    rollback = json.loads(values["DEPLOY_ROLLBACK_IMAGES_JSON"])
+    values["DEPLOY_ROLLBACK_IMAGES_JSON"] = json.dumps(
+        {
+            "bff": rollback["bff"],
+            "rm": rollback["rm"],
+            "ops": rollback["ops"],
+            f"{app_id}-ui": _image(f"{app_id}-ui", "4"),
+            f"{app_id}-api": _image(f"{app_id}-api", "4"),
+        }
+    )
+    return values
+
+
+def test_marketing_compliance_gate_deploys_on_its_managed_profile(tmp_path: Path) -> None:
+    values = _single_app_values("marketing-compliance-gate", {"MKT_GOV_PROFILE": "gcp"})
+
+    config = _load(tmp_path, values)
+
+    assert set(config.terraform_inputs["embedded_apps"]) == {"marketing-compliance-gate"}
+
+
+@pytest.mark.parametrize(
+    ("api_env", "refusal"),
+    [
+        ({}, "must set MKT_GOV_PROFILE to gcp or platform"),
+        ({"MKT_GOV_PROFILE": "local"}, "must set MKT_GOV_PROFILE to gcp or platform"),
+        (
+            {"MKT_GOV_PROFILE": "gcp", "MKT_GOV_IAP_AUDIENCE": "/guessed"},
+            "must not override Terraform-injected MKT_GOV_IAP_AUDIENCE",
+        ),
+    ],
+)
+def test_marketing_compliance_gate_without_its_managed_env_is_refused(
+    tmp_path: Path, api_env: dict[str, str], refusal: str
+) -> None:
+    values = _single_app_values("marketing-compliance-gate", api_env)
+
+    with pytest.raises(DeploymentConfigError, match=refusal):
+        _load(tmp_path, values)
+
+
+@pytest.mark.parametrize("app_id", ["performance-marketing-optimisation", "complaints-review"])
+def test_a_catalog_app_with_no_managed_env_mapping_is_not_deployable(
+    tmp_path: Path, app_id: str
+) -> None:
+    """Mountable locally is not deployable: an app needs its profile and audience mapped."""
+    values = _single_app_values(app_id, {})
+
+    with pytest.raises(DeploymentConfigError, match=f"cannot mount: {app_id}"):
+        _load(tmp_path, values)
+
+
 def test_rollback_must_cover_every_deployed_app(tmp_path: Path) -> None:
     """The guarantee kept from the old rule: nothing deploys without a way back."""
     values = _valid_values()

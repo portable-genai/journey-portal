@@ -71,8 +71,13 @@ automatic or override files. It sanitizes ambient Terraform variables, initializ
 reviewed GCS bucket/prefix, verifies the resulting backend metadata, and uses one fixed ignored
 generated input file.
 
+The apps a deployment can name are the keys of `local.embedded_app_managed_env` in
+`embedded_apps.tf`. Each entry names the profile variable that app's API reads, which the deployment
+must set to `gcp` or `platform`, and the IAP audience variable Terraform injects. An app the journey
+catalog knows but that map does not name is refused at plan, and becomes deployable by adding its
+entry there and in the renderer's `_MANAGED_ENV_BY_APP`; a contract test holds the two equal.
 Each embedded app entry must declare `ui_build_base_path`: `/agent` for `cdd-sow-research` and `/apps/<id>`
-for the other five apps. This is a reviewed build-time image contract, not a runtime environment
+for every other app. This is a reviewed build-time image contract, not a runtime environment
 override. Build and test each UI for that path before recording its immutable digest.
 UI/API plain and secret environment maps cannot overlap within a container. Every surface rejects
 Cloud Run-managed variables and Terraform-owned profile/audience names; only each API's required

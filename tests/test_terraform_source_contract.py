@@ -1,4 +1,10 @@
+import importlib.util
+import re
+import sys
 from pathlib import Path
+
+from journey_portal import deployment_config
+from journey_portal.config import load_journeys_mapping
 
 TERRAFORM = Path("infra/terraform")
 
@@ -73,20 +79,6 @@ def test_cmek_vpc_sc_and_retention_controls_are_code_enforced() -> None:
     assert 'default     = ["asia-southeast1", "us-central1"]' in variables
 
 
-def test_embedded_apps_receive_the_edge_iap_audience() -> None:
-    cloud_run = _source("cloud_run.tf")
-
-    for env_name in (
-        "CDD_IAP_AUDIENCE",
-        "CREDIT_MEMO_IAP_AUDIENCE",
-        "CIO_IAP_AUDIENCE",
-        "TRADE_FINANCE_IAP_AUDIENCE",
-        "COMPLIANCE_IAP_AUDIENCE",
-        "REVIEW_IAP_AUDIENCE",
-    ):
-        assert env_name in cloud_run
-
-
 def test_portal_revision_waits_for_audit_permissions() -> None:
     cloud_run = _source("cloud_run.tf")
     portal_block = cloud_run.split('resource "google_cloud_run_v2_service" "rm_shell"')[0]
@@ -119,42 +111,116 @@ def test_platform_profile_routes_portal_access_evidence_to_hrz5() -> None:
     assert 'variable "observability_audience"' in variables
 
 
-def test_terraform_requires_all_apps_managed_profiles_and_alert_delivery() -> None:
+def test_terraform_requires_managed_profiles_and_alert_delivery() -> None:
     variables = _source("variables.tf")
     main = _source("main.tf")
+    embedded = _source("embedded_apps.tf")
 
-    # A deployment names the SUBSET of journeys it serves; requiring all seven on every apply
-    # coupled seven independently-released repositories into one atomic deployment. What must
-    # still hold is that the set is non-empty and that every id in it is one the portal knows.
+    # A deployment names the SUBSET of journeys it serves; what must still hold is that the set
+    # is non-empty and that every id in it is one this stack can deploy.
     assert "length(var.embedded_apps) > 0" in variables
-    for app_id in (
-        "cdd-sow-research",
-        "credit-memo-drafting",
-        "cio-advisory",
-        "trade-finance-checker",
-        "loan-document-intelligence",
-        "compliance-advisory",
-        "human-review-console",
-    ):
-        assert f'"{app_id}"' in variables
-    for profile_env in (
-        "CDD_PROFILE",
-        "CREDIT_MEMO_PROFILE",
-        "CIO_PROFILE",
-        "TRADE_FINANCE_PROFILE",
-        "LOAN_DOC_PROFILE",
-        "COMPLIANCE_PROFILE",
-        "REVIEW_PROFILE",
-    ):
-        assert profile_env in variables
     assert "length(var.notification_channels) > 0" in variables
     assert "every embedded UI/API" in main
     assert 'id == "cdd-sow-research" ? "/agent" : "/apps/${id}"' in variables
     assert "setintersection" in variables
-    assert "K_SERVICE" in variables
-    assert "CDD_IAP_AUDIENCE" in variables
     assert "UI/API plain and secret env sources must not overlap" in variables
-    assert "setsubtract" in variables
+    assert '"K_SERVICE"' in embedded
+    assert 'managed_embedded_profiles   = ["gcp", "platform"]' in embedded
+
+
+_MANAGED_ENV_ENTRY = re.compile(
+    r'\s*([a-z0-9-]+)\s*=\s*\{\s*profile\s*=\s*"([A-Z0-9_]+)"\s*,'
+    r'\s*iap_audience\s*=\s*"([A-Z0-9_]+)"\s*\}\s*'
+)
+
+
+def _terraform_managed_env() -> dict[str, tuple[str, str]]:
+    """Parse ``local.embedded_app_managed_env``, refusing any line it cannot read.
+
+    Every non-blank line of the block must be an entry in the one reviewed shape, so an entry
+    written differently fails here instead of silently dropping out of the comparison.
+    """
+    source = _source("embedded_apps.tf")
+    opening = "  embedded_app_managed_env = {\n"
+    assert source.count(opening) == 1
+    body = source.split(opening, 1)[1].split("\n  }\n", 1)[0]
+    entries: dict[str, tuple[str, str]] = {}
+    for line in body.splitlines():
+        if not line.strip():
+            continue
+        match = _MANAGED_ENV_ENTRY.fullmatch(line)
+        assert match, f"unreadable embedded_app_managed_env line: {line!r}"
+        app_id, profile, audience = match.groups()
+        assert app_id not in entries, f"{app_id} is mapped twice"
+        entries[app_id] = (profile, audience)
+    assert entries
+    return entries
+
+
+def test_terraform_and_the_renderer_can_deploy_the_same_apps() -> None:
+    """The deployable set is one map in each language, and the two maps are equal.
+
+    Terraform's allowed-id list once named sixteen apps while its profile map named seven, so
+    nine allowed apps, marketing-compliance-gate among them, failed the profile check on every
+    plan. The renderer carried a third copy that named yet another set.
+    """
+    terraform = _terraform_managed_env()
+
+    assert terraform == deployment_config._MANAGED_ENV_BY_APP
+    assert frozenset(terraform) == deployment_config._KNOWN_JOURNEY_APPS
+    assert "marketing-compliance-gate" in terraform
+
+
+def test_the_deployable_set_and_reserved_names_derive_from_the_one_map() -> None:
+    embedded = _source("embedded_apps.tf")
+    cloud_run = _source("cloud_run.tf")
+
+    assert "deployable_embedded_app_ids = sort(keys(local.embedded_app_managed_env))" in embedded
+    assert "[for app in values(local.embedded_app_managed_env) : app.profile]" in embedded
+    assert "[for app in values(local.embedded_app_managed_env) : app.iap_audience]" in embedded
+    assert 'lookup(app.api_env, local.embedded_app_managed_env[id].profile, "")' in embedded
+    assert "local.embedded_app_managed_env[each.key].iap_audience" in cloud_run
+    assert cloud_run.count("terraform_data.embedded_app_contract") == 2
+
+    # No second copy may grow back. Outside embedded_apps.tf no .tf file names a managed variable,
+    # or any catalog app id other than cdd-sow-research, whose /agent mount rule is the one
+    # id-specific line the variable validation keeps.
+    managed_names = {name for pair in _terraform_managed_env().values() for name in pair}
+    catalog_ids = set(load_journeys_mapping(Path("config/journeys.yaml"))["apps"])
+    assert catalog_ids >= set(_terraform_managed_env())
+    for tf_file in sorted(TERRAFORM.glob("*.tf")):
+        if tf_file.name == "embedded_apps.tf":
+            continue
+        text = tf_file.read_text(encoding="utf-8")
+        for name in managed_names:
+            assert not re.search(rf"(?<![A-Z0-9_]){name}(?![A-Z0-9_])", text), (
+                f"{tf_file.name} names {name}; derive it from local.embedded_app_managed_env"
+            )
+        for app_id in catalog_ids - {"cdd-sow-research"}:
+            assert not re.search(rf"(?<![a-z0-9-]){re.escape(app_id)}(?![a-z0-9-])", text), (
+                f"{tf_file.name} names {app_id}; derive it from local.embedded_app_managed_env"
+            )
+
+
+def test_managed_variable_names_match_what_each_app_reads() -> None:
+    """Each profile is the one the local launcher tells that app, and each audience follows it.
+
+    The launcher's map is exercised by every local run of the journeys, so a profile name that
+    disagrees with it is a name the app does not read. The fleet names an app's IAP audience
+    ``<PREFIX>_IAP_AUDIENCE`` beside ``<PREFIX>_PROFILE``, which is the only check the audience
+    name gets short of a deployment.
+    """
+    path = Path("scripts/run_journeys.py").resolve()
+    spec = importlib.util.spec_from_file_location("run_journeys_contract", path)
+    assert spec is not None and spec.loader is not None
+    launcher = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = launcher
+    spec.loader.exec_module(launcher)
+
+    for app_id, (profile, audience) in _terraform_managed_env().items():
+        assert launcher._APP_PROFILE_ENVS[app_id] == profile
+        assert profile.endswith("_PROFILE")
+        assert audience == profile.removesuffix("_PROFILE") + "_IAP_AUDIENCE"
 
 
 def test_kms_rotation_matches_cloud_kms_bounds() -> None:

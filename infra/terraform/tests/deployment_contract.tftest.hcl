@@ -298,55 +298,44 @@ run "reject_kms_rotation_above_cloud_kms_maximum" {
   expect_failures = [var.cmek_rotation_period]
 }
 
+# The reject runs below each deploy ONE app with a rollback map that covers it exactly, so the
+# only contract they can break is the one named. Several preconditions share
+# terraform_data.embedded_app_contract, and a run that also broke the rollback or the id check
+# would pass for a reason other than its name.
 run "reject_api_secret_collision_with_managed_environment" {
   command = plan
   variables {
+    rollback_images = {
+      bff                    = "registry.example.test/bff@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      rm                     = "registry.example.test/rm@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      ops                    = "registry.example.test/ops@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      "cdd-sow-research-ui"  = "registry.example.test/cdd-sow-research-ui@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      "cdd-sow-research-api" = "registry.example.test/cdd-sow-research-api@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    }
     embedded_apps = {
       cdd-sow-research = {
         ui_image           = "registry.example.test/cdd-sow-research-ui@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
         api_image          = "registry.example.test/cdd-sow-research-api@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         ui_build_base_path = "/agent"
         api_env            = { CDD_PROFILE = "gcp" }
-        api_secret_env     = { CDD_PROFILE = "cdd-sow-research-profile-secret" }
-      }
-      credit-memo-drafting = {
-        ui_image           = "registry.example.test/credit-memo-drafting-ui@sha256:2222222222222222222222222222222222222222222222222222222222222222"
-        api_image          = "registry.example.test/credit-memo-drafting-api@sha256:2222222222222222222222222222222222222222222222222222222222222222"
-        ui_build_base_path = "/apps/credit-memo-drafting"
-        api_env            = { CREDIT_MEMO_PROFILE = "gcp" }
-      }
-      cio-advisory = {
-        ui_image           = "registry.example.test/cio-advisory-ui@sha256:3333333333333333333333333333333333333333333333333333333333333333"
-        api_image          = "registry.example.test/cio-advisory-api@sha256:3333333333333333333333333333333333333333333333333333333333333333"
-        ui_build_base_path = "/apps/cio-advisory"
-        api_env            = { CIO_PROFILE = "gcp" }
-      }
-      trade-finance-checker = {
-        ui_image           = "registry.example.test/trade-finance-checker-ui@sha256:4444444444444444444444444444444444444444444444444444444444444444"
-        api_image          = "registry.example.test/trade-finance-checker-api@sha256:4444444444444444444444444444444444444444444444444444444444444444"
-        ui_build_base_path = "/apps/trade-finance-checker"
-        api_env            = { TRADE_FINANCE_PROFILE = "gcp" }
-      }
-      compliance-advisory = {
-        ui_image           = "registry.example.test/compliance-advisory-ui@sha256:5555555555555555555555555555555555555555555555555555555555555555"
-        api_image          = "registry.example.test/compliance-advisory-api@sha256:5555555555555555555555555555555555555555555555555555555555555555"
-        ui_build_base_path = "/apps/compliance-advisory"
-        api_env            = { COMPLIANCE_PROFILE = "gcp" }
-      }
-      human-review-console = {
-        ui_image           = "registry.example.test/human-review-console-ui@sha256:6666666666666666666666666666666666666666666666666666666666666666"
-        api_image          = "registry.example.test/human-review-console-api@sha256:6666666666666666666666666666666666666666666666666666666666666666"
-        ui_build_base_path = "/apps/human-review-console"
-        api_env            = { REVIEW_PROFILE = "gcp" }
+        api_secret_env     = { CDD_IAP_AUDIENCE = "cdd-sow-research-audience-secret" }
       }
     }
   }
-  expect_failures = [var.embedded_apps]
+  expect_failures = [terraform_data.embedded_app_contract]
 }
 
+# Another app's profile is reserved whether or not that app is deployed.
 run "reject_api_env_using_another_apps_profile" {
   command = plan
   variables {
+    rollback_images = {
+      bff                    = "registry.example.test/bff@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      rm                     = "registry.example.test/rm@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      ops                    = "registry.example.test/ops@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      "cdd-sow-research-ui"  = "registry.example.test/cdd-sow-research-ui@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      "cdd-sow-research-api" = "registry.example.test/cdd-sow-research-api@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    }
     embedded_apps = {
       cdd-sow-research = {
         ui_image           = "registry.example.test/cdd-sow-research-ui@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
@@ -354,44 +343,21 @@ run "reject_api_env_using_another_apps_profile" {
         ui_build_base_path = "/agent"
         api_env            = { CDD_PROFILE = "gcp", CIO_PROFILE = "gcp" }
       }
-      credit-memo-drafting = {
-        ui_image           = "registry.example.test/credit-memo-drafting-ui@sha256:2222222222222222222222222222222222222222222222222222222222222222"
-        api_image          = "registry.example.test/credit-memo-drafting-api@sha256:2222222222222222222222222222222222222222222222222222222222222222"
-        ui_build_base_path = "/apps/credit-memo-drafting"
-        api_env            = { CREDIT_MEMO_PROFILE = "gcp" }
-      }
-      cio-advisory = {
-        ui_image           = "registry.example.test/cio-advisory-ui@sha256:3333333333333333333333333333333333333333333333333333333333333333"
-        api_image          = "registry.example.test/cio-advisory-api@sha256:3333333333333333333333333333333333333333333333333333333333333333"
-        ui_build_base_path = "/apps/cio-advisory"
-        api_env            = { CIO_PROFILE = "gcp" }
-      }
-      trade-finance-checker = {
-        ui_image           = "registry.example.test/trade-finance-checker-ui@sha256:4444444444444444444444444444444444444444444444444444444444444444"
-        api_image          = "registry.example.test/trade-finance-checker-api@sha256:4444444444444444444444444444444444444444444444444444444444444444"
-        ui_build_base_path = "/apps/trade-finance-checker"
-        api_env            = { TRADE_FINANCE_PROFILE = "gcp" }
-      }
-      compliance-advisory = {
-        ui_image           = "registry.example.test/compliance-advisory-ui@sha256:5555555555555555555555555555555555555555555555555555555555555555"
-        api_image          = "registry.example.test/compliance-advisory-api@sha256:5555555555555555555555555555555555555555555555555555555555555555"
-        ui_build_base_path = "/apps/compliance-advisory"
-        api_env            = { COMPLIANCE_PROFILE = "gcp" }
-      }
-      human-review-console = {
-        ui_image           = "registry.example.test/human-review-console-ui@sha256:6666666666666666666666666666666666666666666666666666666666666666"
-        api_image          = "registry.example.test/human-review-console-api@sha256:6666666666666666666666666666666666666666666666666666666666666666"
-        ui_build_base_path = "/apps/human-review-console"
-        api_env            = { REVIEW_PROFILE = "gcp" }
-      }
     }
   }
-  expect_failures = [var.embedded_apps]
+  expect_failures = [terraform_data.embedded_app_contract]
 }
 
 run "reject_ui_env_using_cloud_run_managed_name" {
   command = plan
   variables {
+    rollback_images = {
+      bff                    = "registry.example.test/bff@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      rm                     = "registry.example.test/rm@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      ops                    = "registry.example.test/ops@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      "cdd-sow-research-ui"  = "registry.example.test/cdd-sow-research-ui@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      "cdd-sow-research-api" = "registry.example.test/cdd-sow-research-api@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    }
     embedded_apps = {
       cdd-sow-research = {
         ui_image           = "registry.example.test/cdd-sow-research-ui@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
@@ -400,44 +366,21 @@ run "reject_ui_env_using_cloud_run_managed_name" {
         ui_env             = { PORT = "3000" }
         api_env            = { CDD_PROFILE = "gcp" }
       }
-      credit-memo-drafting = {
-        ui_image           = "registry.example.test/credit-memo-drafting-ui@sha256:2222222222222222222222222222222222222222222222222222222222222222"
-        api_image          = "registry.example.test/credit-memo-drafting-api@sha256:2222222222222222222222222222222222222222222222222222222222222222"
-        ui_build_base_path = "/apps/credit-memo-drafting"
-        api_env            = { CREDIT_MEMO_PROFILE = "gcp" }
-      }
-      cio-advisory = {
-        ui_image           = "registry.example.test/cio-advisory-ui@sha256:3333333333333333333333333333333333333333333333333333333333333333"
-        api_image          = "registry.example.test/cio-advisory-api@sha256:3333333333333333333333333333333333333333333333333333333333333333"
-        ui_build_base_path = "/apps/cio-advisory"
-        api_env            = { CIO_PROFILE = "gcp" }
-      }
-      trade-finance-checker = {
-        ui_image           = "registry.example.test/trade-finance-checker-ui@sha256:4444444444444444444444444444444444444444444444444444444444444444"
-        api_image          = "registry.example.test/trade-finance-checker-api@sha256:4444444444444444444444444444444444444444444444444444444444444444"
-        ui_build_base_path = "/apps/trade-finance-checker"
-        api_env            = { TRADE_FINANCE_PROFILE = "gcp" }
-      }
-      compliance-advisory = {
-        ui_image           = "registry.example.test/compliance-advisory-ui@sha256:5555555555555555555555555555555555555555555555555555555555555555"
-        api_image          = "registry.example.test/compliance-advisory-api@sha256:5555555555555555555555555555555555555555555555555555555555555555"
-        ui_build_base_path = "/apps/compliance-advisory"
-        api_env            = { COMPLIANCE_PROFILE = "gcp" }
-      }
-      human-review-console = {
-        ui_image           = "registry.example.test/human-review-console-ui@sha256:6666666666666666666666666666666666666666666666666666666666666666"
-        api_image          = "registry.example.test/human-review-console-api@sha256:6666666666666666666666666666666666666666666666666666666666666666"
-        ui_build_base_path = "/apps/human-review-console"
-        api_env            = { REVIEW_PROFILE = "gcp" }
-      }
     }
   }
-  expect_failures = [var.embedded_apps]
+  expect_failures = [terraform_data.embedded_app_contract]
 }
 
 run "reject_plain_and_secret_source_collision" {
   command = plan
   variables {
+    rollback_images = {
+      bff                    = "registry.example.test/bff@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      rm                     = "registry.example.test/rm@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      ops                    = "registry.example.test/ops@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      "cdd-sow-research-ui"  = "registry.example.test/cdd-sow-research-ui@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      "cdd-sow-research-api" = "registry.example.test/cdd-sow-research-api@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    }
     embedded_apps = {
       cdd-sow-research = {
         ui_image           = "registry.example.test/cdd-sow-research-ui@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
@@ -447,39 +390,176 @@ run "reject_plain_and_secret_source_collision" {
         ui_secret_env      = { UI_SETTING = "cdd-sow-research-ui-secret" }
         api_env            = { CDD_PROFILE = "gcp" }
       }
-      credit-memo-drafting = {
-        ui_image           = "registry.example.test/credit-memo-drafting-ui@sha256:2222222222222222222222222222222222222222222222222222222222222222"
-        api_image          = "registry.example.test/credit-memo-drafting-api@sha256:2222222222222222222222222222222222222222222222222222222222222222"
-        ui_build_base_path = "/apps/credit-memo-drafting"
-        api_env            = { CREDIT_MEMO_PROFILE = "gcp" }
-      }
-      cio-advisory = {
-        ui_image           = "registry.example.test/cio-advisory-ui@sha256:3333333333333333333333333333333333333333333333333333333333333333"
-        api_image          = "registry.example.test/cio-advisory-api@sha256:3333333333333333333333333333333333333333333333333333333333333333"
-        ui_build_base_path = "/apps/cio-advisory"
-        api_env            = { CIO_PROFILE = "gcp" }
-      }
-      trade-finance-checker = {
-        ui_image           = "registry.example.test/trade-finance-checker-ui@sha256:4444444444444444444444444444444444444444444444444444444444444444"
-        api_image          = "registry.example.test/trade-finance-checker-api@sha256:4444444444444444444444444444444444444444444444444444444444444444"
-        ui_build_base_path = "/apps/trade-finance-checker"
-        api_env            = { TRADE_FINANCE_PROFILE = "gcp" }
-      }
-      compliance-advisory = {
-        ui_image           = "registry.example.test/compliance-advisory-ui@sha256:5555555555555555555555555555555555555555555555555555555555555555"
-        api_image          = "registry.example.test/compliance-advisory-api@sha256:5555555555555555555555555555555555555555555555555555555555555555"
-        ui_build_base_path = "/apps/compliance-advisory"
-        api_env            = { COMPLIANCE_PROFILE = "gcp" }
-      }
-      human-review-console = {
-        ui_image           = "registry.example.test/human-review-console-ui@sha256:6666666666666666666666666666666666666666666666666666666666666666"
-        api_image          = "registry.example.test/human-review-console-api@sha256:6666666666666666666666666666666666666666666666666666666666666666"
-        ui_build_base_path = "/apps/human-review-console"
-        api_env            = { REVIEW_PROFILE = "gcp" }
-      }
     }
   }
   expect_failures = [var.embedded_apps]
+}
+
+# marketing-compliance-gate was in the old allowed-id list and absent from the profile map, so it
+# passed the id check and failed the profile check on every plan. It now plans, with its own
+# profile, its own injected IAP audience, and the /apps/<id> mount the BFF routes to it.
+run "accept_marketing_compliance_gate_on_its_managed_profile" {
+  command = plan
+  variables {
+    rollback_images = {
+      bff                             = "registry.example.test/bff@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      rm                              = "registry.example.test/rm@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      ops                             = "registry.example.test/ops@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      "marketing-compliance-gate-ui"  = "registry.example.test/marketing-compliance-gate-ui@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      "marketing-compliance-gate-api" = "registry.example.test/marketing-compliance-gate-api@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    }
+    embedded_apps = {
+      marketing-compliance-gate = {
+        ui_image           = "registry.example.test/marketing-compliance-gate-ui@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        api_image          = "registry.example.test/marketing-compliance-gate-api@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        ui_build_base_path = "/apps/marketing-compliance-gate"
+        api_env            = { MKT_GOV_PROFILE = "gcp" }
+      }
+    }
+  }
+
+  assert {
+    condition = (
+      google_cloud_run_v2_service.embedded_api["marketing-compliance-gate"].name == "hrz9-test-marketing-compliance-gate-api" &&
+      google_cloud_run_v2_service.embedded_ui["marketing-compliance-gate"].name == "hrz9-test-marketing-compliance-gate-ui" &&
+      google_cloud_run_v2_service.embedded_ui["marketing-compliance-gate"].template[0].containers[0].liveness_probe[0].http_get[0].path == "/apps/marketing-compliance-gate"
+    )
+    error_message = "marketing-compliance-gate must plan as its own UI and API services on its canonical mount."
+  }
+
+  assert {
+    condition = (
+      anytrue([for item in google_cloud_run_v2_service.embedded_api["marketing-compliance-gate"].template[0].containers[0].env : item.name == "MKT_GOV_PROFILE" && item.value == "gcp"]) &&
+      anytrue([for item in google_cloud_run_v2_service.embedded_api["marketing-compliance-gate"].template[0].containers[0].env : item.name == "MKT_GOV_IAP_AUDIENCE" && item.value == var.iap_jwt_audience]) &&
+      !anytrue([for item in google_cloud_run_v2_service.embedded_api["marketing-compliance-gate"].template[0].containers[0].env : item.name == "CDD_IAP_AUDIENCE"])
+    )
+    error_message = "marketing-compliance-gate must run on its managed profile and receive the edge audience under its own variable name."
+  }
+
+  assert {
+    condition = (
+      anytrue([for item in google_cloud_run_v2_service.portal.template[0].containers[0].env : item.name == "PORTAL_APPS" && item.value == "marketing-compliance-gate"]) &&
+      length(google_cloud_run_v2_service_iam_member.portal_api_invoker) == 1 &&
+      length(google_cloud_run_v2_service_iam_member.portal_ui_invoker) == 1
+    )
+    error_message = "The BFF must mount marketing-compliance-gate and be the only caller granted invoke on it."
+  }
+}
+
+# Absence is not consent: an API that names no profile would inherit whatever its image defaults to.
+run "reject_marketing_compliance_gate_without_a_profile" {
+  command = plan
+  variables {
+    rollback_images = {
+      bff                             = "registry.example.test/bff@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      rm                              = "registry.example.test/rm@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      ops                             = "registry.example.test/ops@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      "marketing-compliance-gate-ui"  = "registry.example.test/marketing-compliance-gate-ui@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      "marketing-compliance-gate-api" = "registry.example.test/marketing-compliance-gate-api@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    }
+    embedded_apps = {
+      marketing-compliance-gate = {
+        ui_image           = "registry.example.test/marketing-compliance-gate-ui@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        api_image          = "registry.example.test/marketing-compliance-gate-api@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        ui_build_base_path = "/apps/marketing-compliance-gate"
+      }
+    }
+  }
+  expect_failures = [terraform_data.embedded_app_contract]
+}
+
+run "reject_marketing_compliance_gate_on_the_local_profile" {
+  command = plan
+  variables {
+    rollback_images = {
+      bff                             = "registry.example.test/bff@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      rm                              = "registry.example.test/rm@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      ops                             = "registry.example.test/ops@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      "marketing-compliance-gate-ui"  = "registry.example.test/marketing-compliance-gate-ui@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      "marketing-compliance-gate-api" = "registry.example.test/marketing-compliance-gate-api@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    }
+    embedded_apps = {
+      marketing-compliance-gate = {
+        ui_image           = "registry.example.test/marketing-compliance-gate-ui@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        api_image          = "registry.example.test/marketing-compliance-gate-api@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        ui_build_base_path = "/apps/marketing-compliance-gate"
+        api_env            = { MKT_GOV_PROFILE = "local" }
+      }
+    }
+  }
+  expect_failures = [terraform_data.embedded_app_contract]
+}
+
+run "reject_marketing_compliance_gate_overriding_its_injected_audience" {
+  command = plan
+  variables {
+    rollback_images = {
+      bff                             = "registry.example.test/bff@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      rm                              = "registry.example.test/rm@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      ops                             = "registry.example.test/ops@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      "marketing-compliance-gate-ui"  = "registry.example.test/marketing-compliance-gate-ui@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      "marketing-compliance-gate-api" = "registry.example.test/marketing-compliance-gate-api@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    }
+    embedded_apps = {
+      marketing-compliance-gate = {
+        ui_image           = "registry.example.test/marketing-compliance-gate-ui@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        api_image          = "registry.example.test/marketing-compliance-gate-api@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        ui_build_base_path = "/apps/marketing-compliance-gate"
+        api_env            = { MKT_GOV_PROFILE = "gcp", MKT_GOV_IAP_AUDIENCE = "/guessed" }
+      }
+    }
+  }
+  expect_failures = [terraform_data.embedded_app_contract]
+}
+
+# One of the ids the old list allowed and nothing mapped. It stays undeployable until someone adds
+# its profile and audience variables to local.embedded_app_managed_env. (Not
+# performance-marketing-optimisation: its rollback component name is longer than rollback_images
+# accepts, so that run would fail on the rollback map instead.)
+run "reject_app_with_no_managed_env_mapping" {
+  command = plan
+  variables {
+    rollback_images = {
+      bff                     = "registry.example.test/bff@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      rm                      = "registry.example.test/rm@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      ops                     = "registry.example.test/ops@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      "complaints-review-ui"  = "registry.example.test/complaints-review-ui@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      "complaints-review-api" = "registry.example.test/complaints-review-api@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    }
+    embedded_apps = {
+      complaints-review = {
+        ui_image           = "registry.example.test/complaints-review-ui@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        api_image          = "registry.example.test/complaints-review-api@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        ui_build_base_path = "/apps/complaints-review"
+        api_env            = { COMPLAINTS_PROFILE = "gcp" }
+      }
+    }
+  }
+  expect_failures = [terraform_data.embedded_app_contract]
+}
+
+# A 20-character prefix is valid on its own, and makes this app's API service name 50 characters.
+run "reject_service_name_over_cloud_run_limit" {
+  command = plan
+  variables {
+    name_prefix = "hrz9-test-long-names"
+    rollback_images = {
+      bff                             = "registry.example.test/bff@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      rm                              = "registry.example.test/rm@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      ops                             = "registry.example.test/ops@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      "marketing-compliance-gate-ui"  = "registry.example.test/marketing-compliance-gate-ui@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      "marketing-compliance-gate-api" = "registry.example.test/marketing-compliance-gate-api@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    }
+    embedded_apps = {
+      marketing-compliance-gate = {
+        ui_image           = "registry.example.test/marketing-compliance-gate-ui@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        api_image          = "registry.example.test/marketing-compliance-gate-api@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        ui_build_base_path = "/apps/marketing-compliance-gate"
+        api_env            = { MKT_GOV_PROFILE = "gcp" }
+      }
+    }
+  }
+  expect_failures = [terraform_data.embedded_app_contract]
 }
 
 run "safe_stage_one_bootstrap" {
