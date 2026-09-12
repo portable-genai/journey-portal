@@ -278,6 +278,17 @@ def run(target: Target, out_dir: Path) -> Evidence:
                 # constant 8 on every run of either target and called it a citation count.
                 cited_documents=summary["rating.citations"]["count"]
                 + summary["sow.citations"]["count"],
+                # Whether the regulatory check ran, and whether the answer that came back had
+                # policy behind it. Three states, not two: None means compliance-advisory was
+                # asked and did not answer -- NOT CHECKED, which the dossier records rather than
+                # fails on -- False means it answered from a profile with no policy corpus, and
+                # True means a grounded answer. Without this line a service outage is captured
+                # in dossier.json and visible in nothing anyone reads, which is how the
+                # deployment answered every dossier from a stand-in unnoticed in the first
+                # place. The dossier's own compliance object travels whole in dossier.json and
+                # under the digest below; this is the part the evidence states out loud.
+                compliance_checked=summary["compliance.present"],
+                compliance_grounded=summary.get("compliance.grounded"),
                 comparable_fields=len(summary),
                 generated_at=artifact.get("generated_at"),
                 # What makes this dossier and this evidence provably one run. pair_report

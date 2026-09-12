@@ -115,6 +115,24 @@ EXEMPT: dict[str, str] = {
         "features it matched on. WHICH watchlist the hit came from, WHO it matched and the "
         "alert's disposition are compared instead, and those are what a reviewer acts on."
     ),
+    "compliance.answer / compliance.confidence": (
+        "the regulatory answer's prose, and the self-assessment the service attaches to its own "
+        "reading of it. The same class as rating.rationale and sow.confidence above, and for a "
+        "stronger reason than either: the answer is advisory and explicitly never an outcome, so "
+        "the rating is settled before the question is asked and nothing in the dossier is "
+        "downstream of how the answer is worded. What the answer DETERMINES -- whether a human "
+        "must look at this -- is compared, and so is the question it was asked."
+    ),
+    "compliance.citations[]": (
+        "WHICH policy passages ground the regulatory answer, how many there are and what they "
+        "are titled. The local profile answers in-process from a conservative stand-in that "
+        "carries no policy corpus and cites nothing by design, while every networked profile "
+        "asks the grounded compliance-advisory service, so these are citations OF two different "
+        "sources of truth in exactly the way ownership.citations are, and comparing them would "
+        "demand the laptop invent a policy library it does not ship. Whether the answer is "
+        "grounded AT ALL is compared instead, in one direction: see compliance.grounded in "
+        "ONE_WAY. Decided 2026-09-12."
+    ),
     "citations[].snippet": (
         "parser fidelity. Portable OCR and Document AI extract different spans of one page."
     ),
@@ -261,6 +279,7 @@ def comparable(dossier: dict[str, Any]) -> dict[str, Any]:
     sow = dossier.get("sow") or {}
     screening = dossier.get("screening")
     ownership = dossier.get("ownership")
+    compliance = dossier.get("compliance")
 
     out: dict[str, Any] = {
         # Escalation reasons. Whether a human must look at this is policy, and the most
@@ -337,6 +356,31 @@ def comparable(dossier: dict[str, Any]) -> dict[str, Any]:
     if ownership is not None:
         out["ownership.root_entity"] = ownership.get("root_entity")
 
+    # The regulatory check, on the same present-vs-absent principle as the screen above. An
+    # absent answer is NOT CHECKED -- compliance-advisory was asked and did not answer -- which
+    # the dossier records rather than fails on, and which must never read as agreement with a
+    # profile that got an answer. Compared in BOTH directions, unlike the search below: the
+    # laptop is the side that always answers here (it answers in-process and cannot fail to),
+    # so the usual left-is-the-reduced-one asymmetry does not apply and there is nothing to
+    # tolerate. A managed dossier that reports NOT CHECKED beside a laptop one that asked and
+    # was answered is precisely the regression this key exists to make red.
+    out["compliance.present"] = compliance is not None
+    if compliance is not None:
+        # What was ASKED. The service builds it from the subject's type and jurisdiction and
+        # the risk band -- inputs and a compared figure, never model prose -- so two profiles
+        # asking different questions means they asked about different dossiers, and the answers
+        # below are then not comparable at all.
+        out["compliance.question"] = compliance.get("question")
+        # The only DETERMINATION the answer publishes. ComplianceAnswerModel carries no
+        # allow/deny verdict and no list of policy breaches -- the answer is advisory and "never
+        # an outcome" by construction, so the rating is already settled when it arrives -- which
+        # leaves this single bit as the whole of what it decides. It is an escalation reason,
+        # the class of field the published claim names explicitly, so it is compared.
+        out["compliance.requires_human_review"] = compliance.get("requires_human_review")
+        # Whether ANY policy source stands behind the answer. Not which, not how many, not what
+        # they are titled: see compliance.citations[] in EXEMPT. One-way, see ONE_WAY.
+        out["compliance.grounded"] = bool(compliance.get("citations"))
+
     # Whether a public-web search happened AT ALL, on the same present-vs-absent principle. The
     # findings are exempt (see EXEMPT) because the laptop has no grounding to search with, but
     # the exemption runs one way: compare() tolerates the reduced profile being the silent one
@@ -357,6 +401,14 @@ ONE_WAY: dict[str, str] = {
         "the laptop has no public-web grounding and reports NOT SEARCHED by design, so the left "
         "profile may be the one that did not search. The managed profile silently dropping the "
         "search is a regression, not a declared reduction, and diverges."
+    ),
+    "compliance.grounded": (
+        "the laptop answers the regulatory question in-process from a stand-in with no policy "
+        "corpus behind it, and the answer says so in its own text; every networked profile asks "
+        "compliance-advisory, which cites the policy it read. So the left profile may be the "
+        "ungrounded one. The managed profile answering with no policy source behind it is a "
+        "regression, not a declared reduction, and diverges -- the same shape, and the same "
+        "reasoning, as adverse_media.searched above."
     ),
 }
 
