@@ -21,7 +21,8 @@ locals {
   # creating it. See google_project_service_identity.iap below.
   iap_service_agent = "serviceAccount:${google_project_service_identity.iap.email}"
   expected_rollback_components = concat(
-    ["bff", "rm", "ops"],
+    ["bff"],
+    local.shell_journeys,
     [for id in keys(var.embedded_apps) : "${id}-ui"],
     [for id in keys(var.embedded_apps) : "${id}-api"],
   )
@@ -59,24 +60,22 @@ resource "terraform_data" "deployment_contract" {
     # variables.tf: variable validation runs before preconditions, so the same condition
     # here would be unreachable. region and allowed_regions stay in the recorded contract
     # input above so the reviewed pair is visible in the plan.
-    precondition {
-      condition     = var.rm_domain != var.ops_domain
-      error_message = "RM and Ops need distinct hostnames so each shell can own its root path."
-    }
+    # Distinct shell hostnames and journeys are owned by terraform_data.shell_contract in
+    # shells.tf; this one holds the tenant registry to exactly the hostnames the edge routes.
     precondition {
       condition = (
         length(local.tenant_policy_hosts) == length(distinct(local.tenant_policy_hosts)) &&
-        length(setsubtract(toset(local.tenant_policy_hosts), toset([var.rm_domain, var.ops_domain]))) == 0 &&
-        length(setsubtract(toset([var.rm_domain, var.ops_domain]), toset(local.tenant_policy_hosts))) == 0
+        length(setsubtract(toset(local.tenant_policy_hosts), toset(local.shell_domains))) == 0 &&
+        length(setsubtract(toset(local.shell_domains), toset(local.tenant_policy_hosts))) == 0
       )
-      error_message = "Each routed RM/Ops hostname must resolve to exactly one tenant embed policy."
+      error_message = "Each routed shell hostname must resolve to exactly one tenant embed policy."
     }
     precondition {
       condition = length(var.rollback_images) == length(local.expected_rollback_components) && alltrue([
         for component in local.expected_rollback_components :
         contains(keys(var.rollback_images), component)
       ])
-      error_message = "rollback_images must cover the BFF, both shells, and every embedded UI/API."
+      error_message = "rollback_images must cover the BFF, every shell (keyed by its journey), and every embedded UI/API, and nothing else."
     }
     precondition {
       condition = alltrue([
@@ -107,16 +106,11 @@ resource "google_service_account" "portal" {
   display_name = "Journey portal BFF runtime"
 }
 
-resource "google_service_account" "rm_shell" {
+resource "google_service_account" "shell" {
+  for_each     = local.shells
   project      = var.project_id
-  account_id   = "${var.name_prefix}-rm"
-  display_name = "Journey portal RM shell runtime"
-}
-
-resource "google_service_account" "ops_shell" {
-  project      = var.project_id
-  account_id   = "${var.name_prefix}-ops"
-  display_name = "Journey portal Ops shell runtime"
+  account_id   = "${var.name_prefix}-${each.key}"
+  display_name = "Journey portal ${each.key} shell runtime"
 }
 
 resource "google_service_account" "embedded_ui" {

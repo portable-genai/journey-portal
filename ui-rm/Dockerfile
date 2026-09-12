@@ -3,7 +3,18 @@
 # it runs on the build host's own architecture rather than under emulation. See
 # ui-ops/Dockerfile for the crash this avoids on cross-arch builds.
 FROM --platform=$BUILDPLATFORM node:26-bookworm-slim@sha256:cd565714d4da3e84bfd341e31448f81d47c6362198f152345297c9c1154e6341 AS builder
-ENV PORTAL_STATIC_EXPORT=1
+# WHICH journey this image serves, chosen at BUILD time and not at runtime. Next.js inlines
+# every NEXT_PUBLIC_* value into the compiled bundle, so a static export cannot be re-pointed
+# afterwards: one image per persona host is the shape, not a deployment-time environment
+# variable. `docker build --build-arg JOURNEY=mkt ui-rm` is the Marketing shell; the default is
+# the journey this image has always served, so an unchanged build command is an unchanged shell.
+#
+# Terraform cannot read this back out of a digest, which is why `var.shells` records the journey
+# as the operator's claim and `e2e/app_coverage.py` is what holds a hostname to the journey it
+# actually renders: a shell whose journey is absent from the catalog falls back to the first one
+# and serves a perfectly healthy page under the wrong persona's name.
+ARG JOURNEY=rm
+ENV PORTAL_STATIC_EXPORT=1 NEXT_PUBLIC_JOURNEY=$JOURNEY
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci

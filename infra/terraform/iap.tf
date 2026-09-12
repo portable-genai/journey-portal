@@ -6,18 +6,11 @@ resource "google_cloud_run_v2_service_iam_member" "iap_portal_invoker" {
   member   = local.iap_service_agent
 }
 
-resource "google_cloud_run_v2_service_iam_member" "iap_rm_invoker" {
+resource "google_cloud_run_v2_service_iam_member" "iap_shell_invoker" {
+  for_each = local.shells
   project  = var.project_id
   location = var.region
-  name     = google_cloud_run_v2_service.rm_shell.name
-  role     = "roles/run.invoker"
-  member   = local.iap_service_agent
-}
-
-resource "google_cloud_run_v2_service_iam_member" "iap_ops_invoker" {
-  project  = var.project_id
-  location = var.region
-  name     = google_cloud_run_v2_service.ops_shell.name
+  name     = google_cloud_run_v2_service.shell[each.key].name
   role     = "roles/run.invoker"
   member   = local.iap_service_agent
 }
@@ -121,11 +114,12 @@ resource "google_project_iam_member" "embedded_runtime_baseline" {
 
 locals {
   computed_portal_iap_audience = "/projects/${data.google_project.current.number}/global/backendServices/${google_compute_backend_service.portal.generated_id}"
-  iap_backends = {
-    portal = google_compute_backend_service.portal.name
-    rm     = google_compute_backend_service.rm_shell.name
-    ops    = google_compute_backend_service.ops_shell.name
-  }
+  # The portal backend plus one per shell; every approved member is granted on each, so a new
+  # shell host admits exactly the members the existing ones do.
+  iap_backends = merge(
+    { portal = google_compute_backend_service.portal.name },
+    { for journey, backend in google_compute_backend_service.shell : journey => backend.name },
+  )
   iap_access_bindings = {
     for binding in setproduct(keys(local.iap_backends), var.iap_members) :
     "${binding[0]}|${binding[1]}" => {

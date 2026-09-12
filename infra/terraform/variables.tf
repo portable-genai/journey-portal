@@ -95,21 +95,32 @@ variable "bff_image" {
   }
 }
 
-variable "rm_shell_image" {
-  type        = string
-  description = "RM shell image pinned by sha256 digest."
-  validation {
-    condition     = can(regex("@sha256:[0-9a-f]{64}$", var.rm_shell_image))
-    error_message = "rm_shell_image must use an immutable @sha256 digest."
-  }
-}
+variable "shells" {
+  type = list(object({
+    journey = string
+    image   = string
+    domain  = string
+  }))
+  description = <<-EOT
+    The persona shells this deployment publishes, in certificate order: one entry per journey,
+    naming the journey key from config/journeys.yaml, the digest-pinned shell image BUILT FOR
+    that journey, and the hostname it serves on. Ordered on purpose; shells.tf says why. The
+    first entry is the url map's default backend. A deployment names the subset of journeys it
+    publishes, as embedded_apps names the subset of apps; shells.tf refuses a shell whose
+    journey has no app in embedded_apps.
 
-variable "ops_shell_image" {
-  type        = string
-  description = "Ops shell image pinned by sha256 digest."
+    The image carries the journey at build time (NEXT_PUBLIC_JOURNEY for the React shell), so
+    Terraform cannot read it back; the journey here is the operator's claim, and the e2e sweep
+    (e2e/app_coverage.py) is what holds each hostname to the journey it renders.
+  EOT
   validation {
-    condition     = can(regex("@sha256:[0-9a-f]{64}$", var.ops_shell_image))
-    error_message = "ops_shell_image must use an immutable @sha256 digest."
+    condition = length(var.shells) > 0 && alltrue([
+      for shell in var.shells :
+      can(regex("^[a-z][a-z0-9-]{1,14}$", shell.journey)) &&
+      can(regex("@sha256:[0-9a-f]{64}$", shell.image)) &&
+      can(regex("^[a-z0-9][a-z0-9.-]+[a-z0-9]$", shell.domain))
+    ])
+    error_message = "shells must be non-empty, and each entry needs a short lowercase journey key, an immutable @sha256 shell image, and a DNS hostname without scheme or path."
   }
 }
 
@@ -210,8 +221,11 @@ variable "rollback_images" {
       for component, image in var.rollback_images :
       can(regex("^[a-z0-9][a-z0-9-]{0,30}$", component)) &&
       can(regex("@sha256:[0-9a-f]{64}$", image))
-    ]) && alltrue([for component in ["bff", "rm", "ops"] : contains(keys(var.rollback_images), component)])
-    error_message = "rollback_images values must be digest-pinned component images."
+    ]) && contains(keys(var.rollback_images), "bff")
+    # Exact coverage -- the BFF, every shell and every embedded UI/API -- is a precondition on
+    # terraform_data.deployment_contract, because a validation block may not read var.shells or
+    # var.embedded_apps on the Terraform floor this stack declares.
+    error_message = "rollback_images values must be digest-pinned component images and must name bff."
   }
 }
 
@@ -223,8 +237,8 @@ variable "rollback_images" {
 # forwarding rule -- bills a forwarding-rule minimum whether or not anything reaches it, and a
 # released global address is billed at the HIGHER unattached rate for as long as it is held.
 # The reference deployment tore the edge down on 2026-09-02 and released 8.233.116.41 with it;
-# the three backend services and their serverless NEGs are free without a forwarding rule in
-# front and are deliberately kept, so re-enabling this rebuilds the edge over them.
+# the backend services and their serverless NEGs are free without a forwarding rule in front
+# and are deliberately kept, so re-enabling this rebuilds the edge over them.
 #
 # Default false, matching `production_edge_enabled` across the fleet. It was previously
 # unconditional, which meant any apply -- for any unrelated reason -- silently rebuilt the edge
@@ -235,24 +249,6 @@ variable "production_edge_enabled" {
   description = "Provision the external load-balancer edge in front of the backend services."
   type        = bool
   default     = false
-}
-
-variable "rm_domain" {
-  type        = string
-  description = "DNS name for the RM shell, without scheme or path."
-  validation {
-    condition     = can(regex("^[a-z0-9][a-z0-9.-]+[a-z0-9]$", var.rm_domain))
-    error_message = "rm_domain must be a DNS hostname."
-  }
-}
-
-variable "ops_domain" {
-  type        = string
-  description = "DNS name for the Ops shell, without scheme or path."
-  validation {
-    condition     = can(regex("^[a-z0-9][a-z0-9.-]+[a-z0-9]$", var.ops_domain))
-    error_message = "ops_domain must be a DNS hostname."
-  }
 }
 
 variable "dns_managed_zone" {

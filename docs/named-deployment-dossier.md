@@ -24,6 +24,14 @@ the Mode 5 registration as all-or-nothing: naming any one of its variables deman
 plus `PORTAL_SESSION_SIGNING_KEY`. A row marked `PENDING` below is therefore a row that will
 stop a production command, by design.
 
+`DEPLOY_SHELLS_JSON` is the one row that decides which personas this deployment is FOR: one
+`{journey, image, domain}` entry per published host, in certificate order. Record each host's
+journey, hostname and reviewed image digest below alongside the apps it mounts, because a shell
+whose journey has no deployed app is refused at plan -- the BFF would drop that journey and the
+host would render another persona's. Adding or removing a host replaces the managed certificate;
+[`infra/terraform/README.md`](../infra/terraform/README.md) ("Adding a shell host") owns that
+procedure.
+
 Repository code and reusable infrastructure are ready. The dossier is deliberately incomplete
 until the institution supplies the decisions below. A fictional institution is not production
 evidence.

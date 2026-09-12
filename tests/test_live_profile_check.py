@@ -10,6 +10,10 @@ from types import ModuleType
 
 import pytest
 
+#: The two shells the reference deployment publishes. A run is TOLD which shells exist, so a
+#: third persona host is another entry rather than another keyword argument.
+_REFERENCE_SHELLS = [("rm", "https://rm.bank.internal"), ("ops", "https://ops.bank.internal")]
+
 
 @pytest.fixture(scope="module")
 def live_module() -> ModuleType:
@@ -31,12 +35,14 @@ class _Requester:
         allow_unauthenticated: bool = False,
         broken_ui: str = "",
         wrong_membership: bool = False,
+        marketing: bool = False,
     ) -> None:
         self._module = module
         self._profile = profile
         self._allow_unauthenticated = allow_unauthenticated
         self._broken_ui = broken_ui
         self._wrong_membership = wrong_membership
+        self._marketing = marketing
         self.calls: list[tuple[str, str, str]] = []
 
     def get(self, base_url: str, path: str, token: str):
@@ -71,20 +77,18 @@ class _Requester:
                     "human-review-console",
                 )
             )
+            feed = [("rm", rm_ids), ("ops", ops_ids)]
+            if self._marketing:
+                feed.append(("mkt", ("marketing-compliance-gate", "human-review-console")))
             body = {
                 "journeys": [
                     {
-                        "key": "rm",
+                        "key": key,
                         "apps": [
-                            {"id": app_id, "ui_base": f"/apps/{app_id}/"} for app_id in rm_ids
+                            {"id": app_id, "ui_base": f"/apps/{app_id}/"} for app_id in app_ids
                         ],
-                    },
-                    {
-                        "key": "ops",
-                        "apps": [
-                            {"id": app_id, "ui_base": f"/apps/{app_id}/"} for app_id in ops_ids
-                        ],
-                    },
+                    }
+                    for key, app_ids in feed
                 ]
             }
         elif path == "/apps/loan-document-intelligence/api/healthz":
@@ -97,14 +101,17 @@ class _Requester:
             "/apps/compliance-advisory/api/healthz",
         }:
             body = {"status": "ok", "profile": "live", "region": "asia-southeast1"}
-        elif path == "/apps/human-review-console/api/healthz":
+        elif path in {
+            "/apps/human-review-console/api/healthz",
+            "/apps/marketing-compliance-gate/api/healthz",
+        }:
             body = {"status": "ok", "profile": "gcp", "region": "asia-southeast1"}
         elif path == "/apps/cdd-sow-research/":
             return self._module.Response(307, "text/html", b"", "/agent/")
         elif path == "/agent/":
             return self._ui("cdd-sow-research", "/agent")
         elif re.fullmatch(
-            r"/apps/(credit-memo-drafting|cio-advisory|trade-finance-checker|loan-document-intelligence|compliance-advisory|human-review-console)/",
+            r"/apps/(credit-memo-drafting|cio-advisory|trade-finance-checker|loan-document-intelligence|compliance-advisory|human-review-console|marketing-compliance-gate)/",
             path,
         ):
             app_id = path.split("/")[2]
@@ -126,8 +133,7 @@ def test_checks_both_hosts_through_iap(live_module: ModuleType) -> None:
 
     live_module.run_check(
         requester,
-        rm_url="https://rm.bank.internal",
-        ops_url="https://ops.bank.internal",
+        shells=_REFERENCE_SHELLS,
         token="signed-id-token",
         expected_region="asia-southeast1",
     )
@@ -147,6 +153,56 @@ def test_checks_both_hosts_through_iap(live_module: ModuleType) -> None:
     }
 
 
+def test_a_third_persona_host_is_another_shell_entry(live_module: ModuleType) -> None:
+    """The Marketing host is checked by naming it, not by a third keyword argument.
+
+    The feed must then expose exactly three journeys: a shell whose journey the BFF has dropped
+    renders a DIFFERENT persona's journey under its own hostname and looks perfectly healthy, so
+    "the deployment publishes mkt" and "the feed serves mkt" are separate claims that must agree.
+    """
+    requester = _Requester(live_module, marketing=True)
+
+    live_module.run_check(
+        requester,
+        shells=[*_REFERENCE_SHELLS, ("mkt", "https://mkt.bank.internal")],
+        token="signed-id-token",
+        expected_region="asia-southeast1",
+    )
+
+    origins = {base_url for base_url, _, _ in requester.calls}
+    assert "https://mkt.bank.internal" in origins
+    assert ("https://mkt.bank.internal", "/apps/marketing-compliance-gate/api/healthz", "") not in (
+        requester.calls
+    )
+    assert (
+        "https://mkt.bank.internal",
+        "/apps/marketing-compliance-gate/api/healthz",
+        "signed-id-token",
+    ) in requester.calls
+
+
+def test_a_marketing_host_the_feed_does_not_serve_is_refused(live_module: ModuleType) -> None:
+    with pytest.raises(live_module.LiveCheckError, match="the hosted feed exposes"):
+        live_module.run_check(
+            _Requester(live_module),
+            shells=[*_REFERENCE_SHELLS, ("mkt", "https://mkt.bank.internal")],
+            token="signed-id-token",
+            expected_region="asia-southeast1",
+        )
+
+
+@pytest.mark.parametrize("raw", ["rm", "=https://rm.bank.internal", "rm="])
+def test_a_malformed_shell_argument_is_refused(live_module: ModuleType, raw: str) -> None:
+    with pytest.raises(live_module.LiveCheckError, match="journey=https"):
+        live_module.parse_shell(raw)
+
+
+def test_a_shell_whose_contents_this_check_cannot_state_is_refused(live_module: ModuleType) -> None:
+    """Checking a shell against no stated contents would pass by asserting nothing."""
+    with pytest.raises(live_module.LiveCheckError, match="does not state"):
+        live_module.parse_shell("risk=https://risk.bank.internal")
+
+
 def test_standalone_help_needs_only_the_system_python_stdlib() -> None:
     repo = Path(__file__).resolve().parents[1]
     # The interpreter UNDERNEATH the virtualenv, not `sys.executable`. Running the venv's own
@@ -164,6 +220,7 @@ def test_standalone_help_needs_only_the_system_python_stdlib() -> None:
     )
     assert result.returncode == 0, result.stderr
     assert "--expected-region" in result.stdout
+    assert "JOURNEY=URL" in result.stdout
     assert "ModuleNotFoundError" not in result.stderr
 
 
@@ -183,8 +240,10 @@ def test_fails_closed_on_placeholder_url(live_module: ModuleType) -> None:
     with pytest.raises(live_module.LiveCheckError, match="placeholder"):
         live_module.run_check(
             _Requester(live_module),
-            rm_url="https://replace-me.example.test",
-            ops_url="https://ops.bank.internal",
+            shells=[
+                ("rm", "https://replace-me.example.test"),
+                ("ops", "https://ops.bank.internal"),
+            ],
             token="signed-id-token",
             expected_region="asia-southeast1",
         )
@@ -194,8 +253,7 @@ def test_rejects_local_profile(live_module: ModuleType) -> None:
     with pytest.raises(live_module.LiveCheckError, match="managed profile"):
         live_module.run_check(
             _Requester(live_module, profile="local"),
-            rm_url="https://rm.bank.internal",
-            ops_url="https://ops.bank.internal",
+            shells=_REFERENCE_SHELLS,
             token="signed-id-token",
             expected_region="asia-southeast1",
         )
@@ -205,8 +263,7 @@ def test_rejects_unauthenticated_access(live_module: ModuleType) -> None:
     with pytest.raises(live_module.LiveCheckError, match="allowed unauthenticated access"):
         live_module.run_check(
             _Requester(live_module, allow_unauthenticated=True),
-            rm_url="https://rm.bank.internal",
-            ops_url="https://ops.bank.internal",
+            shells=_REFERENCE_SHELLS,
             token="signed-id-token",
             expected_region="asia-southeast1",
         )
@@ -233,8 +290,7 @@ def test_rejects_local_embedded_app_profile(live_module: ModuleType) -> None:
     with pytest.raises(live_module.LiveCheckError, match="credit-memo-drafting health profile"):
         live_module.run_check(
             requester,
-            rm_url="https://rm.bank.internal",
-            ops_url="https://ops.bank.internal",
+            shells=_REFERENCE_SHELLS,
             token="signed-id-token",
             expected_region="asia-southeast1",
         )
@@ -244,8 +300,7 @@ def test_rejects_embedded_ui_asset_outside_build_base(live_module: ModuleType) -
     with pytest.raises(live_module.LiveCheckError, match="escaped"):
         live_module.run_check(
             _Requester(live_module, broken_ui="credit-memo-drafting"),
-            rm_url="https://rm.bank.internal",
-            ops_url="https://ops.bank.internal",
+            shells=_REFERENCE_SHELLS,
             token="signed-id-token",
             expected_region="asia-southeast1",
         )
@@ -255,8 +310,7 @@ def test_rejects_apps_assigned_to_wrong_journey(live_module: ModuleType) -> None
     with pytest.raises(live_module.LiveCheckError, match="journey membership"):
         live_module.run_check(
             _Requester(live_module, wrong_membership=True),
-            rm_url="https://rm.bank.internal",
-            ops_url="https://ops.bank.internal",
+            shells=_REFERENCE_SHELLS,
             token="signed-id-token",
             expected_region="asia-southeast1",
         )

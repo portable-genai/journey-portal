@@ -1,11 +1,6 @@
-output "rm_url" {
-  value       = var.production_edge_enabled ? "https://${var.rm_domain}" : ""
-  description = "IAP-protected RM journey URL."
-}
-
-output "ops_url" {
-  value       = var.production_edge_enabled ? "https://${var.ops_domain}" : ""
-  description = "IAP-protected Ops journey URL."
+output "shell_urls" {
+  value       = { for journey, shell in local.shells : journey => var.production_edge_enabled ? "https://${shell.domain}" : "" }
+  description = "IAP-protected journey URL per shell, keyed by journey; empty while the edge is declined."
 }
 
 output "load_balancer_address" {
@@ -15,7 +10,8 @@ output "load_balancer_address" {
 
 output "image_digests" {
   value = merge(
-    { bff = var.bff_image, rm = var.rm_shell_image, ops = var.ops_shell_image },
+    { bff = var.bff_image },
+    { for journey, shell in local.shells : journey => shell.image },
     { for id, app in var.embedded_apps : "${id}-ui" => app.ui_image },
     { for id, app in var.embedded_apps : "${id}-api" => app.api_image },
   )
@@ -42,11 +38,8 @@ output "vpc_sc_mode" {
 
 output "service_accounts" {
   value = merge(
-    {
-      portal = google_service_account.portal.email
-      rm     = google_service_account.rm_shell.email
-      ops    = google_service_account.ops_shell.email
-    },
+    { portal = google_service_account.portal.email },
+    { for journey, account in google_service_account.shell : journey => account.email },
     { for id, account in google_service_account.embedded_ui : "${id}-ui" => account.email },
     { for id, account in google_service_account.embedded_api : "${id}-api" => account.email },
   )
@@ -69,10 +62,12 @@ output "embedded_service_urls" {
 }
 
 output "verification_commands" {
-  value = {
-    unauthenticated_rm = "curl -I https://${var.rm_domain}"
-    authenticated_rm   = "gcloud iap web login --resource-type=backend-services"
-    revisions          = "gcloud run services list --region=${var.region} --project=${var.project_id}"
-  }
+  value = merge(
+    { for journey, shell in local.shells : "unauthenticated_${journey}" => "curl -I https://${shell.domain}" },
+    {
+      authenticated = "gcloud iap web login --resource-type=backend-services"
+      revisions     = "gcloud run services list --region=${var.region} --project=${var.project_id}"
+    },
+  )
   description = "Operator starting points. Execute and retain output in the named evidence pack."
 }

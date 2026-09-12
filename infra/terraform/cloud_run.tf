@@ -172,14 +172,18 @@ resource "google_cloud_run_v2_service" "portal" {
   ]
 }
 
-resource "google_cloud_run_v2_service" "rm_shell" {
+# One service per shell in var.shells. The image is a static export of the shell built for
+# exactly one journey (NEXT_PUBLIC_JOURNEY for the React shell); the static server it ships
+# answers /healthz, so every shell probes the same path.
+resource "google_cloud_run_v2_service" "shell" {
+  for_each            = local.shells
   project             = var.project_id
-  name                = "${var.name_prefix}-rm"
+  name                = "${var.name_prefix}-${each.key}"
   location            = var.region
   ingress             = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
   deletion_protection = var.cloud_run_deletion_protection
   template {
-    service_account                  = google_service_account.rm_shell.email
+    service_account                  = google_service_account.shell[each.key].email
     encryption_key                   = google_kms_crypto_key.portal.id
     timeout                          = var.runtime.timeout
     max_instance_request_concurrency = var.runtime.concurrency
@@ -188,53 +192,7 @@ resource "google_cloud_run_v2_service" "rm_shell" {
       max_instance_count = var.runtime.max_instances
     }
     containers {
-      image = var.rm_shell_image
-      resources {
-        limits = { cpu = var.runtime.cpu, memory = var.runtime.memory }
-      }
-      ports {
-        container_port = 8080
-      }
-      env {
-        name  = "FRAME_ANCESTORS"
-        value = join(" ", sort(tolist(var.frame_ancestors)))
-      }
-      env {
-        name  = "TENANT_EMBED_POLICIES_JSON"
-        value = local.tenant_embed_policies_json
-      }
-      startup_probe {
-        http_get {
-          path = "/"
-        }
-      }
-      liveness_probe {
-        http_get {
-          path = "/"
-        }
-      }
-    }
-  }
-  depends_on = [google_kms_crypto_key_iam_member.cloud_run, google_project_service.services, terraform_data.deployment_contract]
-}
-
-resource "google_cloud_run_v2_service" "ops_shell" {
-  project             = var.project_id
-  name                = "${var.name_prefix}-ops"
-  location            = var.region
-  ingress             = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
-  deletion_protection = var.cloud_run_deletion_protection
-  template {
-    service_account                  = google_service_account.ops_shell.email
-    encryption_key                   = google_kms_crypto_key.portal.id
-    timeout                          = var.runtime.timeout
-    max_instance_request_concurrency = var.runtime.concurrency
-    scaling {
-      min_instance_count = var.runtime_min_instances
-      max_instance_count = var.runtime.max_instances
-    }
-    containers {
-      image = var.ops_shell_image
+      image = each.value.image
       resources {
         limits = { cpu = var.runtime.cpu, memory = var.runtime.memory }
       }
@@ -261,7 +219,12 @@ resource "google_cloud_run_v2_service" "ops_shell" {
       }
     }
   }
-  depends_on = [google_kms_crypto_key_iam_member.cloud_run, google_project_service.services, terraform_data.deployment_contract]
+  depends_on = [
+    google_kms_crypto_key_iam_member.cloud_run,
+    google_project_service.services,
+    terraform_data.deployment_contract,
+    terraform_data.shell_contract,
+  ]
 }
 
 resource "google_cloud_run_v2_service" "embedded_ui" {

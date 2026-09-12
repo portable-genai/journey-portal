@@ -108,6 +108,11 @@ A journey is served by its own shell on its own origin — the React shell serve
 | `rm` | `PORTAL_E2E_BASE_URL`, default `http://localhost:3000` | `PORTAL_E2E_BASE_URL` |
 | every other | the port `scripts/run_journeys.py` assigns it (`mkt` 3001, `gov` 3002, `svc` 3003, `ops` 4200) | `PORTAL_E2E_SHELL_<JOURNEY>_BASE_URL`, or it is not driven |
 
+A cloud origin is named once per published persona host, so a deployment that publishes three
+shells is driven with `PORTAL_E2E_BASE_URL` (the `rm` host) plus
+`PORTAL_E2E_SHELL_OPS_BASE_URL` and `PORTAL_E2E_SHELL_MKT_BASE_URL`. The deployment's own shell
+list (`DEPLOY_SHELLS_JSON`) says which hosts exist and what each one's hostname is.
+
 **A journey the portal serves but this run has no origin for is reported as NEVER OPENED, not
 skipped.** On a deployment publishing one host per persona, "we did not open the ops shell" and
 "the ops shell is fine" must not print the same, and a run that quietly narrowed itself is how a

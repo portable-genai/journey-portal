@@ -28,8 +28,6 @@ variables {
   name_prefix                      = "hrz9-test"
   region                           = "asia-southeast1"
   allowed_regions                  = ["asia-southeast1"]
-  rm_domain                        = "rm.hrz9.example.test"
-  ops_domain                       = "ops.hrz9.example.test"
   iap_oauth2_client_id             = "000000000000-test.apps.example.test"
   iap_oauth2_client_secret         = "synthetic-test-value"
   portal_audit_hmac_secret         = "hrz9-test-portal-audit-hmac"
@@ -53,8 +51,19 @@ variables {
   # edge must not silently shrink what this file covers.
   production_edge_enabled = true
   bff_image               = "registry.example.test/bff@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-  rm_shell_image          = "registry.example.test/rm@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-  ops_shell_image         = "registry.example.test/ops@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  # The two shells the reference deployment publishes, in its order. Runs below add a third.
+  shells = [
+    {
+      journey = "rm"
+      image   = "registry.example.test/rm@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      domain  = "rm.hrz9.example.test"
+    },
+    {
+      journey = "ops"
+      image   = "registry.example.test/ops@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      domain  = "ops.hrz9.example.test"
+    },
+  ]
   rollback_images = {
     bff                            = "registry.example.test/bff@sha256:1111111111111111111111111111111111111111111111111111111111111111"
     rm                             = "registry.example.test/rm@sha256:2222222222222222222222222222222222222222222222222222222222222222"
@@ -205,7 +214,41 @@ run "complete_edge_and_private_services" {
 
   assert {
     condition     = length(google_iap_web_backend_service_iam_member.access) == 3
-    error_message = "Each approved member must receive three backend-scoped IAP grants."
+    error_message = "Each approved member must receive one backend-scoped IAP grant per backend: the portal and each of the two shells."
+  }
+
+  # The shape the reference deployment's state holds: two shells, rm first, and a certificate
+  # keeper equal to the string the hand-written pair produced, so moving the two shells into
+  # the map neither reorders the certificate's domains nor mints it a new name.
+  assert {
+    condition = (
+      length(google_cloud_run_v2_service.shell) == 2 &&
+      google_cloud_run_v2_service.shell["rm"].name == "hrz9-test-rm" &&
+      google_cloud_run_v2_service.shell["ops"].name == "hrz9-test-ops" &&
+      google_cloud_run_v2_service.shell["rm"].template[0].containers[0].startup_probe[0].http_get[0].path == "/healthz" &&
+      google_cloud_run_v2_service.shell["ops"].template[0].containers[0].liveness_probe[0].http_get[0].path == "/healthz"
+    )
+    error_message = "The two reference shells must plan under their existing service names and probe the static server's /healthz."
+  }
+
+  assert {
+    condition = (
+      google_compute_managed_ssl_certificate.portal[0].managed[0].domains == tolist(["rm.hrz9.example.test", "ops.hrz9.example.test"]) &&
+      random_id.certificate[0].keepers.domains == "rm.hrz9.example.test|ops.hrz9.example.test" &&
+      google_compute_url_map.portal[0].default_service == google_compute_backend_service.shell["rm"].id &&
+      length(google_compute_url_map.portal[0].host_rule) == 2 &&
+      length(google_compute_url_map.portal[0].path_matcher) == 2
+    )
+    error_message = "Two shells must yield today's certificate domain order and keeper, the rm shell as the url map default, and one host rule and path matcher each."
+  }
+
+  assert {
+    condition = (
+      length(output.shell_urls) == 2 &&
+      output.shell_urls["rm"] == "https://rm.hrz9.example.test" &&
+      output.shell_urls["ops"] == "https://ops.hrz9.example.test"
+    )
+    error_message = "shell_urls must name every shell's IAP-protected origin by journey."
   }
 
   assert {
@@ -305,10 +348,25 @@ run "reject_kms_rotation_above_cloud_kms_maximum" {
 run "reject_api_secret_collision_with_managed_environment" {
   command = plan
   variables {
+    # One app, so one shell: the journey that app belongs to, on its own host.
+    shells = [
+      {
+        journey = "rm"
+        image   = "registry.example.test/rm@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        domain  = "rm.hrz9.example.test"
+      },
+    ]
+    tenant_embed_policies = {
+      hrz9-test-primary = {
+        tenant          = "hrz9-test"
+        hosts           = ["rm.hrz9.example.test"]
+        frame_ancestors = ["'self'"]
+        cors_origins    = []
+      }
+    }
     rollback_images = {
       bff                    = "registry.example.test/bff@sha256:1111111111111111111111111111111111111111111111111111111111111111"
       rm                     = "registry.example.test/rm@sha256:1111111111111111111111111111111111111111111111111111111111111111"
-      ops                    = "registry.example.test/ops@sha256:1111111111111111111111111111111111111111111111111111111111111111"
       "cdd-sow-research-ui"  = "registry.example.test/cdd-sow-research-ui@sha256:1111111111111111111111111111111111111111111111111111111111111111"
       "cdd-sow-research-api" = "registry.example.test/cdd-sow-research-api@sha256:1111111111111111111111111111111111111111111111111111111111111111"
     }
@@ -329,10 +387,25 @@ run "reject_api_secret_collision_with_managed_environment" {
 run "reject_api_env_using_another_apps_profile" {
   command = plan
   variables {
+    # One app, so one shell: the journey that app belongs to, on its own host.
+    shells = [
+      {
+        journey = "rm"
+        image   = "registry.example.test/rm@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        domain  = "rm.hrz9.example.test"
+      },
+    ]
+    tenant_embed_policies = {
+      hrz9-test-primary = {
+        tenant          = "hrz9-test"
+        hosts           = ["rm.hrz9.example.test"]
+        frame_ancestors = ["'self'"]
+        cors_origins    = []
+      }
+    }
     rollback_images = {
       bff                    = "registry.example.test/bff@sha256:1111111111111111111111111111111111111111111111111111111111111111"
       rm                     = "registry.example.test/rm@sha256:1111111111111111111111111111111111111111111111111111111111111111"
-      ops                    = "registry.example.test/ops@sha256:1111111111111111111111111111111111111111111111111111111111111111"
       "cdd-sow-research-ui"  = "registry.example.test/cdd-sow-research-ui@sha256:1111111111111111111111111111111111111111111111111111111111111111"
       "cdd-sow-research-api" = "registry.example.test/cdd-sow-research-api@sha256:1111111111111111111111111111111111111111111111111111111111111111"
     }
@@ -351,10 +424,25 @@ run "reject_api_env_using_another_apps_profile" {
 run "reject_ui_env_using_cloud_run_managed_name" {
   command = plan
   variables {
+    # One app, so one shell: the journey that app belongs to, on its own host.
+    shells = [
+      {
+        journey = "rm"
+        image   = "registry.example.test/rm@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        domain  = "rm.hrz9.example.test"
+      },
+    ]
+    tenant_embed_policies = {
+      hrz9-test-primary = {
+        tenant          = "hrz9-test"
+        hosts           = ["rm.hrz9.example.test"]
+        frame_ancestors = ["'self'"]
+        cors_origins    = []
+      }
+    }
     rollback_images = {
       bff                    = "registry.example.test/bff@sha256:1111111111111111111111111111111111111111111111111111111111111111"
       rm                     = "registry.example.test/rm@sha256:1111111111111111111111111111111111111111111111111111111111111111"
-      ops                    = "registry.example.test/ops@sha256:1111111111111111111111111111111111111111111111111111111111111111"
       "cdd-sow-research-ui"  = "registry.example.test/cdd-sow-research-ui@sha256:1111111111111111111111111111111111111111111111111111111111111111"
       "cdd-sow-research-api" = "registry.example.test/cdd-sow-research-api@sha256:1111111111111111111111111111111111111111111111111111111111111111"
     }
@@ -374,10 +462,25 @@ run "reject_ui_env_using_cloud_run_managed_name" {
 run "reject_plain_and_secret_source_collision" {
   command = plan
   variables {
+    # One app, so one shell: the journey that app belongs to, on its own host.
+    shells = [
+      {
+        journey = "rm"
+        image   = "registry.example.test/rm@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        domain  = "rm.hrz9.example.test"
+      },
+    ]
+    tenant_embed_policies = {
+      hrz9-test-primary = {
+        tenant          = "hrz9-test"
+        hosts           = ["rm.hrz9.example.test"]
+        frame_ancestors = ["'self'"]
+        cors_origins    = []
+      }
+    }
     rollback_images = {
       bff                    = "registry.example.test/bff@sha256:1111111111111111111111111111111111111111111111111111111111111111"
       rm                     = "registry.example.test/rm@sha256:1111111111111111111111111111111111111111111111111111111111111111"
-      ops                    = "registry.example.test/ops@sha256:1111111111111111111111111111111111111111111111111111111111111111"
       "cdd-sow-research-ui"  = "registry.example.test/cdd-sow-research-ui@sha256:1111111111111111111111111111111111111111111111111111111111111111"
       "cdd-sow-research-api" = "registry.example.test/cdd-sow-research-api@sha256:1111111111111111111111111111111111111111111111111111111111111111"
     }
@@ -401,10 +504,25 @@ run "reject_plain_and_secret_source_collision" {
 run "accept_marketing_compliance_gate_on_its_managed_profile" {
   command = plan
   variables {
+    # One app, so one shell: the journey that app belongs to, on its own host.
+    shells = [
+      {
+        journey = "mkt"
+        image   = "registry.example.test/mkt@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        domain  = "mkt.hrz9.example.test"
+      },
+    ]
+    tenant_embed_policies = {
+      hrz9-test-primary = {
+        tenant          = "hrz9-test"
+        hosts           = ["mkt.hrz9.example.test"]
+        frame_ancestors = ["'self'"]
+        cors_origins    = []
+      }
+    }
     rollback_images = {
       bff                             = "registry.example.test/bff@sha256:1111111111111111111111111111111111111111111111111111111111111111"
-      rm                              = "registry.example.test/rm@sha256:1111111111111111111111111111111111111111111111111111111111111111"
-      ops                             = "registry.example.test/ops@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      mkt                             = "registry.example.test/mkt@sha256:1111111111111111111111111111111111111111111111111111111111111111"
       "marketing-compliance-gate-ui"  = "registry.example.test/marketing-compliance-gate-ui@sha256:1111111111111111111111111111111111111111111111111111111111111111"
       "marketing-compliance-gate-api" = "registry.example.test/marketing-compliance-gate-api@sha256:1111111111111111111111111111111111111111111111111111111111111111"
     }
@@ -450,10 +568,25 @@ run "accept_marketing_compliance_gate_on_its_managed_profile" {
 run "reject_marketing_compliance_gate_without_a_profile" {
   command = plan
   variables {
+    # One app, so one shell: the journey that app belongs to, on its own host.
+    shells = [
+      {
+        journey = "mkt"
+        image   = "registry.example.test/mkt@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        domain  = "mkt.hrz9.example.test"
+      },
+    ]
+    tenant_embed_policies = {
+      hrz9-test-primary = {
+        tenant          = "hrz9-test"
+        hosts           = ["mkt.hrz9.example.test"]
+        frame_ancestors = ["'self'"]
+        cors_origins    = []
+      }
+    }
     rollback_images = {
       bff                             = "registry.example.test/bff@sha256:1111111111111111111111111111111111111111111111111111111111111111"
-      rm                              = "registry.example.test/rm@sha256:1111111111111111111111111111111111111111111111111111111111111111"
-      ops                             = "registry.example.test/ops@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      mkt                             = "registry.example.test/mkt@sha256:1111111111111111111111111111111111111111111111111111111111111111"
       "marketing-compliance-gate-ui"  = "registry.example.test/marketing-compliance-gate-ui@sha256:1111111111111111111111111111111111111111111111111111111111111111"
       "marketing-compliance-gate-api" = "registry.example.test/marketing-compliance-gate-api@sha256:1111111111111111111111111111111111111111111111111111111111111111"
     }
@@ -471,10 +604,25 @@ run "reject_marketing_compliance_gate_without_a_profile" {
 run "reject_marketing_compliance_gate_on_the_local_profile" {
   command = plan
   variables {
+    # One app, so one shell: the journey that app belongs to, on its own host.
+    shells = [
+      {
+        journey = "mkt"
+        image   = "registry.example.test/mkt@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        domain  = "mkt.hrz9.example.test"
+      },
+    ]
+    tenant_embed_policies = {
+      hrz9-test-primary = {
+        tenant          = "hrz9-test"
+        hosts           = ["mkt.hrz9.example.test"]
+        frame_ancestors = ["'self'"]
+        cors_origins    = []
+      }
+    }
     rollback_images = {
       bff                             = "registry.example.test/bff@sha256:1111111111111111111111111111111111111111111111111111111111111111"
-      rm                              = "registry.example.test/rm@sha256:1111111111111111111111111111111111111111111111111111111111111111"
-      ops                             = "registry.example.test/ops@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      mkt                             = "registry.example.test/mkt@sha256:1111111111111111111111111111111111111111111111111111111111111111"
       "marketing-compliance-gate-ui"  = "registry.example.test/marketing-compliance-gate-ui@sha256:1111111111111111111111111111111111111111111111111111111111111111"
       "marketing-compliance-gate-api" = "registry.example.test/marketing-compliance-gate-api@sha256:1111111111111111111111111111111111111111111111111111111111111111"
     }
@@ -493,10 +641,25 @@ run "reject_marketing_compliance_gate_on_the_local_profile" {
 run "reject_marketing_compliance_gate_overriding_its_injected_audience" {
   command = plan
   variables {
+    # One app, so one shell: the journey that app belongs to, on its own host.
+    shells = [
+      {
+        journey = "mkt"
+        image   = "registry.example.test/mkt@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        domain  = "mkt.hrz9.example.test"
+      },
+    ]
+    tenant_embed_policies = {
+      hrz9-test-primary = {
+        tenant          = "hrz9-test"
+        hosts           = ["mkt.hrz9.example.test"]
+        frame_ancestors = ["'self'"]
+        cors_origins    = []
+      }
+    }
     rollback_images = {
       bff                             = "registry.example.test/bff@sha256:1111111111111111111111111111111111111111111111111111111111111111"
-      rm                              = "registry.example.test/rm@sha256:1111111111111111111111111111111111111111111111111111111111111111"
-      ops                             = "registry.example.test/ops@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      mkt                             = "registry.example.test/mkt@sha256:1111111111111111111111111111111111111111111111111111111111111111"
       "marketing-compliance-gate-ui"  = "registry.example.test/marketing-compliance-gate-ui@sha256:1111111111111111111111111111111111111111111111111111111111111111"
       "marketing-compliance-gate-api" = "registry.example.test/marketing-compliance-gate-api@sha256:1111111111111111111111111111111111111111111111111111111111111111"
     }
@@ -519,10 +682,25 @@ run "reject_marketing_compliance_gate_overriding_its_injected_audience" {
 run "reject_app_with_no_managed_env_mapping" {
   command = plan
   variables {
+    # One app, so one shell: the journey that app belongs to, on its own host.
+    shells = [
+      {
+        journey = "svc"
+        image   = "registry.example.test/svc@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        domain  = "svc.hrz9.example.test"
+      },
+    ]
+    tenant_embed_policies = {
+      hrz9-test-primary = {
+        tenant          = "hrz9-test"
+        hosts           = ["svc.hrz9.example.test"]
+        frame_ancestors = ["'self'"]
+        cors_origins    = []
+      }
+    }
     rollback_images = {
       bff                     = "registry.example.test/bff@sha256:1111111111111111111111111111111111111111111111111111111111111111"
-      rm                      = "registry.example.test/rm@sha256:1111111111111111111111111111111111111111111111111111111111111111"
-      ops                     = "registry.example.test/ops@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      svc                     = "registry.example.test/svc@sha256:1111111111111111111111111111111111111111111111111111111111111111"
       "complaints-review-ui"  = "registry.example.test/complaints-review-ui@sha256:1111111111111111111111111111111111111111111111111111111111111111"
       "complaints-review-api" = "registry.example.test/complaints-review-api@sha256:1111111111111111111111111111111111111111111111111111111111111111"
     }
@@ -542,11 +720,26 @@ run "reject_app_with_no_managed_env_mapping" {
 run "reject_service_name_over_cloud_run_limit" {
   command = plan
   variables {
+    # One app, so one shell: the journey that app belongs to, on its own host.
+    shells = [
+      {
+        journey = "mkt"
+        image   = "registry.example.test/mkt@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        domain  = "mkt.hrz9.example.test"
+      },
+    ]
+    tenant_embed_policies = {
+      hrz9-test-primary = {
+        tenant          = "hrz9-test"
+        hosts           = ["mkt.hrz9.example.test"]
+        frame_ancestors = ["'self'"]
+        cors_origins    = []
+      }
+    }
     name_prefix = "hrz9-test-long-names"
     rollback_images = {
       bff                             = "registry.example.test/bff@sha256:1111111111111111111111111111111111111111111111111111111111111111"
-      rm                              = "registry.example.test/rm@sha256:1111111111111111111111111111111111111111111111111111111111111111"
-      ops                             = "registry.example.test/ops@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      mkt                             = "registry.example.test/mkt@sha256:1111111111111111111111111111111111111111111111111111111111111111"
       "marketing-compliance-gate-ui"  = "registry.example.test/marketing-compliance-gate-ui@sha256:1111111111111111111111111111111111111111111111111111111111111111"
       "marketing-compliance-gate-api" = "registry.example.test/marketing-compliance-gate-api@sha256:1111111111111111111111111111111111111111111111111111111111111111"
     }
@@ -711,9 +904,350 @@ run "declined_edge_builds_no_billable_edge" {
   assert {
     condition = (
       google_compute_backend_service.portal.iap[0].enabled &&
-      google_compute_backend_service.rm_shell.iap[0].enabled &&
-      google_compute_backend_service.ops_shell.iap[0].enabled
+      google_compute_backend_service.shell["rm"].iap[0].enabled &&
+      google_compute_backend_service.shell["ops"].iap[0].enabled
     )
     error_message = "Declining the edge must keep the backend services: they are free without a forwarding rule and are what a rebuild reuses."
   }
+}
+
+# --------------------------------------------------------------------------- #
+# Shells are a list a deployment names, not a pair the stack hard-codes.
+# --------------------------------------------------------------------------- #
+
+# A third host for the Marketing journey: its own service, NEG, backend, IAP grants, host rule,
+# certificate domain (appended, so the existing two keep their positions) and rollback component.
+run "three_shells_publish_the_marketing_journey" {
+  command = plan
+  variables {
+    shells = [
+      {
+        journey = "rm"
+        image   = "registry.example.test/rm@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        domain  = "rm.hrz9.example.test"
+      },
+      {
+        journey = "ops"
+        image   = "registry.example.test/ops@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        domain  = "ops.hrz9.example.test"
+      },
+      {
+        journey = "mkt"
+        image   = "registry.example.test/mkt@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        domain  = "mkt.hrz9.example.test"
+      },
+    ]
+    tenant_embed_policies = {
+      hrz9-test-primary = {
+        tenant          = "hrz9-test"
+        hosts           = ["rm.hrz9.example.test", "ops.hrz9.example.test", "mkt.hrz9.example.test"]
+        frame_ancestors = ["'self'", "https://host.hrz9.example.test"]
+        cors_origins    = ["https://host.hrz9.example.test"]
+      }
+    }
+    rollback_images = {
+      bff                             = "registry.example.test/bff@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      rm                              = "registry.example.test/rm@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      ops                             = "registry.example.test/ops@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      mkt                             = "registry.example.test/mkt@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      "cdd-sow-research-ui"           = "registry.example.test/cdd-sow-research-ui@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      "cdd-sow-research-api"          = "registry.example.test/cdd-sow-research-api@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      "credit-memo-drafting-ui"       = "registry.example.test/credit-memo-drafting-ui@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      "credit-memo-drafting-api"      = "registry.example.test/credit-memo-drafting-api@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      "marketing-compliance-gate-ui"  = "registry.example.test/marketing-compliance-gate-ui@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      "marketing-compliance-gate-api" = "registry.example.test/marketing-compliance-gate-api@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    }
+    embedded_apps = {
+      cdd-sow-research = {
+        ui_image           = "registry.example.test/cdd-sow-research-ui@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        api_image          = "registry.example.test/cdd-sow-research-api@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        ui_build_base_path = "/agent"
+        api_env            = { CDD_PROFILE = "gcp" }
+      }
+      credit-memo-drafting = {
+        ui_image           = "registry.example.test/credit-memo-drafting-ui@sha256:2222222222222222222222222222222222222222222222222222222222222222"
+        api_image          = "registry.example.test/credit-memo-drafting-api@sha256:2222222222222222222222222222222222222222222222222222222222222222"
+        ui_build_base_path = "/apps/credit-memo-drafting"
+        api_env            = { CREDIT_MEMO_PROFILE = "gcp" }
+      }
+      marketing-compliance-gate = {
+        ui_image           = "registry.example.test/marketing-compliance-gate-ui@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        api_image          = "registry.example.test/marketing-compliance-gate-api@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        ui_build_base_path = "/apps/marketing-compliance-gate"
+        api_env            = { MKT_GOV_PROFILE = "gcp" }
+      }
+    }
+  }
+
+  assert {
+    condition = (
+      length(google_cloud_run_v2_service.shell) == 3 &&
+      google_cloud_run_v2_service.shell["mkt"].name == "hrz9-test-mkt" &&
+      google_cloud_run_v2_service.shell["mkt"].ingress == "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER" &&
+      google_service_account.shell["mkt"].account_id == "hrz9-test-mkt" &&
+      google_compute_backend_service.shell["mkt"].iap[0].enabled &&
+      google_compute_region_network_endpoint_group.shell["mkt"].cloud_run[0].service == "hrz9-test-mkt"
+    )
+    error_message = "The Marketing shell must plan as its own private service behind its own IAP backend."
+  }
+
+  assert {
+    condition = (
+      google_compute_managed_ssl_certificate.portal[0].managed[0].domains == tolist(["rm.hrz9.example.test", "ops.hrz9.example.test", "mkt.hrz9.example.test"]) &&
+      random_id.certificate[0].keepers.domains == "rm.hrz9.example.test|ops.hrz9.example.test|mkt.hrz9.example.test" &&
+      length(google_compute_url_map.portal[0].host_rule) == 3 &&
+      length(google_compute_url_map.portal[0].path_matcher) == 3 &&
+      google_compute_url_map.portal[0].default_service == google_compute_backend_service.shell["rm"].id
+    )
+    error_message = "A third shell must append its domain to the certificate (new keeper, new name), add its host rule, and leave the rm shell as the default."
+  }
+
+  assert {
+    condition = (
+      length(google_iap_web_backend_service_iam_member.access) == 4 &&
+      google_iap_web_backend_service_iam_member.access["mkt|group:journey-users@example.test"].web_backend_service == "hrz9-test-mkt" &&
+      length(google_cloud_run_v2_service_iam_member.iap_shell_invoker) == 3
+    )
+    error_message = "Every approved member must be granted on the new shell's backend, and IAP must be able to invoke it."
+  }
+
+  assert {
+    condition = (
+      output.shell_urls["mkt"] == "https://mkt.hrz9.example.test" &&
+      output.image_digests["mkt"] == "registry.example.test/mkt@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff" &&
+      contains(keys(output.service_accounts), "mkt") &&
+      output.verification_commands["unauthenticated_mkt"] == "curl -I https://mkt.hrz9.example.test"
+    )
+    error_message = "Every per-shell output must carry the third shell under its journey key."
+  }
+}
+
+# The Marketing journey with none of its apps mounted: the BFF would drop the journey and the
+# shell would render the rm one under the mkt hostname. Refused at plan.
+run "reject_shell_whose_journey_has_no_deployed_app" {
+  command = plan
+  variables {
+    shells = [
+      {
+        journey = "rm"
+        image   = "registry.example.test/rm@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        domain  = "rm.hrz9.example.test"
+      },
+      {
+        journey = "mkt"
+        image   = "registry.example.test/mkt@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        domain  = "mkt.hrz9.example.test"
+      },
+    ]
+    tenant_embed_policies = {
+      hrz9-test-primary = {
+        tenant          = "hrz9-test"
+        hosts           = ["rm.hrz9.example.test", "mkt.hrz9.example.test"]
+        frame_ancestors = ["'self'"]
+        cors_origins    = []
+      }
+    }
+    rollback_images = {
+      bff                    = "registry.example.test/bff@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      rm                     = "registry.example.test/rm@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      mkt                    = "registry.example.test/mkt@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      "cdd-sow-research-ui"  = "registry.example.test/cdd-sow-research-ui@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      "cdd-sow-research-api" = "registry.example.test/cdd-sow-research-api@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    }
+    embedded_apps = {
+      cdd-sow-research = {
+        ui_image           = "registry.example.test/cdd-sow-research-ui@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        api_image          = "registry.example.test/cdd-sow-research-api@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        ui_build_base_path = "/agent"
+        api_env            = { CDD_PROFILE = "gcp" }
+      }
+    }
+  }
+  expect_failures = [terraform_data.shell_contract]
+}
+
+run "reject_shell_for_a_journey_the_catalog_does_not_define" {
+  command = plan
+  variables {
+    shells = [
+      {
+        journey = "rm"
+        image   = "registry.example.test/rm@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        domain  = "rm.hrz9.example.test"
+      },
+      {
+        journey = "hr"
+        image   = "registry.example.test/hr@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        domain  = "ops.hrz9.example.test"
+      },
+    ]
+    rollback_images = {
+      bff                    = "registry.example.test/bff@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      rm                     = "registry.example.test/rm@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      hr                     = "registry.example.test/hr@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      "cdd-sow-research-ui"  = "registry.example.test/cdd-sow-research-ui@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      "cdd-sow-research-api" = "registry.example.test/cdd-sow-research-api@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    }
+    embedded_apps = {
+      cdd-sow-research = {
+        ui_image           = "registry.example.test/cdd-sow-research-ui@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        api_image          = "registry.example.test/cdd-sow-research-api@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        ui_build_base_path = "/agent"
+        api_env            = { CDD_PROFILE = "gcp" }
+      }
+    }
+  }
+  expect_failures = [terraform_data.shell_contract]
+}
+
+# The tenant registry is held to exactly the shell hostnames, so it keeps only the rm host here.
+run "reject_two_shells_on_one_hostname" {
+  command = plan
+  variables {
+    shells = [
+      {
+        journey = "rm"
+        image   = "registry.example.test/rm@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        domain  = "rm.hrz9.example.test"
+      },
+      {
+        journey = "ops"
+        image   = "registry.example.test/ops@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        domain  = "rm.hrz9.example.test"
+      },
+    ]
+    tenant_embed_policies = {
+      hrz9-test-primary = {
+        tenant          = "hrz9-test"
+        hosts           = ["rm.hrz9.example.test"]
+        frame_ancestors = ["'self'"]
+        cors_origins    = []
+      }
+    }
+  }
+  expect_failures = [terraform_data.shell_contract]
+}
+
+run "reject_one_journey_served_by_two_shells" {
+  command = plan
+  variables {
+    shells = [
+      {
+        journey = "rm"
+        image   = "registry.example.test/rm@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        domain  = "rm.hrz9.example.test"
+      },
+      {
+        journey = "rm"
+        image   = "registry.example.test/rm@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        domain  = "ops.hrz9.example.test"
+      },
+    ]
+  }
+  expect_failures = [terraform_data.shell_contract]
+}
+
+# A third shell with no rollback component, and a third shell the tenant registry does not
+# route: each is the existing deployment contract refusing, now over the shell list.
+run "reject_shell_without_a_rollback_component" {
+  command = plan
+  variables {
+    shells = [
+      {
+        journey = "rm"
+        image   = "registry.example.test/rm@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        domain  = "rm.hrz9.example.test"
+      },
+      {
+        journey = "ops"
+        image   = "registry.example.test/ops@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        domain  = "ops.hrz9.example.test"
+      },
+      {
+        journey = "mkt"
+        image   = "registry.example.test/mkt@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        domain  = "mkt.hrz9.example.test"
+      },
+    ]
+    tenant_embed_policies = {
+      hrz9-test-primary = {
+        tenant          = "hrz9-test"
+        hosts           = ["rm.hrz9.example.test", "ops.hrz9.example.test", "mkt.hrz9.example.test"]
+        frame_ancestors = ["'self'"]
+        cors_origins    = []
+      }
+    }
+  }
+  expect_failures = [terraform_data.deployment_contract]
+}
+
+run "reject_shell_host_the_tenant_registry_does_not_route" {
+  command = plan
+  variables {
+    shells = [
+      {
+        journey = "rm"
+        image   = "registry.example.test/rm@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        domain  = "rm.hrz9.example.test"
+      },
+      {
+        journey = "ops"
+        image   = "registry.example.test/ops@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        domain  = "ops.hrz9.example.test"
+      },
+      {
+        journey = "mkt"
+        image   = "registry.example.test/mkt@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        domain  = "mkt.hrz9.example.test"
+      },
+    ]
+    rollback_images = {
+      bff                            = "registry.example.test/bff@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      rm                             = "registry.example.test/rm@sha256:2222222222222222222222222222222222222222222222222222222222222222"
+      ops                            = "registry.example.test/ops@sha256:3333333333333333333333333333333333333333333333333333333333333333"
+      mkt                            = "registry.example.test/mkt@sha256:3333333333333333333333333333333333333333333333333333333333333333"
+      cdd-sow-research-ui            = "registry.example.test/cdd-sow-research-ui@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      cdd-sow-research-api           = "registry.example.test/cdd-sow-research-api@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      credit-memo-drafting-ui        = "registry.example.test/credit-memo-drafting-ui@sha256:2222222222222222222222222222222222222222222222222222222222222222"
+      credit-memo-drafting-api       = "registry.example.test/credit-memo-drafting-api@sha256:2222222222222222222222222222222222222222222222222222222222222222"
+      cio-advisory-ui                = "registry.example.test/cio-advisory-ui@sha256:3333333333333333333333333333333333333333333333333333333333333333"
+      cio-advisory-api               = "registry.example.test/cio-advisory-api@sha256:3333333333333333333333333333333333333333333333333333333333333333"
+      trade-finance-checker-ui       = "registry.example.test/trade-finance-checker-ui@sha256:4444444444444444444444444444444444444444444444444444444444444444"
+      trade-finance-checker-api      = "registry.example.test/trade-finance-checker-api@sha256:4444444444444444444444444444444444444444444444444444444444444444"
+      loan-document-intelligence-ui  = "registry.example.test/loan-document-intelligence-ui@sha256:7777777777777777777777777777777777777777777777777777777777777777"
+      loan-document-intelligence-api = "registry.example.test/loan-document-intelligence-api@sha256:7777777777777777777777777777777777777777777777777777777777777777"
+      compliance-advisory-ui         = "registry.example.test/compliance-advisory-ui@sha256:5555555555555555555555555555555555555555555555555555555555555555"
+      compliance-advisory-api        = "registry.example.test/compliance-advisory-api@sha256:5555555555555555555555555555555555555555555555555555555555555555"
+      human-review-console-ui        = "registry.example.test/human-review-console-ui@sha256:6666666666666666666666666666666666666666666666666666666666666666"
+      human-review-console-api       = "registry.example.test/human-review-console-api@sha256:6666666666666666666666666666666666666666666666666666666666666666"
+    }
+  }
+  expect_failures = [terraform_data.deployment_contract]
+}
+
+run "reject_empty_shell_list" {
+  command = plan
+  variables {
+    shells = []
+  }
+  expect_failures = [var.shells]
+}
+
+run "reject_mutable_shell_image" {
+  command = plan
+  variables {
+    shells = [
+      {
+        journey = "rm"
+        image   = "registry.example.test/rm:latest"
+        domain  = "rm.hrz9.example.test"
+      },
+      {
+        journey = "ops"
+        image   = "registry.example.test/ops@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        domain  = "ops.hrz9.example.test"
+      },
+    ]
+  }
+  expect_failures = [var.shells]
 }
