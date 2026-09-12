@@ -90,7 +90,8 @@ def _dossier() -> dict[str, Any]:
 
     The subject is the fictional demo entity the e2e journey itself uses, so nothing real travels
     into a fixture. The values are the laptop profile's: ``adverse_media`` null because the
-    offline adapter has no public web to search.
+    offline adapter has no public web to search, and ``compliance`` an in-process answer citing
+    nothing because the offline adapter has no policy corpus to ground one in.
     """
     return {
         "id": "cdd-meridian-harbour-holdings-pte-ltd",
@@ -169,6 +170,16 @@ def _dossier() -> dict[str, Any]:
             "citations": [_citation(source_id="doc-registry", title="registry")],
         },
         "adverse_media": None,
+        "compliance": {
+            "question": (
+                "For a entity customer in SG jurisdiction rated medium risk, what CDD/AML "
+                "expectations apply?"
+            ),
+            "answer": "Standard CDD and ongoing-monitoring expectations apply. Offline answer.",
+            "citations": [],
+            "requires_human_review": True,
+            "confidence": 0.7,
+        },
     }
 
 
@@ -214,21 +225,33 @@ def test_the_fixture_is_the_wire() -> None:
     dossier = _dossier()
     alert = deepcopy(ALERT)
 
-    pairs: list[tuple[str, dict[str, Any], Any]] = [
-        ("dossier", dossier, schemas.CddCaseResponse),
-        ("subject", dossier["subject"], schemas.SubjectModel),
-        ("rating", dossier["rating"], schemas.RiskRatingModel),
-        ("rating.factors[0]", dossier["rating"]["factors"][0], schemas.RiskFactorModel),
-        ("rating.citations[0]", dossier["rating"]["citations"][0], schemas.CitationModel),
-        ("sow", dossier["sow"], schemas.SourceOfWealthResponse),
-        ("sow.sources[0]", dossier["sow"]["sources"][0], schemas.WealthSourceModel),
-        ("screening", dossier["screening"], schemas.ScreeningResultModel),
-        ("ownership", dossier["ownership"], schemas.OwnershipSummaryModel),
-        ("ownership.owners[0]", dossier["ownership"]["owners"][0], schemas.BeneficialOwnerModel),
-        ("alert", alert, schemas.ScreeningAlertModel),
-        ("alert.entry", alert["entry"], schemas.WatchlistEntryModel),
+    pairs: list[tuple[str, dict[str, Any], str]] = [
+        ("dossier", dossier, "CddCaseResponse"),
+        ("subject", dossier["subject"], "SubjectModel"),
+        ("rating", dossier["rating"], "RiskRatingModel"),
+        ("rating.factors[0]", dossier["rating"]["factors"][0], "RiskFactorModel"),
+        ("rating.citations[0]", dossier["rating"]["citations"][0], "CitationModel"),
+        ("sow", dossier["sow"], "SourceOfWealthResponse"),
+        ("sow.sources[0]", dossier["sow"]["sources"][0], "WealthSourceModel"),
+        ("screening", dossier["screening"], "ScreeningResultModel"),
+        ("ownership", dossier["ownership"], "OwnershipSummaryModel"),
+        ("ownership.owners[0]", dossier["ownership"]["owners"][0], "BeneficialOwnerModel"),
+        ("compliance", dossier["compliance"], "ComplianceAnswerModel"),
+        ("alert", alert, "ScreeningAlertModel"),
+        ("alert.entry", alert["entry"], "WatchlistEntryModel"),
     ]
-    for path, node, model in pairs:
+    for path, node, model_name in pairs:
+        # Resolved by NAME rather than by attribute access, so a sibling checkout that predates
+        # a model this fixture covers reports the drift instead of an AttributeError raised
+        # while the list is still being built. The strictness is unchanged: an unresolvable
+        # model is a failure, never a skip. Which side is behind is the whole diagnostic, and
+        # it is the reason this test exists.
+        model = getattr(schemas, model_name, None)
+        assert model is not None, (
+            f"{model_name} does not exist in {schemas.__file__}. This fixture is shaped for a "
+            f"NEWER cdd-sow-research than the checkout beside it: pull that repository, or "
+            f"point DOC1_REPO_PATH at a tree that carries the model."
+        )
         assert set(node) == set(model.model_fields), (
             f"{path} does not match {model.__name__}: "
             f"invented {sorted(set(node) - set(model.model_fields))}, "
@@ -329,6 +352,22 @@ def test_identical_dossiers_agree() -> None:
             lambda d: d.__setitem__("screening", None),
         ),
         (
+            "the regulatory question one profile asked about a different band",
+            lambda d: d["compliance"].__setitem__(
+                "question",
+                "For a entity customer in SG jurisdiction rated low risk, what CDD/AML "
+                "expectations apply?",
+            ),
+        ),
+        (
+            "a compliance answer that escalated on one profile and not the other",
+            lambda d: d["compliance"].__setitem__("requires_human_review", False),
+        ),
+        (
+            "a regulatory check one profile silently did not run",
+            lambda d: d.__setitem__("compliance", None),
+        ),
+        (
             "ownership one profile silently did not resolve",
             lambda d: d.__setitem__("ownership", None),
         ),
@@ -395,6 +434,16 @@ def test_alert_divergence_is_caught(name: str, mutate) -> None:
             lambda d: d["sow"]["sources"][0].__setitem__(
                 "est_value_band", "USD 1,000,000 to USD 5,000,000"
             ),
+        ),
+        (
+            "the compliance answer's own prose",
+            lambda d: d["compliance"].__setitem__(
+                "answer", "A far longer regulatory answer from the grounded service. " * 20
+            ),
+        ),
+        (
+            "the confidence the compliance service assigns its own answer",
+            lambda d: d["compliance"].__setitem__("confidence", 0.42),
         ),
         (
             "a factor's explanatory prose",
@@ -476,14 +525,20 @@ def test_an_unparseable_band_keeps_its_own_text() -> None:
 # --------------------------------------------------------------------------------------- #
 # Present versus absent, and the one asymmetry that is tolerated.
 # --------------------------------------------------------------------------------------- #
-def test_present_versus_absent_is_itself_compared() -> None:
-    """A profile that omits ownership must not read as agreeing with one that resolved it."""
+@pytest.mark.parametrize("node", ["ownership", "compliance"])
+def test_present_versus_absent_is_itself_compared(node: str) -> None:
+    """A profile that omits a section must not read as agreeing with one that produced it.
+
+    And the divergence must be reported ON the presence key. Every field of an absent section
+    reads as None, so a dropped ``.present`` key still goes red -- on ``compliance.question``,
+    which says the two profiles asked different questions when in truth one never asked.
+    """
     left = _dossier()
     right = deepcopy(left)
-    right["ownership"] = None
+    right[node] = None
     report = compare(left, right, "local", "gcp")
     assert not report.agreed
-    assert any(d.field == "ownership.present" for d in report.divergences)
+    assert f"{node}.present" in [d.field for d in report.divergences]
 
 
 def test_the_laptop_not_searching_the_web_is_tolerated_and_recorded() -> None:
@@ -526,6 +581,85 @@ def test_the_managed_profile_dropping_its_search_is_a_divergence() -> None:
     assert not report.agreed
     assert any(d.field == "adverse_media.searched" for d in report.divergences)
     assert not report.tolerated
+
+
+def _policy_citation(source_id: str = "policy-1", title: str = "MAS Notice 626") -> Any:
+    """A citation of the policy corpus compliance-advisory reads, wire-shaped like any other."""
+    return _citation(source_id=source_id, title=title, source_type="policy", page=None)
+
+
+def test_the_laptop_answering_compliance_from_a_stand_in_is_tolerated_and_recorded() -> None:
+    """The declared reduction: an in-process answer with nothing behind it on the laptop, a
+    grounded compliance-advisory answer on the cloud.
+
+    The laptop cites nothing because it has no policy corpus, not because the check went wrong,
+    which is the same shape as it reporting NOT SEARCHED for the public web.
+    """
+
+    report = _pair(
+        lambda d: d["compliance"].__setitem__("citations", [_policy_citation()]),
+    )
+
+    assert report.agreed, [d.field for d in report.divergences]
+    assert [t.field for t in report.tolerated] == ["compliance.grounded"], (
+        "a tolerated asymmetry that is not recorded is indistinguishable from one nobody noticed"
+    )
+    assert report.as_dict()["tolerated_asymmetries"][0]["reason"]
+
+
+def test_the_managed_profile_answering_with_no_policy_behind_it_is_a_divergence() -> None:
+    """The other direction is a regression: a grounded service that stopped citing its policy."""
+
+    left = _dossier()
+    left["compliance"]["citations"] = [_policy_citation()]
+    right = deepcopy(left)
+    right["compliance"]["citations"] = []
+
+    report = compare(left, right, "local", "gcp")
+
+    assert not report.agreed
+    assert any(d.field == "compliance.grounded" for d in report.divergences)
+    assert not report.tolerated
+
+
+def test_two_profiles_citing_different_policy_passages_is_not_a_divergence() -> None:
+    """Both grounded: WHICH policy grounds the answer is the exempt half, and must stay quiet."""
+
+    left = _dossier()
+    left["compliance"]["citations"] = [_policy_citation()]
+    right = deepcopy(left)
+    right["compliance"]["citations"] = [
+        _policy_citation("policy-2", "HKMA AML/CFT Guideline"),
+        _policy_citation("policy-3", "APRA CPS 234"),
+    ]
+
+    report = compare(left, right, "local", "gcp")
+
+    assert report.agreed, [d.field for d in report.divergences]
+    assert not report.tolerated
+
+
+def test_a_regulatory_check_neither_profile_ran_is_not_a_divergence() -> None:
+    """NOT CHECKED on both sides is agreement about the check and silence about the answer.
+
+    An outage of compliance-advisory must not manufacture a divergence, and must not leave the
+    answer's own fields comparing None with None either: they are simply not emitted.
+    """
+
+    left = _dossier()
+    left["compliance"] = None
+    right = deepcopy(left)
+
+    report = compare(left, right, "local", "gcp")
+
+    assert report.agreed
+    assert "compliance.present" in report.compared
+    assert not [
+        key
+        for key in report.compared
+        if key.startswith("compliance.")
+        and key.endswith(("question", "requires_human_review", "grounded"))
+    ], "an unanswered check must not compare the fields of an answer that never arrived"
 
 
 def test_an_empty_dossier_is_a_failure_not_a_match() -> None:

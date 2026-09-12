@@ -88,15 +88,18 @@ both `dossier.json` files, compares the half that must not move, and **exits non
 disagree**. `e2e/pairing.py` is the specification: what it compares is policy, and what it exempts
 is listed beside the reason it is a declared reduction rather than a divergence.
 
-The exemptions are the interesting half. Narration length, snippet text, retrieval ranking and
-per-store document ids are all permitted to differ, because a frontier model and a local one, and
-a managed retrieval engine and a local index, are exactly the quality reduction the invariant
-allows. What is not permitted is a different risk band, a different score, a different escalation
-decision, a factor that fired on one profile and not the other, a different estimated value for a
-source of wealth, a screen that one profile silently did not run, or a claim grounded in a
-different kind of source. One tolerance runs in a single direction: the laptop may report that it
-did not search the public web, and the managed profile may not, so a managed search that
-disappears is a divergence rather than a reduction.
+The exemptions are the interesting half. Narration length, snippet text, retrieval ranking,
+per-store document ids and the wording of the regulatory answer are all permitted to differ,
+because a frontier model and a local one, and a managed retrieval engine and a local index, are
+exactly the quality reduction the invariant allows. What is not permitted is a different risk
+band, a different score, a different escalation decision, a factor that fired on one profile and
+not the other, a different estimated value for a source of wealth, a screen or a regulatory check
+that one profile silently did not run, a compliance answer that escalated on one profile and not
+the other, or a claim grounded in a different kind of source. Two tolerances run in a single
+direction, and for one reason: the laptop is the profile that cannot do the work. It may report
+that it did not search the public web, and it may answer the regulatory question in-process from
+a stand-in that cites no policy at all. The managed profile may do neither, so a managed search
+or a managed answer's grounding that disappears is a divergence rather than a reduction.
 
 ## The wide sweep: one shell per journey, one origin per shell
 
