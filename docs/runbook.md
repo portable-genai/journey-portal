@@ -15,8 +15,8 @@ access. Do not create service-account keys.
 
 ## Build and release images
 
-The `release immutable images` workflow uses workload identity and pushes the BFF/RM/Ops builds
-under run-specific quarantine tags with max provenance and SBOMs. It scans the exact build digest,
+The `release immutable images` workflow uses workload identity and pushes the BFF build plus one
+shell build per persona host under run-specific quarantine tags with max provenance and SBOMs. It scans the exact build digest,
 blocks high/critical vulnerability findings, signs that digest, and only then promotes it to the
 reviewed version tag. Digest metadata artifacts are retained for 90 days. This repo does not
 control Artifact Registry cleanup; the operator must verify that every current and rollback digest
@@ -68,7 +68,7 @@ prior key identifier with its evidence window. Cloud Logging delivery is synchro
 write returns 503 before the request reaches an embedded application.
 
 Managed profiles also require `PORTAL_TENANT_EMBED_POLICIES_JSON`. Terraform produces it from
-`tenant_embed_policies` and passes the same canonical document to the BFF, RM shell and Ops shell.
+`tenant_embed_policies` and passes the same canonical document to the BFF and every shell.
 Each policy binds one stable tenant id to exact routed hosts, frame ancestors and CORS origins.
 The BFF rejects unknown hosts, tenant/host mismatches and unapproved origins before route
 execution, then writes the allow/deny assessment to the audit sink. The static shells fail framing
@@ -86,6 +86,13 @@ closed with `frame-ancestors 'none'` if their Host does not resolve exactly once
    images, wildcard origins, an invalid tenant id, missing owners, missing notification channels
    and mixed secret placement. Render non-secret inputs with
    `python scripts/deployment_config.py render`.
+   `DEPLOY_SHELLS_JSON` names the persona hosts this deployment publishes, in certificate order:
+   one `{journey, image, domain}` entry per host, the way `DEPLOY_EMBEDDED_APPS_JSON` names the
+   subset of apps. The loader refuses a journey the catalog does not define, two hosts on one
+   hostname, and a host none of whose journey's apps are deployed. Adding or removing a host
+   changes the managed certificate's domain list:
+   [`infra/terraform/README.md`](../infra/terraform/README.md) ("Adding a shell host") is the
+   procedure and what the replacement costs the hosts that were already live.
 3. Start from a reviewed example and replace every fictional value. Keep
    `iap_jwt_audience = ""` and `iap_members = []` for bootstrap.
 4. Run Terraform through the loader so the IAP secret exists only in the child process:
@@ -104,8 +111,10 @@ closed with `frame-ancestors 'none'` if their Host does not resolve exactly once
    `python scripts/deployment_config.py terraform -- output -raw computed_portal_iap_audience`,
    copy it exactly into `iap_jwt_audience`, add approved `iap_members`, then save and review a
    second plan. A mismatch fails before any backend-scoped grant is created.
-9. Apply stage two. Confirm DNS resolves, certificates are active, IAP denies an unauthenticated
-   request, and both approved RM and Ops users can sign in.
+9. Apply stage two. Confirm DNS resolves, the managed certificate reports `ACTIVE` on EVERY shell
+   hostname (a domain-list change replaces the certificate and it starts `PROVISIONING` on all of
+   them, live hosts included), IAP denies an unauthenticated request, and an approved user can sign
+   in on every published persona host.
 10. Confirm the BFF reaches every `INGRESS_TRAFFIC_INTERNAL_ONLY` embedded UI/API through its
    dedicated Direct VPC `ALL_TRAFFIC` egress and Private Google Access subnet.
 11. Send a valid IAP-authenticated request through the load balancer, confirm assertion
@@ -126,7 +135,9 @@ No source-controlled fixture is live apply evidence.
 
 ## Health and alerting
 
-- `/healthz` checks BFF profile and region. RM probes `/`; Ops probes `/healthz`.
+- `/healthz` checks BFF profile and region. Every shell probes `/healthz`: the static server both
+  shell images ship answers it, so the probe path no longer depends on which shell it is. The RM
+  shell probed `/` until 2026-09-12, which is why its first revision after that change is expected.
 - Embedded UI probes its configured TCP port; embedded APIs probe `/healthz`.
 - Load-balancer request logging is sampled at 100 percent and copied into the regional audit
   bucket. The 403 policy should route to institution notification channels.
@@ -199,11 +210,14 @@ Owners, dates and the still-outstanding inputs are recorded in
 ## Deferred items and blockers
 
 The manual `live profile integration` workflow uses keyless WIF to obtain an IAP audience-bound ID
-token and checks both HTTPS shell roots, managed health and region, verified identity, and both
-journey feeds. It also reaches all seven embedded application health routes through the correct RM
-or Ops origin, loads every iframe route and its base-path-scoped build assets, and rejects local
-profiles. Configure the `live-integration` GitHub environment variables for project, Singapore
-region, URLs, IAP client, resource name prefix, and the exact 15-component image-digest manifest,
+token and checks every shell root it is given, managed health and region, verified identity, and the
+journey feed behind each. The shells are NAMED, one `--shell <journey>=https://host` per published
+host, so a third persona is another argument; a journey whose contents
+`scripts/live_profile_check.py` does not state is refused rather than checked against nothing. It
+reaches each journey's embedded application health routes through that journey's own origin, loads
+every iframe route and its base-path-scoped build assets, and rejects local profiles. Configure the
+`live-integration` GitHub environment variables for project, Singapore region, shell URLs, IAP
+client, resource name prefix, and the exact per-component image-digest manifest,
 plus its two WIF secrets, only after a named deployment exists. The workflow first verifies those
 exact GCP resources, their IAP settings, region and exact reviewed images; it then uses a separate
 audience-bound token for redirect-disabled positive and unauthenticated-negative HTTP checks.

@@ -5,13 +5,44 @@ from pathlib import Path
 
 import pytest
 
-from journey_portal.deployment_config import DeploymentConfigError, load_deployment_config
+from journey_portal.config import load_journeys_mapping
+from journey_portal.deployment_config import (
+    OPTIONAL_NONSECRET_KEYS,
+    REQUIRED_NONSECRET_KEYS,
+    DeploymentConfigError,
+    load_deployment_config,
+    load_env_file,
+)
+
+_JOURNEYS_FILE = Path("config/journeys.yaml")
 
 
 def _image(name: str, character: str) -> str:
     return (
         f"asia-southeast1-docker.pkg.dev/bank-hrz9-prod-001/portal/{name}@sha256:{character * 64}"
     )
+
+
+def _shell(journey: str, character: str = "b") -> dict[str, str]:
+    return {
+        "journey": journey,
+        "image": _image(journey, character),
+        "domain": f"{journey}-journey.bank.internal",
+    }
+
+
+def _journey_of(app_id: str) -> str:
+    """The journey key a catalog app belongs to, from the catalog rather than a second copy.
+
+    A deployment may only publish a shell whose journey has a deployed app, so a fixture that
+    deploys one app has to name that app's own journey. Reading it here means a catalog change
+    that moves an app between journeys does not leave these fixtures asserting the old shape.
+    """
+    journeys = load_journeys_mapping(_JOURNEYS_FILE)["journeys"]
+    for key, journey in journeys.items():
+        if app_id in journey["apps"]:
+            return str(key)
+    raise AssertionError(f"{app_id} belongs to no journey in {_JOURNEYS_FILE}")
 
 
 def _valid_values() -> dict[str, str]:
@@ -49,8 +80,16 @@ def _valid_values() -> dict[str, str]:
         "GCP_ALLOWED_REGIONS_JSON": '["asia-southeast1"]',
         "DEPLOY_NAME_PREFIX": "bank-hrz9",
         "DEPLOY_BFF_IMAGE": _image("bff", "a"),
-        "DEPLOY_RM_SHELL_IMAGE": _image("rm", "b"),
-        "DEPLOY_OPS_SHELL_IMAGE": _image("ops", "c"),
+        "DEPLOY_SHELLS_JSON": json.dumps(
+            [
+                {"journey": "rm", "image": _image("rm", "b"), "domain": "rm-journey.bank.internal"},
+                {
+                    "journey": "ops",
+                    "image": _image("ops", "c"),
+                    "domain": "ops-journey.bank.internal",
+                },
+            ]
+        ),
         "DEPLOY_EMBEDDED_APPS_JSON": json.dumps(embedded),
         "DEPLOY_ROLLBACK_IMAGES_JSON": json.dumps(
             {
@@ -72,8 +111,6 @@ def _valid_values() -> dict[str, str]:
                 },
             }
         ),
-        "DEPLOY_RM_DOMAIN": "rm-journey.bank.internal",
-        "DEPLOY_OPS_DOMAIN": "ops-journey.bank.internal",
         "DEPLOY_TENANT_ID": "bank-sg",
         "DEPLOY_TENANT_IDENTITY_DOMAINS_JSON": '["bank.internal"]',
         "DEPLOY_OBSERVABILITY_URL": "https://observability.bank.internal",
@@ -255,22 +292,25 @@ def test_a_partial_journey_portfolio_is_deployable(tmp_path: Path) -> None:
     apps = json.loads(values["DEPLOY_EMBEDDED_APPS_JSON"])
     single = {"cdd-sow-research": apps["cdd-sow-research"]}
     values["DEPLOY_EMBEDDED_APPS_JSON"] = json.dumps(single)
+    # One journey's worth of apps is one shell's worth of hosts: the Ops shell goes with the Ops
+    # apps, rather than being published with nothing of its own to show.
+    values["DEPLOY_SHELLS_JSON"] = json.dumps([_shell("rm")])
     rollback = json.loads(values["DEPLOY_ROLLBACK_IMAGES_JSON"])
     values["DEPLOY_ROLLBACK_IMAGES_JSON"] = json.dumps(
         {
             "bff": rollback["bff"],
             "rm": rollback["rm"],
-            "ops": rollback["ops"],
             "cdd-sow-research-ui": rollback["cdd-sow-research-ui"],
             "cdd-sow-research-api": rollback["cdd-sow-research-api"],
         }
     )
     config = _load(tmp_path, values)
     assert set(config.terraform_inputs["embedded_apps"]) == {"cdd-sow-research"}
+    assert [shell["journey"] for shell in config.terraform_inputs["shells"]] == ["rm"]
 
 
 def _single_app_values(app_id: str, api_env: dict[str, str]) -> dict[str, str]:
-    """A complete config deploying one app, with a rollback map that covers it exactly."""
+    """A complete config deploying one app on its own journey's shell, rolled back exactly."""
     values = _valid_values()
     app = {
         "ui_image": _image(f"{app_id}-ui", "d"),
@@ -279,12 +319,13 @@ def _single_app_values(app_id: str, api_env: dict[str, str]) -> dict[str, str]:
         "api_env": api_env,
     }
     values["DEPLOY_EMBEDDED_APPS_JSON"] = json.dumps({app_id: app})
+    journey = _journey_of(app_id)
+    values["DEPLOY_SHELLS_JSON"] = json.dumps([_shell(journey)])
     rollback = json.loads(values["DEPLOY_ROLLBACK_IMAGES_JSON"])
     values["DEPLOY_ROLLBACK_IMAGES_JSON"] = json.dumps(
         {
             "bff": rollback["bff"],
-            "rm": rollback["rm"],
-            "ops": rollback["ops"],
+            journey: _image(journey, "2"),
             f"{app_id}-ui": _image(f"{app_id}-ui", "4"),
             f"{app_id}-api": _image(f"{app_id}-api", "4"),
         }
@@ -336,9 +377,10 @@ def test_rollback_must_cover_every_deployed_app(tmp_path: Path) -> None:
     values = _valid_values()
     apps = json.loads(values["DEPLOY_EMBEDDED_APPS_JSON"])
     values["DEPLOY_EMBEDDED_APPS_JSON"] = json.dumps({"cdd-sow-research": apps["cdd-sow-research"]})
+    values["DEPLOY_SHELLS_JSON"] = json.dumps([_shell("rm")])
     rollback = json.loads(values["DEPLOY_ROLLBACK_IMAGES_JSON"])
     values["DEPLOY_ROLLBACK_IMAGES_JSON"] = json.dumps(
-        {"bff": rollback["bff"], "rm": rollback["rm"], "ops": rollback["ops"]}
+        {"bff": rollback["bff"], "rm": rollback["rm"]}
     )
 
     with pytest.raises(DeploymentConfigError, match="must exactly cover"):
@@ -357,6 +399,210 @@ def test_an_empty_app_set_is_still_refused(tmp_path: Path) -> None:
     )
 
     with pytest.raises(DeploymentConfigError, match="must not be empty"):
+        _load(tmp_path, values)
+
+
+# --------------------------------------------------------------------------- #
+# The shells a deployment publishes: one entry per persona host, not a fixed pair.
+# --------------------------------------------------------------------------- #
+
+
+def _marketing_values() -> dict[str, str]:
+    """The reference shape plus a third host for the Marketing journey.
+
+    The Marketing journey was in the catalog from the day the persona journeys landed and no
+    deployable shell could publish it, because the renderer took exactly two shell images and
+    two domains. This is the configuration that ends that.
+    """
+    values = _valid_values()
+    apps = json.loads(values["DEPLOY_EMBEDDED_APPS_JSON"])
+    apps["marketing-compliance-gate"] = {
+        "ui_image": _image("marketing-compliance-gate-ui", "d"),
+        "api_image": _image("marketing-compliance-gate-api", "e"),
+        "ui_build_base_path": "/apps/marketing-compliance-gate",
+        "api_env": {"MKT_GOV_PROFILE": "gcp"},
+    }
+    values["DEPLOY_EMBEDDED_APPS_JSON"] = json.dumps(apps)
+    values["DEPLOY_SHELLS_JSON"] = json.dumps(
+        [_shell("rm"), _shell("ops", "c"), _shell("mkt", "f")]
+    )
+    rollback = json.loads(values["DEPLOY_ROLLBACK_IMAGES_JSON"])
+    rollback["mkt"] = _image("mkt", "3")
+    rollback["marketing-compliance-gate-ui"] = _image("marketing-compliance-gate-ui", "4")
+    rollback["marketing-compliance-gate-api"] = _image("marketing-compliance-gate-api", "4")
+    values["DEPLOY_ROLLBACK_IMAGES_JSON"] = json.dumps(rollback)
+    return values
+
+
+def test_a_third_shell_publishes_the_marketing_journey(tmp_path: Path) -> None:
+    config = _load(tmp_path, _marketing_values())
+
+    shells = config.terraform_inputs["shells"]
+    # ORDER, not membership: the managed certificate's domain list is this list, and the
+    # provider treats that list as ordered and ForceNew, so a reordering replaces the
+    # certificate exactly as adding a domain does. The two existing hosts keep their places
+    # and the new one is appended.
+    assert [shell["journey"] for shell in shells] == ["rm", "ops", "mkt"]
+    assert shells[2]["domain"] == "mkt-journey.bank.internal"
+    assert shells[2]["image"] == _image("mkt", "f")
+    # The tenant registry follows the shells: every routed hostname resolves to one policy, so
+    # the third host is admitted rather than denied as an unregistered tenant host.
+    policy = config.terraform_inputs["tenant_embed_policies"]["bank-sg-primary"]
+    assert policy["hosts"] == [
+        "rm-journey.bank.internal",
+        "ops-journey.bank.internal",
+        "mkt-journey.bank.internal",
+    ]
+    assert "rm_shell_image" not in config.terraform_inputs
+    assert "rm_domain" not in config.terraform_inputs
+
+
+def test_a_third_shell_needs_its_own_rollback_component(tmp_path: Path) -> None:
+    """A host with no recorded previous digest cannot be rolled back, so it cannot deploy."""
+    values = _marketing_values()
+    rollback = json.loads(values["DEPLOY_ROLLBACK_IMAGES_JSON"])
+    del rollback["mkt"]
+    values["DEPLOY_ROLLBACK_IMAGES_JSON"] = json.dumps(rollback)
+
+    with pytest.raises(DeploymentConfigError, match="must exactly cover"):
+        _load(tmp_path, values)
+
+
+def test_rejects_a_shell_whose_journey_has_no_deployed_app(tmp_path: Path) -> None:
+    """The hazard this check exists for: a healthy page under the wrong persona's hostname.
+
+    The BFF drops a journey none of whose apps are mounted, and the React shell falls back to
+    the first journey in the catalog when the one it was built for is absent. So a Marketing
+    host with no Marketing app serves the RM journey and looks perfectly well.
+
+    Note what it takes to construct this: `human-review-console` belongs to four journeys, so
+    deploying it alone makes four shells publishable. The refusal is reachable only for a
+    journey none of whose apps are deployed at all, which is exactly the case it is for.
+    """
+    values = _valid_values()
+    apps = json.loads(values["DEPLOY_EMBEDDED_APPS_JSON"])
+    values["DEPLOY_EMBEDDED_APPS_JSON"] = json.dumps({"cdd-sow-research": apps["cdd-sow-research"]})
+    values["DEPLOY_SHELLS_JSON"] = json.dumps([_shell("rm"), _shell("mkt", "f")])
+    rollback = json.loads(values["DEPLOY_ROLLBACK_IMAGES_JSON"])
+    values["DEPLOY_ROLLBACK_IMAGES_JSON"] = json.dumps(
+        {
+            "bff": rollback["bff"],
+            "rm": rollback["rm"],
+            "mkt": _image("mkt", "3"),
+            "cdd-sow-research-ui": rollback["cdd-sow-research-ui"],
+            "cdd-sow-research-api": rollback["cdd-sow-research-api"],
+        }
+    )
+
+    with pytest.raises(DeploymentConfigError, match="none of its journey's apps"):
+        _load(tmp_path, values)
+
+
+def test_rejects_a_shell_for_a_journey_the_catalog_does_not_define(tmp_path: Path) -> None:
+    values = _valid_values()
+    values["DEPLOY_SHELLS_JSON"] = json.dumps([_shell("rm"), _shell("hr", "f")])
+    rollback = json.loads(values["DEPLOY_ROLLBACK_IMAGES_JSON"])
+    del rollback["ops"]
+    rollback["hr"] = _image("hr", "3")
+    values["DEPLOY_ROLLBACK_IMAGES_JSON"] = json.dumps(rollback)
+
+    with pytest.raises(DeploymentConfigError, match="not a journey the journeys config defines"):
+        _load(tmp_path, values)
+
+
+def test_rejects_two_shells_on_one_hostname(tmp_path: Path) -> None:
+    values = _valid_values()
+    shells = json.loads(values["DEPLOY_SHELLS_JSON"])
+    shells[1]["domain"] = shells[0]["domain"]
+    values["DEPLOY_SHELLS_JSON"] = json.dumps(shells)
+
+    with pytest.raises(DeploymentConfigError, match="twice; each shell owns its root path"):
+        _load(tmp_path, values)
+
+
+def test_rejects_one_journey_served_by_two_shells(tmp_path: Path) -> None:
+    values = _valid_values()
+    shells = json.loads(values["DEPLOY_SHELLS_JSON"])
+    shells[1]["journey"] = "rm"
+    values["DEPLOY_SHELLS_JSON"] = json.dumps(shells)
+    rollback = json.loads(values["DEPLOY_ROLLBACK_IMAGES_JSON"])
+    del rollback["ops"]
+    values["DEPLOY_ROLLBACK_IMAGES_JSON"] = json.dumps(rollback)
+
+    with pytest.raises(DeploymentConfigError, match="twice; one shell serves one journey"):
+        _load(tmp_path, values)
+
+
+@pytest.mark.parametrize(
+    ("mutate", "refusal"),
+    [
+        ("[]", "non-empty JSON array"),
+        ('{"rm": {}}', "must contain a JSON list"),
+        ("[1]", "must be a JSON object"),
+        (
+            '[{"journey": "rm", "image": "registry.invalid/rm@sha256:' + "b" * 64 + '"}]',
+            "exactly the keys journey, image and domain",
+        ),
+        (
+            '[{"journey": "rm", "image": "registry.invalid/rm:latest", '
+            '"domain": "rm.bank.internal"}]',
+            "immutable @sha256 digest",
+        ),
+        (
+            '[{"journey": "rm", "image": "registry.invalid/rm@sha256:'
+            + "b" * 64
+            + '", "domain": "https://rm.bank.internal"}]',
+            "must be a DNS hostname",
+        ),
+        (
+            '[{"journey": "RM", "image": "registry.invalid/rm@sha256:'
+            + "b" * 64
+            + '", "domain": "rm.bank.internal"}]',
+            "is not a short journey key",
+        ),
+    ],
+)
+def test_rejects_an_unusable_shell_list(tmp_path: Path, mutate: str, refusal: str) -> None:
+    values = _valid_values()
+    values["DEPLOY_SHELLS_JSON"] = mutate
+    rollback = json.loads(values["DEPLOY_ROLLBACK_IMAGES_JSON"])
+    del rollback["ops"]
+    values["DEPLOY_ROLLBACK_IMAGES_JSON"] = json.dumps(rollback)
+
+    with pytest.raises(DeploymentConfigError, match=refusal):
+        _load(tmp_path, values)
+
+
+def test_the_example_env_file_names_exactly_the_variables_the_loader_requires() -> None:
+    """A template that cannot be copied is not a template.
+
+    The loader refuses a missing required key and an unknown key alike, so either direction of
+    drift between this module and `.env.example` makes the documented first step --
+    `cp .env.example .env` then `deployment_config.py check` -- fail on something the reader
+    cannot see. It did: `DEPLOY_PRODUCTION_EDGE_ENABLED` was required and absent from the example
+    until 2026-09-12, and nothing reported it because nothing compared the two.
+    """
+    example = load_env_file(Path(".env.example"))
+
+    assert sorted(REQUIRED_NONSECRET_KEYS - example.keys()) == []
+    assert sorted(example.keys() - REQUIRED_NONSECRET_KEYS - OPTIONAL_NONSECRET_KEYS) == []
+    # And the shells it ships are the two the reference deployment publishes, in that order.
+    shells = json.loads(example["DEPLOY_SHELLS_JSON"])
+    assert [shell["journey"] for shell in shells] == ["rm", "ops"]
+
+
+@pytest.mark.parametrize(
+    "retired",
+    ["DEPLOY_RM_SHELL_IMAGE", "DEPLOY_OPS_SHELL_IMAGE", "DEPLOY_RM_DOMAIN", "DEPLOY_OPS_DOMAIN"],
+)
+def test_an_env_file_still_naming_a_retired_shell_variable_is_told_what_replaced_it(
+    tmp_path: Path, retired: str
+) -> None:
+    """Refused BY NAME, not as a generic unknown: an unknown-key error says nothing useful."""
+    values = _valid_values()
+    values[retired] = "rm-journey.bank.internal"
+
+    with pytest.raises(DeploymentConfigError, match="DEPLOY_SHELLS_JSON"):
         _load(tmp_path, values)
 
 

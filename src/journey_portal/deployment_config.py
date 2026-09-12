@@ -17,8 +17,21 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from .config import load_journeys_mapping
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_DEFAULT_JOURNEYS_FILE = _REPO_ROOT / "config" / "journeys.yaml"
 _PROJECT_RE = re.compile(r"^[a-z][a-z0-9-]{4,28}[a-z0-9]$")
 _DOMAIN_RE = re.compile(r"^[a-z0-9][a-z0-9.-]+[a-z0-9]$")
+# Mirrors the var.shells validation in infra/terraform/variables.tf: a journey key is also a
+# Cloud Run service-name and service-account suffix, so it stays short.
+_JOURNEY_KEY_RE = re.compile(r"^[a-z][a-z0-9-]{1,14}$")
+_SHELL_KEYS = frozenset({"journey", "image", "domain"})
+# The four variables DEPLOY_SHELLS_JSON replaced on 2026-09-12. They are refused by name rather
+# than as generic unknowns so an env file written against the old pair says what to do next.
+_RETIRED_SHELL_KEYS = frozenset(
+    {"DEPLOY_RM_SHELL_IMAGE", "DEPLOY_OPS_SHELL_IMAGE", "DEPLOY_RM_DOMAIN", "DEPLOY_OPS_DOMAIN"}
+)
 _DIGEST_IMAGE_RE = re.compile(r"^[^@\s]+@sha256:[0-9a-f]{64}$")
 _AUDIENCE_RE = re.compile(r"^/projects/[0-9]+/global/backendServices/[0-9]+$")
 _CHANNEL_RE = re.compile(r"^projects/[a-z][a-z0-9-]{4,28}[a-z0-9]/notificationChannels/[0-9]+$")
@@ -123,12 +136,14 @@ REQUIRED_NONSECRET_KEYS = frozenset(
         "GCP_ALLOWED_REGIONS_JSON",
         "DEPLOY_NAME_PREFIX",
         "DEPLOY_BFF_IMAGE",
-        "DEPLOY_RM_SHELL_IMAGE",
-        "DEPLOY_OPS_SHELL_IMAGE",
+        # The persona shells this deployment publishes, in certificate order: a JSON array of
+        # {journey, image, domain}. One entry per journey the deployment serves, the way
+        # DEPLOY_EMBEDDED_APPS_JSON names the apps. It replaced DEPLOY_RM_SHELL_IMAGE,
+        # DEPLOY_OPS_SHELL_IMAGE, DEPLOY_RM_DOMAIN and DEPLOY_OPS_DOMAIN, which could name exactly
+        # two shells and so could never publish the Marketing journey.
+        "DEPLOY_SHELLS_JSON",
         "DEPLOY_EMBEDDED_APPS_JSON",
         "DEPLOY_ROLLBACK_IMAGES_JSON",
-        "DEPLOY_RM_DOMAIN",
-        "DEPLOY_OPS_DOMAIN",
         "DEPLOY_TENANT_ID",
         "DEPLOY_TENANT_IDENTITY_DOMAINS_JSON",
         "DEPLOY_OBSERVABILITY_URL",
@@ -400,6 +415,75 @@ def _validate_embedded_apps(apps: dict[str, Any]) -> None:
         _reject_placeholder(f"embedded app {app_id}", app)
 
 
+def _validate_shells(
+    shells: Any, deployed_apps: dict[str, Any], journeys_file: Path
+) -> list[dict[str, str]]:
+    """The shells a deployment publishes: each a known journey with at least one deployed app.
+
+    A shell whose journey has no app in DEPLOY_EMBEDDED_APPS_JSON is refused rather than
+    rendered, because the BFF drops a journey none of whose apps are mounted and the shell
+    built for it then renders a different journey under that hostname. The journey keys and
+    their apps come from the journeys config, which is the BFF's own statement of both.
+    """
+    if not isinstance(shells, list) or not shells:
+        raise DeploymentConfigError(
+            "DEPLOY_SHELLS_JSON must be a non-empty JSON array of {journey, image, domain}"
+        )
+    raw_journeys = load_journeys_mapping(journeys_file).get("journeys")
+    if not isinstance(raw_journeys, dict) or not raw_journeys:
+        raise DeploymentConfigError(f"{journeys_file} defines no journeys")
+    journey_apps = {
+        str(key): {str(app) for app in spec.get("apps", [])}
+        for key, spec in raw_journeys.items()
+        if isinstance(spec, dict)
+    }
+    validated: list[dict[str, str]] = []
+    seen_journeys: set[str] = set()
+    seen_domains: set[str] = set()
+    for index, shell in enumerate(shells):
+        where = f"DEPLOY_SHELLS_JSON[{index}]"
+        if not isinstance(shell, dict):
+            raise DeploymentConfigError(f"{where} must be a JSON object")
+        if set(shell) != _SHELL_KEYS:
+            raise DeploymentConfigError(
+                f"{where} must have exactly the keys journey, image and domain; "
+                f"got {', '.join(sorted(shell))}"
+            )
+        if not all(isinstance(value, str) for value in shell.values()):
+            raise DeploymentConfigError(f"{where} values must be strings")
+        journey, image, domain = shell["journey"], shell["image"], shell["domain"]
+        _reject_placeholder(where, shell)
+        if not _JOURNEY_KEY_RE.fullmatch(journey):
+            raise DeploymentConfigError(f"{where}.journey {journey!r} is not a short journey key")
+        if journey not in journey_apps:
+            raise DeploymentConfigError(
+                f"{where}.journey {journey!r} is not a journey the journeys config defines; "
+                f"it defines {', '.join(sorted(journey_apps))}"
+            )
+        if journey in seen_journeys:
+            raise DeploymentConfigError(
+                f"DEPLOY_SHELLS_JSON names journey {journey!r} twice; one shell serves one journey"
+            )
+        if not _DIGEST_IMAGE_RE.fullmatch(image):
+            raise DeploymentConfigError(f"{where}.image must use an immutable @sha256 digest")
+        if not _DOMAIN_RE.fullmatch(domain):
+            raise DeploymentConfigError(f"{where}.domain must be a DNS hostname")
+        if domain in seen_domains:
+            raise DeploymentConfigError(
+                f"DEPLOY_SHELLS_JSON names hostname {domain!r} twice; each shell owns its root path"
+            )
+        if not journey_apps[journey] & deployed_apps.keys():
+            raise DeploymentConfigError(
+                f"shell {journey!r} has none of its journey's apps in DEPLOY_EMBEDDED_APPS_JSON "
+                f"({', '.join(sorted(journey_apps[journey]))}); the BFF would drop the journey and "
+                "the shell would render another one under its hostname"
+            )
+        seen_journeys.add(journey)
+        seen_domains.add(domain)
+        validated.append({"journey": journey, "image": image, "domain": domain})
+    return validated
+
+
 def _validate_mode5_registration(
     values: dict[str, str],
     secrets: dict[str, str],
@@ -447,8 +531,14 @@ def _validate_mode5_registration(
         )
 
 
-def load_deployment_config(env_file: Path, secrets_file: Path) -> DeploymentConfig:
-    """Load and validate a named deployment from separate dotenv files."""
+def load_deployment_config(
+    env_file: Path, secrets_file: Path, journeys_file: Path = _DEFAULT_JOURNEYS_FILE
+) -> DeploymentConfig:
+    """Load and validate a named deployment from separate dotenv files.
+
+    ``journeys_file`` is the catalog the shells are checked against; it defaults to this
+    repository's, which is the one the BFF image ships.
+    """
 
     values = load_env_file(env_file)
     if not secrets_file.is_file():
@@ -471,6 +561,13 @@ def load_deployment_config(env_file: Path, secrets_file: Path) -> DeploymentConf
     if unexpected_secrets:
         raise DeploymentConfigError(
             f"non-secret variables must not be in {secrets_file}: {', '.join(unexpected_secrets)}"
+        )
+    retired = sorted(_RETIRED_SHELL_KEYS & values.keys())
+    if retired:
+        raise DeploymentConfigError(
+            f"{env_file} sets {', '.join(retired)}, which no longer exist: the shells a "
+            "deployment publishes are one JSON array, DEPLOY_SHELLS_JSON, with an entry "
+            "{journey, image, domain} per shell in certificate order"
         )
     unexpected_values = sorted(values.keys() - REQUIRED_NONSECRET_KEYS - OPTIONAL_NONSECRET_KEYS)
     if unexpected_values:
@@ -506,22 +603,28 @@ def load_deployment_config(env_file: Path, secrets_file: Path) -> DeploymentConf
     if len(allowed_regions) != len(set(allowed_regions)):
         raise DeploymentConfigError("GCP_ALLOWED_REGIONS_JSON must not repeat a region")
 
-    current_images = {
-        "bff": values["DEPLOY_BFF_IMAGE"],
-        "rm": values["DEPLOY_RM_SHELL_IMAGE"],
-        "ops": values["DEPLOY_OPS_SHELL_IMAGE"],
-    }
+    # The apps are validated BEFORE the shells that present them, because a shell is only
+    # meaningful once its journey's apps are known to be mountable. Validating the other way
+    # round reported "shell mkt has none of its journey's apps" for an env whose real error was
+    # a misspelt app id or an empty app set, which sends the reader to the wrong line.
+    embedded_apps = _json_value(values, "DEPLOY_EMBEDDED_APPS_JSON", dict)
+    _validate_embedded_apps(embedded_apps)
+    shells = _validate_shells(
+        _json_value(values, "DEPLOY_SHELLS_JSON", list), embedded_apps, journeys_file
+    )
+    # A shell's rollback component is keyed by its journey, beside the BFF's.
+    current_images = {"bff": values["DEPLOY_BFF_IMAGE"]}
+    current_images.update({shell["journey"]: shell["image"] for shell in shells})
     _validate_images(current_images, "current_images")
     rollback_images = _json_value(values, "DEPLOY_ROLLBACK_IMAGES_JSON", dict)
     _validate_images(rollback_images, "DEPLOY_ROLLBACK_IMAGES_JSON")
     # Rollback must cover exactly what is BEING DEPLOYED, which is the property that actually
     # protects a release: a component with no recorded previous digest cannot be rolled back.
     # Deriving it from the deployed set rather than from a constant keeps that guarantee exact
-    # for a partial deployment, instead of demanding rollback digests for apps this
+    # for a partial deployment, instead of demanding rollback digests for apps and shells this
     # installation does not run.
-    deployed_apps = _json_value(values, "DEPLOY_EMBEDDED_APPS_JSON", dict)
     expected_rollback = set(current_images)
-    for app_id in deployed_apps:
+    for app_id in embedded_apps:
         expected_rollback.update({f"{app_id}-ui", f"{app_id}-api"})
     if set(rollback_images) != expected_rollback:
         missing_rollback = sorted(expected_rollback - rollback_images.keys())
@@ -530,15 +633,6 @@ def load_deployment_config(env_file: Path, secrets_file: Path) -> DeploymentConf
             "DEPLOY_ROLLBACK_IMAGES_JSON must exactly cover every component; "
             f"missing={missing_rollback}, unexpected={unexpected_rollback}"
         )
-    embedded_apps = deployed_apps
-    _validate_embedded_apps(embedded_apps)
-
-    rm_domain = values["DEPLOY_RM_DOMAIN"]
-    ops_domain = values["DEPLOY_OPS_DOMAIN"]
-    if not _DOMAIN_RE.fullmatch(rm_domain) or not _DOMAIN_RE.fullmatch(ops_domain):
-        raise DeploymentConfigError("RM and Ops domains must be DNS hostnames")
-    if rm_domain == ops_domain:
-        raise DeploymentConfigError("RM and Ops domains must be distinct")
     tenant_id = values["DEPLOY_TENANT_ID"]
     if not re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,127}", tenant_id):
         raise DeploymentConfigError("DEPLOY_TENANT_ID must be a stable lowercase identifier")
@@ -755,12 +849,11 @@ def load_deployment_config(env_file: Path, secrets_file: Path) -> DeploymentConf
         "region": values["GCP_REGION"],
         "allowed_regions": allowed_regions,
         "bff_image": current_images["bff"],
-        "rm_shell_image": current_images["rm"],
-        "ops_shell_image": current_images["ops"],
+        # In the order the deployment wrote them: the managed certificate's domain list follows
+        # this order, and reordering it replaces the certificate (infra/terraform/shells.tf).
+        "shells": shells,
         "embedded_apps": embedded_apps,
         "rollback_images": rollback_images,
-        "rm_domain": rm_domain,
-        "ops_domain": ops_domain,
         # `none` is the explicit "resolved outside this deployment" statement — an
         # institution's existing zone, or a public wildcard resolver. Terraform already
         # supports that case: an empty dns_managed_zone emits the address without records.
@@ -782,7 +875,7 @@ def load_deployment_config(env_file: Path, secrets_file: Path) -> DeploymentConf
         "tenant_embed_policies": {
             f"{tenant_id}-primary": {
                 "tenant": tenant_id,
-                "hosts": [rm_domain, ops_domain],
+                "hosts": [shell["domain"] for shell in shells],
                 "frame_ancestors": frame_ancestors,
                 "cors_origins": cors_origins,
             }

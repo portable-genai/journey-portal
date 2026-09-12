@@ -90,8 +90,10 @@ CORS, no third-party cookies, and the portal can own the framing policy. The hos
 one tenant policy; the verified principal must match it; the policy's exact CSP `frame-ancestors`
 and CORS origin set drive the response.
 In production the shells and BFF are separate private Cloud Run services behind one HTTPS load
-balancer and IAP. Host rules select the RM or Ops shell; path rules send `/v1`, `/apps` and
-`/agent` to the BFF. Embedded UIs/APIs are internal-only services invoked by the BFF with
+balancer and IAP. One persona shell per hostname: a deployment names the hosts it publishes
+(`DEPLOY_SHELLS_JSON` / `var.shells`), each is a build of one shell codebase for one journey, and
+host rules select between them while path rules send `/v1`, `/apps` and `/agent` to the BFF. The
+managed certificate covers every published hostname. Embedded UIs/APIs are internal-only services invoked by the BFF with
 workload-identity ID tokens.
 
 ## Identity model

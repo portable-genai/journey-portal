@@ -130,9 +130,15 @@ deployment-render: ## Validate and render ignored, non-secret Terraform inputs.
 docker-build: ## Build the serving image (BFF).
 	docker build -t journey-portal:dev .
 
-docker-build-all: ## Build BFF, RM and Ops immutable-image inputs.
+docker-build-all: ## Build BFF and one shell image per persona host.
+	@# One image per shell, because the journey is compiled in: the React shell reads
+	@# NEXT_PUBLIC_JOURNEY at build time (ui-rm/Dockerfile's JOURNEY argument), so the SAME
+	@# source produces the RM and Marketing images and differs only in that argument. Ops keeps
+	@# its own Angular image. A fourth persona is another line here and an entry in
+	@# DEPLOY_SHELLS_JSON -- nothing else.
 	docker build -t journey-portal:dev .
-	docker build -t hrz-journey-rm:dev ui-rm
+	docker build -t hrz-journey-rm:dev --build-arg JOURNEY=rm ui-rm
+	docker build -t hrz-journey-mkt:dev --build-arg JOURNEY=mkt ui-rm
 	docker build -t hrz-journey-ops:dev ui-ops
 
 tf-validate: ## Format and validate the reusable deployment stack offline.

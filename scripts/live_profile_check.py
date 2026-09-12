@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
-"""Credentialed smoke check for the deployed RM and Ops journeys."""
+"""Credentialed smoke check for the deployed persona journey shells.
+
+Each shell is one journey on one hostname, so the run is told which ones the deployment
+publishes -- ``--shell rm=https://...`` once per host -- rather than taking a fixed pair. The
+tables below state what each journey must contain; they are hard-coded rather than read from
+``config/journeys.yaml`` because this file is deliberately stdlib-only (it runs on a hosted
+builder before the repository is installed, and the stdlib has no YAML reader). A journey with no
+row here is refused rather than checked loosely: a shell nobody stated the contents of would pass
+by checking nothing.
+"""
 
 from __future__ import annotations
 
@@ -8,6 +17,7 @@ import json
 import os
 import re
 import sys
+from collections.abc import Sequence
 from dataclasses import dataclass
 from html.parser import HTMLParser
 from typing import Any, Protocol
@@ -24,6 +34,21 @@ _APP_HEALTH_ROUTES: dict[str, tuple[tuple[str, str, frozenset[str]], ...]] = {
             frozenset({"local", "gcp", "platform"}),
         ),
         ("cio-advisory", "/apps/cio-advisory/api/healthz", frozenset({"live", "gcp", "platform"})),
+    ),
+    # The Marketing journey, publishable since 2026-09-12. Its gate is the one marketing app the
+    # stack can deploy; the rest of the journey's apps are in the catalog and not yet built as
+    # deployable UI/API pairs, so naming them here would assert a shape no deployment has.
+    "mkt": (
+        (
+            "marketing-compliance-gate",
+            "/apps/marketing-compliance-gate/api/healthz",
+            frozenset({"gcp", "platform"}),
+        ),
+        (
+            "human-review-console",
+            "/apps/human-review-console/api/healthz",
+            frozenset({"gcp", "platform"}),
+        ),
     ),
     "ops": (
         (
@@ -59,6 +84,10 @@ _EXPECTED_UI_BASES = {
     ),
     "compliance-advisory": ("/apps/compliance-advisory/", "/apps/compliance-advisory"),
     "human-review-console": ("/apps/human-review-console/", "/apps/human-review-console"),
+    "marketing-compliance-gate": (
+        "/apps/marketing-compliance-gate/",
+        "/apps/marketing-compliance-gate",
+    ),
 }
 _EXPECTED_JOURNEY_APPS = {
     "rm": ("cdd-sow-research", "loan-document-intelligence", "cio-advisory"),
@@ -68,6 +97,7 @@ _EXPECTED_JOURNEY_APPS = {
         "compliance-advisory",
         "human-review-console",
     ),
+    "mkt": ("marketing-compliance-gate", "human-review-console"),
 }
 
 
@@ -232,21 +262,50 @@ def _verify_ui(
     print(f"PASS {app_id}: iframe UI and {checked} base-path build assets")
 
 
+def parse_shell(raw: str) -> tuple[str, str]:
+    """Read one ``--shell journey=origin`` pair, refusing a journey this file cannot state."""
+
+    journey, separator, url = raw.partition("=")
+    if not separator or not journey or not url:
+        raise LiveCheckError(f"--shell must be journey=https://host, got {raw!r}")
+    if journey not in _EXPECTED_JOURNEY_APPS or journey not in _APP_HEALTH_ROUTES:
+        stated = ", ".join(sorted(_EXPECTED_JOURNEY_APPS))
+        raise LiveCheckError(
+            f"--shell names journey {journey!r}, whose contents this check does not state. "
+            f"It states {stated}. Add its row to _EXPECTED_JOURNEY_APPS and _APP_HEALTH_ROUTES "
+            "rather than checking a shell against nothing."
+        )
+    # The ORIGIN is validated in run_check, not here, so every caller -- the CLI and the tests
+    # that drive run_check directly -- gets the same placeholder and scheme refusals.
+    return journey, url
+
+
 def run_check(
     requester: Requester,
     *,
-    rm_url: str,
-    ops_url: str,
+    shells: Sequence[tuple[str, str]],
     token: str,
     expected_region: str,
 ) -> None:
-    """Check shell roots, managed profile, verified identity, and both journey feeds."""
+    """Check every named shell's root, managed profile, verified identity and journey feed."""
 
     if not token or any(marker in token.lower() for marker in ("replace", "placeholder")):
         raise LiveCheckError("LIVE_IAP_ID_TOKEN is absent or still a placeholder")
     if not expected_region or "replace" in expected_region.lower():
         raise LiveCheckError("expected region is absent or still a placeholder")
-    origins = {"rm": _origin("RM URL", rm_url), "ops": _origin("Ops URL", ops_url)}
+    if not shells:
+        raise LiveCheckError("name at least one shell with --shell journey=https://host")
+    origins = {journey: _origin(f"{journey} URL", url) for journey, url in shells}
+    if len(origins) != len(shells):
+        raise LiveCheckError("--shell names a journey twice; one shell serves one journey")
+    if len(set(origins.values())) != len(origins):
+        raise LiveCheckError("--shell names one hostname twice; each shell owns its root path")
+    unstated = sorted(set(origins) - set(_EXPECTED_JOURNEY_APPS))
+    if unstated:
+        raise LiveCheckError(
+            f"this check does not state the contents of {', '.join(unstated)}; it states "
+            f"{', '.join(sorted(_EXPECTED_JOURNEY_APPS))}"
+        )
     journey_ids: set[str] = set()
     journey_apps: dict[str, tuple[str, ...]] = {}
     app_ui_bases: dict[str, tuple[str, str]] = {}
@@ -314,16 +373,30 @@ def run_check(
             f"PASS {journey_name}: shell, {health['profile']} health, "
             f"IAP identity, and journey feed"
         )
-    if journey_ids != {"rm", "ops"}:
-        raise LiveCheckError("the hosted feed must expose exactly the RM and Ops journeys")
-    if journey_apps != _EXPECTED_JOURNEY_APPS:
+    # The feed must expose exactly the journeys this deployment was said to publish. A journey in
+    # the feed that no shell serves is unreachable; a shell whose journey the feed has dropped is
+    # the silent-fallback hazard -- that host renders a DIFFERENT persona's journey and looks well.
+    if journey_ids != set(origins):
         raise LiveCheckError(
-            "journey membership must be exactly RM "
-            "cdd-sow-research/loan-document-intelligence/cio-advisory and Ops "
-            "credit-memo-drafting/trade-finance-checker/compliance-advisory/human-review-console"
+            "the hosted feed exposes "
+            f"{', '.join(sorted(journey_ids))}, but the shells named are "
+            f"{', '.join(sorted(origins))}"
         )
-    if set(app_ui_bases) != set(_EXPECTED_UI_BASES):
-        raise LiveCheckError("the hosted feed did not expose exactly all seven embedded UIs")
+    expected_apps = {journey: _EXPECTED_JOURNEY_APPS[journey] for journey in origins}
+    if journey_apps != expected_apps:
+        raise LiveCheckError(
+            "journey membership must be exactly "
+            + "; ".join(
+                f"{journey} {'/'.join(apps)}" for journey, apps in sorted(expected_apps.items())
+            )
+            + f", received {journey_apps!r}"
+        )
+    expected_uis = {app_id for apps in expected_apps.values() for app_id in apps}
+    if set(app_ui_bases) != expected_uis:
+        raise LiveCheckError(
+            f"the hosted feed exposed {sorted(app_ui_bases)}, not the "
+            f"{len(expected_uis)} embedded UIs these shells compose: {sorted(expected_uis)}"
+        )
     for app_id, (origin, feed_base) in app_ui_bases.items():
         _verify_ui(
             requester,
@@ -336,8 +409,17 @@ def run_check(
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--rm-url", required=True)
-    parser.add_argument("--ops-url", required=True)
+    parser.add_argument(
+        "--shell",
+        action="append",
+        default=[],
+        metavar="JOURNEY=URL",
+        required=True,
+        help=(
+            "one persona shell, repeatable: --shell rm=https://rm.example --shell "
+            "mkt=https://mkt.example. The deployment names the shells it publishes."
+        ),
+    )
     parser.add_argument("--expected-region", required=True)
     parser.add_argument("--timeout", type=float, default=30.0)
     return parser.parse_args(argv)
@@ -370,8 +452,7 @@ def main(argv: list[str] | None = None) -> int:
             raise LiveCheckError("timeout must be greater than zero")
         run_check(
             HttpsRequester(args.timeout),
-            rm_url=args.rm_url,
-            ops_url=args.ops_url,
+            shells=[parse_shell(raw) for raw in args.shell],
             token=_live_iap_token(),
             expected_region=args.expected_region,
         )

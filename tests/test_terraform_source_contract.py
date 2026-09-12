@@ -58,7 +58,13 @@ def test_cmek_vpc_sc_and_retention_controls_are_code_enforced() -> None:
     perimeter = _source("vpc_sc.tf")
     variables = _source("variables.tf")
 
-    assert cloud_run.count("encryption_key") == 5
+    # Four resources, not five: the two hand-written shells became one `for_each` over
+    # var.shells, so the fifth occurrence went with the duplicated block and not with a service.
+    # Every Cloud Run service in the file still declares the key.
+    assert cloud_run.count("encryption_key") == 4
+    assert cloud_run.count("encryption_key") == cloud_run.count(
+        'resource "google_cloud_run_v2_service"'
+    )
     assert "cmek_settings {" in audit
     assert "prevent_destroy = true" in kms
     assert "use_explicit_dry_run_spec = true" in perimeter
@@ -81,21 +87,31 @@ def test_cmek_vpc_sc_and_retention_controls_are_code_enforced() -> None:
 
 def test_portal_revision_waits_for_audit_permissions() -> None:
     cloud_run = _source("cloud_run.tf")
-    portal_block = cloud_run.split('resource "google_cloud_run_v2_service" "rm_shell"')[0]
+    # Split on the resource that FOLLOWS the portal, and assert the split happened: `str.split`
+    # returns the whole string when its separator is absent, so a renamed following resource
+    # would have left this test passing over the entire file and asserting nothing about order.
+    separator = 'resource "google_cloud_run_v2_service" "shell"'
+    assert cloud_run.count(separator) == 1
+    portal_block = cloud_run.split(separator)[0]
 
     assert "google_project_iam_member.portal_log_writer" in portal_block
     assert "google_secret_manager_secret_iam_member.portal_audit_hmac_access" in portal_block
 
 
-def test_tenant_policy_registry_reaches_bff_and_both_shells() -> None:
+def test_tenant_policy_registry_reaches_bff_and_every_shell() -> None:
     cloud_run = _source("cloud_run.tf")
     main = _source("main.tf")
     variables = _source("variables.tf")
 
-    assert cloud_run.count('name  = "TENANT_EMBED_POLICIES_JSON"') == 2
+    # Once, not twice: the shells are one `for_each` resource now, so one env block serves every
+    # shell a deployment names. Two occurrences would mean a second shell resource had grown back.
+    assert cloud_run.count('name  = "TENANT_EMBED_POLICIES_JSON"') == 1
     assert cloud_run.count('name  = "PORTAL_TENANT_EMBED_POLICIES_JSON"') == 1
     assert "tenant_embed_policies_json = jsonencode" in main
-    assert "Each routed RM/Ops hostname must resolve to exactly one" in main
+    assert "Each routed shell hostname must resolve to exactly one" in main
+    # The registry is held to the shell hostnames themselves, so a new host cannot be routed
+    # without being registered and cannot be registered without being routed.
+    assert "toset(local.shell_domains)" in main
     assert 'variable "tenant_embed_policies"' in variables
 
 
@@ -200,6 +216,75 @@ def test_the_deployable_set_and_reserved_names_derive_from_the_one_map() -> None
             assert not re.search(rf"(?<![a-z0-9-]){re.escape(app_id)}(?![a-z0-9-])", text), (
                 f"{tf_file.name} names {app_id}; derive it from local.embedded_app_managed_env"
             )
+
+
+def test_the_shell_set_is_one_list_every_persona_host_derives_from() -> None:
+    """A fourth persona must be an entry in `var.shells`, never another hand-written pair.
+
+    Until 2026-09-12 each shell was written out twice -- `rm_shell` and `ops_shell` -- across
+    five resources, an IAP backend map, a url map, a certificate keeper, a DNS set, four outputs
+    and a rollback list. Thirteen places, so the Marketing journey the catalog had composed all
+    along had no host any deployment could publish it on. The guard below is that no .tf file
+    outside shells.tf names a journey at all: the enumeration has exactly one home.
+    """
+    shells = _source("shells.tf")
+    main = _source("main.tf")
+    load_balancer = _source("load_balancer.tf")
+    outputs = _source("outputs.tf")
+    iap = _source("iap.tf")
+    variables = _source("variables.tf")
+
+    # The list, the map derived from it, and the catalog it is checked against.
+    assert 'variable "shells"' in variables
+    assert "shells_by_journey = { for shell in var.shells" in shells
+    catalog_read = 'journey_catalog = yamldecode(file("${path.module}/../../config/journeys.yaml"))'
+    assert catalog_read in shells
+    assert 'resource "terraform_data" "shell_contract"' in shells
+
+    # Every per-shell resource is one for_each over that map, and the url map and certificate
+    # read the ORDERED list rather than the map, because their order is load-bearing.
+    per_shell_resources = {
+        "main.tf": ['resource "google_service_account" "shell"'],
+        "cloud_run.tf": ['resource "google_cloud_run_v2_service" "shell"'],
+        "load_balancer.tf": [
+            'resource "google_compute_region_network_endpoint_group" "shell"',
+            'resource "google_compute_backend_service" "shell"',
+        ],
+        "iap.tf": ['resource "google_cloud_run_v2_service_iam_member" "iap_shell_invoker"'],
+    }
+    for file_name, resources in per_shell_resources.items():
+        source = _source(file_name)
+        for resource in resources:
+            assert source.count(resource) == 1, f"{file_name} must declare {resource} once"
+            block = source.split(resource, 1)[1].split("\n}\n", 1)[0]
+            assert re.search(r"for_each\s*=\s*local\.shells\b", block), (
+                f"{resource} must be one for_each over local.shells"
+            )
+    assert 'domains = join("|", local.shell_domains)' in load_balancer
+    assert "domains = local.shell_domains" in load_balancer
+    assert "default_service = google_compute_backend_service.shell[local.primary_shell].id" in (
+        load_balancer
+    )
+    assert "for_each = var.shells" in load_balancer
+    assert "local.shell_journeys" in main
+    assert "for journey, backend in google_compute_backend_service.shell" in iap
+    assert "for journey, shell in local.shells" in outputs
+
+    # No journey is named outside shells.tf. The `moved` blocks there carry `rm` and `ops`
+    # because a state address is a fact about the existing deployment, not a new enumeration.
+    catalog_journeys = set(load_journeys_mapping(Path("config/journeys.yaml"))["journeys"])
+    assert {"rm", "ops", "mkt"} <= catalog_journeys
+    for tf_file in sorted(TERRAFORM.glob("*.tf")):
+        if tf_file.name == "shells.tf":
+            continue
+        text = tf_file.read_text(encoding="utf-8")
+        for journey in catalog_journeys:
+            word = rf"(?<![A-Za-z0-9_-]){re.escape(journey)}(?![A-Za-z0-9_-])"
+            assert not re.search(word, text), (
+                f"{tf_file.name} names the {journey} journey; derive it from var.shells"
+            )
+        for retired in ("rm_shell", "ops_shell", "rm_domain", "ops_domain"):
+            assert retired not in text, f"{tf_file.name} still names {retired}"
 
 
 def test_managed_variable_names_match_what_each_app_reads() -> None:

@@ -11,10 +11,14 @@ app. It is the catalog's first runnable proof of the embeddable-micro-frontend c
 
 ## Locked decisions
 
-1. **Single repo, one BFF, two shells.** A shared FastAPI BFF owns the proxy, the journey config,
-   and identity injection. Two thin UI shells consume it: `ui-rm` in React/Next.js, `ui-ops` in
-   Angular. The two-framework split is a requirement (proof of host-framework agnosticism), not an
-   accident; the shells share no UI code and both compose the identical portal.
+1. **Single repo, one BFF, two shell codebases.** A shared FastAPI BFF owns the proxy, the journey
+   config, and identity injection. Two thin UI shells consume it: `ui-rm` in React/Next.js,
+   `ui-ops` in Angular. The two-framework split is a requirement (proof of host-framework
+   agnosticism), not an accident; the shells share no UI code and both compose the identical
+   portal. Two CODEBASES is not two hosts: a deployed persona host is a build of one of them for
+   one journey (the React shell serves every journey but `ops`), and a deployment names the hosts
+   it publishes in `DEPLOY_SHELLS_JSON` the way it names the apps it mounts. Adding a persona is
+   an entry in that list plus an image built for that journey.
 2. **Mode-1 same-origin embedding only.** The portal is the cooperative reverse-proxy host the
    per-app embedding guides assume. The cross-origin loader / postMessage SDK (modes 4/5) stays out
    of scope for `journey-portal`. `cdd-sow-research` demonstrates those portable modes independently. Content-driven iframe
