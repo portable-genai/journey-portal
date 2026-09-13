@@ -437,12 +437,27 @@ variable "nat_log_filter" {
 
 variable "audit_retention_days" {
   type        = number
-  default     = 180
-  description = "Cloud Logging bucket retention. Increasing may be irreversible after lock."
+  default     = 30
+  description = <<-EOT
+    Cloud Logging bucket retention for the edge, IAP and Cloud Run evidence. 30 by default,
+    which is what _Default keeps anyway; a regulated deployment raises it in its own env file.
+    Increasing may be irreversible after lock.
+  EOT
   validation {
-    condition     = var.audit_retention_days >= 180 && var.audit_retention_days <= 3650
-    error_message = "audit_retention_days must be between 180 and 3650."
+    condition     = var.audit_retention_days >= 30 && var.audit_retention_days <= 3650
+    error_message = "audit_retention_days must be between 30 and 3650."
   }
+}
+
+variable "posture_alerts_enabled" {
+  type        = bool
+  default     = false
+  description = <<-EOT
+    Whether this stack creates the posture alert policies (IAP denials, service-account key
+    creation, VPC-SC denials, CMEK changes). False by default: Cloud Monitoring bills alert
+    conditions, and a reference deployment that nobody pages gains nothing from them. The
+    signals still land in Cloud Logging. Set true in a deployment with an on-call rota.
+  EOT
 }
 
 variable "lock_audit_bucket" {

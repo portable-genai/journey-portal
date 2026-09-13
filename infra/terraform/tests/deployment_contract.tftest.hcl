@@ -270,8 +270,8 @@ run "complete_edge_and_private_services" {
   }
 
   assert {
-    condition     = google_logging_project_bucket_config.audit.retention_days == 180
-    error_message = "Audit retention must default to six months."
+    condition     = google_logging_project_bucket_config.audit.retention_days == 30
+    error_message = "Audit retention must default to thirty days, the window _Default keeps anyway."
   }
 
   assert {
@@ -317,10 +317,10 @@ run "accept_reviewed_second_region" {
   }
 }
 
-run "reject_audit_retention_under_six_months" {
+run "reject_audit_retention_under_thirty_days" {
   command = plan
   variables {
-    audit_retention_days = 179
+    audit_retention_days = 29
   }
   expect_failures = [var.audit_retention_days]
 }

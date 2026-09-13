@@ -68,8 +68,8 @@ def test_cmek_vpc_sc_and_retention_controls_are_code_enforced() -> None:
     assert "cmek_settings {" in audit
     assert "prevent_destroy = true" in kms
     assert "use_explicit_dry_run_spec = true" in perimeter
-    assert "default     = 180" in variables
-    assert "var.audit_retention_days >= 180" in variables
+    assert "default     = 30" in variables
+    assert "var.audit_retention_days >= 30" in variables
     # The region is a deploy-time input validated against the residency allowlist, NOT a
     # literal pin. The DEFAULTS are a single region, so an unset deploy cannot spread across
     # jurisdictions; another region needs both variables set, which is the review. That single
