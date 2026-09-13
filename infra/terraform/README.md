@@ -169,13 +169,30 @@ apply (2 creates / 2 destroys / 8 in-place changes, the destroys being only the 
 its `random_id`). Adding a domain is that operation, not a different one.
 
 What it does cost: **the replacement certificate starts in `PROVISIONING` for every domain,
-including the hosts that were already live.** Google validates each domain by checking that it
-resolves to the load balancer now serving the certificate, so the already-live hosts can present a
-certificate a browser will not trust until validation completes -- minutes, on wildcard names that
-already resolve. Plan the apply accordingly rather than during a demonstration, and check
-`gcloud compute ssl-certificates describe <name>` for `ACTIVE` on every domain before declaring the
-new host reachable. Because the order of `var.shells` is the order of that domain list, **appending
-keeps the existing hosts' positions and reordering replaces the certificate for no gain.**
+including the hosts that were already live -- and `create_before_destroy` does not hide this.** It
+guarantees the new certificate object exists before the old one is deleted; it does not wait for
+the new object to reach `ACTIVE` first. Terraform creates it, repoints the HTTPS proxy onto it, and
+deletes the old certificate in the same apply, seconds apart, while the new one is still
+provisioning -- observed exactly this way adding the third shell host on 2026-09-13, which took the
+two already-live hosts down (`SSL_ERROR_SYSCALL`) for a single-digit number of minutes. There is no
+faster rollback once that apply has run: the old certificate is already gone.
+
+So treat any change to `var.shells`' domain list as a live-traffic-affecting change, not a
+routine append, until this stack gates the proxy update on certificate readiness (or moves to a
+certificate per domain -- both were considered and declined for now; see the 2026-09-13 row in
+`org-metadata/docs/deployment-status.md`):
+
+- run it in a scheduled low-traffic window, never during a demonstration or unannounced;
+- have someone watching `gcloud compute ssl-certificates describe <name> --format='value(managed.status)'`
+  in a loop *while the apply runs*, not only after it returns -- the apply itself is the outage
+  window, not just its aftermath;
+- expect a further delay after `managed.status` reaches `ACTIVE` on every domain before TLS
+  actually recovers -- Google's edge propagation of a newly active certificate lags its
+  control-plane status -- so confirm recovery by polling the hosts themselves (a `302` IAP
+  redirect on all of them), not by the status field alone.
+
+Because the order of `var.shells` is the order of that domain list, **appending keeps the existing
+hosts' positions and reordering replaces the certificate for no gain.**
 
 ## External completion blockers
 

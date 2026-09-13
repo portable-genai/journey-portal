@@ -111,10 +111,17 @@ closed with `frame-ancestors 'none'` if their Host does not resolve exactly once
    `python scripts/deployment_config.py terraform -- output -raw computed_portal_iap_audience`,
    copy it exactly into `iap_jwt_audience`, add approved `iap_members`, then save and review a
    second plan. A mismatch fails before any backend-scoped grant is created.
-9. Apply stage two. Confirm DNS resolves, the managed certificate reports `ACTIVE` on EVERY shell
-   hostname (a domain-list change replaces the certificate and it starts `PROVISIONING` on all of
-   them, live hosts included), IAP denies an unauthenticated request, and an approved user can sign
-   in on every published persona host.
+9. Apply stage two. If this apply changes `var.shells`' domain list and any of those hosts are
+   already live, do not run it unannounced: schedule a low-traffic window and watch
+   `gcloud compute ssl-certificates describe <name> --format='value(managed.status)'` in a loop
+   *while the apply runs* -- the replacement certificate starts `PROVISIONING` on every domain,
+   already-live hosts included, and `create_before_destroy` only orders the create before the
+   delete, it does not wait for `ACTIVE` first (observed as a real, if brief, multi-host outage
+   adding the third shell on 2026-09-13; see `infra/terraform/README.md`, "What the certificate
+   replacement costs"). Confirm DNS resolves, the managed certificate reports `ACTIVE` on EVERY
+   shell hostname, IAP denies an unauthenticated request, and an approved user can sign in on every
+   published persona host -- and expect TLS recovery to lag `ACTIVE` by a further interval, so
+   confirm recovery by polling the hosts themselves, not the status field alone.
 10. Confirm the BFF reaches every `INGRESS_TRAFFIC_INTERNAL_ONLY` embedded UI/API through its
    dedicated Direct VPC `ALL_TRAFFIC` egress and Private Google Access subnet.
 11. Send a valid IAP-authenticated request through the load balancer, confirm assertion
