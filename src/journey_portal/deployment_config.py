@@ -807,8 +807,8 @@ def load_deployment_config(
         retention_days = int(values["DEPLOY_AUDIT_RETENTION_DAYS"])
     except ValueError as exc:
         raise DeploymentConfigError("DEPLOY_AUDIT_RETENTION_DAYS must be an integer") from exc
-    if not 180 <= retention_days <= 3650:
-        raise DeploymentConfigError("DEPLOY_AUDIT_RETENTION_DAYS must be between 180 and 3650")
+    if not 30 <= retention_days <= 3650:
+        raise DeploymentConfigError("DEPLOY_AUDIT_RETENTION_DAYS must be between 30 and 3650")
     try:
         run_min_instances = int(values["DEPLOY_RUN_MIN_INSTANCES"])
     except ValueError as exc:

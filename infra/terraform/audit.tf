@@ -35,7 +35,11 @@ resource "google_logging_project_sink" "audit" {
 # this grant — would be required if the destination ever moved to another project, and that
 # is the change that should reintroduce it.
 
+# The four posture alerts below exist only when var.posture_alerts_enabled is true (default
+# false). Their signals still land in Cloud Logging either way; what the flag declines is the
+# paging, which a reference deployment with nobody on call pays for and never reads.
 resource "google_monitoring_alert_policy" "iap_denials" {
+  count                 = var.posture_alerts_enabled ? 1 : 0
   project               = var.project_id
   display_name          = "${var.name_prefix} IAP denials"
   combiner              = "OR"
@@ -54,6 +58,7 @@ resource "google_monitoring_alert_policy" "iap_denials" {
 }
 
 resource "google_monitoring_alert_policy" "service_account_key_creation" {
+  count                 = var.posture_alerts_enabled ? 1 : 0
   project               = var.project_id
   display_name          = "${var.name_prefix} service-account key creation"
   combiner              = "OR"
@@ -74,6 +79,7 @@ resource "google_monitoring_alert_policy" "service_account_key_creation" {
 }
 
 resource "google_monitoring_alert_policy" "vpc_sc_denials" {
+  count                 = var.posture_alerts_enabled ? 1 : 0
   project               = var.project_id
   display_name          = "${var.name_prefix} VPC-SC denials"
   combiner              = "OR"
@@ -92,6 +98,7 @@ resource "google_monitoring_alert_policy" "vpc_sc_denials" {
 }
 
 resource "google_monitoring_alert_policy" "cmek_changes" {
+  count                 = var.posture_alerts_enabled ? 1 : 0
   project               = var.project_id
   display_name          = "${var.name_prefix} CMEK changes"
   combiner              = "OR"

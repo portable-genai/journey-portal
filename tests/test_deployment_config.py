@@ -778,8 +778,8 @@ def test_rejects_placeholder_secret(tmp_path: Path) -> None:
         _load(tmp_path, _valid_values(), secret="REPLACE_ME")
 
 
-@pytest.mark.parametrize("retention", ["179", "six-months"])
-def test_named_deployment_requires_six_month_minimum_retention(
+@pytest.mark.parametrize("retention", ["29", "six-months"])
+def test_named_deployment_requires_thirty_day_minimum_retention(
     tmp_path: Path, retention: str
 ) -> None:
     values = _valid_values()
