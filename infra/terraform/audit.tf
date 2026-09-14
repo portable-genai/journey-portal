@@ -5,8 +5,11 @@ resource "google_logging_project_bucket_config" "audit" {
   retention_days = var.audit_retention_days
   locked         = var.lock_audit_bucket
   description    = "Journey portal load-balancer, IAP, and Cloud Run audit evidence."
-  cmek_settings {
-    kms_key_name = google_kms_crypto_key.portal.id
+  dynamic "cmek_settings" {
+    for_each = var.cmek_enabled ? [1] : []
+    content {
+      kms_key_name = one(google_kms_crypto_key.portal[*].id)
+    }
   }
   depends_on = [
     google_kms_crypto_key_iam_member.logging,

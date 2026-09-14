@@ -165,6 +165,7 @@ REQUIRED_NONSECRET_KEYS = frozenset(
         "DEPLOY_AUDIT_RETENTION_DAYS",
         "DEPLOY_LOCK_AUDIT_BUCKET",
         "DEPLOY_CLOUD_RUN_DELETION_PROTECTION",
+        "DEPLOY_CMEK_ENABLED",
         # The deployment's own cost posture. Required rather than optional, and required for
         # the reason the WORM lock next door was NOT: a default that a deployment never states
         # is a decision nobody made. These four are the whole of this stack's standing spend
@@ -889,6 +890,9 @@ def load_deployment_config(
         "cmek_rotation_period": values["DEPLOY_CMEK_ROTATION_PERIOD"],
         "audit_retention_days": retention_days,
         "lock_audit_bucket": _boolean(values, "DEPLOY_LOCK_AUDIT_BUCKET"),
+        # Decided before the first apply and never flipped after it: a keyed log bucket cannot
+        # drop its key, and the key's prevent_destroy refuses the plan that would try.
+        "cmek_enabled": _boolean(values, "DEPLOY_CMEK_ENABLED"),
         "cloud_run_deletion_protection": _boolean(values, "DEPLOY_CLOUD_RUN_DELETION_PROTECTION"),
         "runtime_min_instances": run_min_instances,
         "lb_log_sample_rate": lb_log_sample_rate,

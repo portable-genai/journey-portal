@@ -137,6 +137,10 @@ variables {
 run "complete_edge_and_private_services" {
   command = plan
 
+  variables {
+    cmek_enabled = true
+  }
+
   assert {
     condition     = google_cloud_run_v2_service.portal.ingress == "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
     error_message = "The BFF must not expose a direct public bypass."
@@ -263,8 +267,8 @@ run "complete_edge_and_private_services" {
 
   assert {
     condition = (
-      google_cloud_run_v2_service.portal.template[0].encryption_key == google_kms_crypto_key.portal.id &&
-      google_logging_project_bucket_config.audit.cmek_settings[0].kms_key_name == google_kms_crypto_key.portal.id
+      google_cloud_run_v2_service.portal.template[0].encryption_key == google_kms_crypto_key.portal[0].id &&
+      google_logging_project_bucket_config.audit.cmek_settings[0].kms_key_name == google_kms_crypto_key.portal[0].id
     )
     error_message = "Cloud Run and the audit bucket must use the regional CMEK."
   }
@@ -328,6 +332,7 @@ run "reject_audit_retention_under_thirty_days" {
 run "reject_kms_rotation_below_24_hours" {
   command = plan
   variables {
+    cmek_enabled         = true
     cmek_rotation_period = "86399s"
   }
   expect_failures = [var.cmek_rotation_period]
@@ -336,6 +341,7 @@ run "reject_kms_rotation_below_24_hours" {
 run "reject_kms_rotation_above_cloud_kms_maximum" {
   command = plan
   variables {
+    cmek_enabled         = true
     cmek_rotation_period = "3153600001s"
   }
   expect_failures = [var.cmek_rotation_period]

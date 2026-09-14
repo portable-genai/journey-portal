@@ -65,7 +65,10 @@ def test_cmek_vpc_sc_and_retention_controls_are_code_enforced() -> None:
     assert cloud_run.count("encryption_key") == cloud_run.count(
         'resource "google_cloud_run_v2_service"'
     )
-    assert "cmek_settings {" in audit
+    # The block is dynamic since CMEK became optional: present only when cmek_enabled is true,
+    # and never removable once applied, which is why the default is off.
+    assert 'dynamic "cmek_settings" {' in audit
+    assert "for_each = var.cmek_enabled ? [1] : []" in audit
     assert "prevent_destroy = true" in kms
     assert "use_explicit_dry_run_spec = true" in perimeter
     assert "default     = 30" in variables

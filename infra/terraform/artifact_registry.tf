@@ -21,7 +21,8 @@ resource "google_project_service_identity" "artifactregistry" {
 }
 
 resource "google_kms_crypto_key_iam_member" "artifactregistry" {
-  crypto_key_id = google_kms_crypto_key.portal.id
+  count         = var.cmek_enabled ? 1 : 0
+  crypto_key_id = one(google_kms_crypto_key.portal[*].id)
   role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
   member        = "serviceAccount:${google_project_service_identity.artifactregistry.email}"
 }
@@ -33,7 +34,7 @@ resource "google_artifact_registry_repository" "images" {
   description   = "Portal BFF, shell and embedded app images, digest-pinned, CMEK-encrypted."
   format        = "DOCKER"
 
-  kms_key_name = google_kms_crypto_key.portal.id
+  kms_key_name = one(google_kms_crypto_key.portal[*].id)
 
   # Immutable tags: a deployed tag must always name the same bytes. The stack already
   # refuses any image not pinned by digest; this closes the same gap on the registry side.

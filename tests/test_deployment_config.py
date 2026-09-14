@@ -132,6 +132,7 @@ def _valid_values() -> dict[str, str]:
         "DEPLOY_VPC_SC_ENFORCED": "false",
         "DEPLOY_CMEK_ROTATION_PERIOD": "7776000s",
         "DEPLOY_AUDIT_RETENTION_DAYS": "180",
+        "DEPLOY_CMEK_ENABLED": "true",
         "DEPLOY_LOCK_AUDIT_BUCKET": "false",
         "DEPLOY_CLOUD_RUN_DELETION_PROTECTION": "true",
         "DEPLOY_RUN_MIN_INSTANCES": "1",

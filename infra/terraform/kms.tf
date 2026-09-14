@@ -1,4 +1,5 @@
 resource "google_kms_key_ring" "portal" {
+  count    = var.cmek_enabled ? 1 : 0
   project  = var.project_id
   name     = "${var.name_prefix}-portal"
   location = var.region
@@ -8,8 +9,9 @@ resource "google_kms_key_ring" "portal" {
 }
 
 resource "google_kms_crypto_key" "portal" {
+  count                      = var.cmek_enabled ? 1 : 0
   name                       = "${var.name_prefix}-portal"
-  key_ring                   = google_kms_key_ring.portal.id
+  key_ring                   = one(google_kms_key_ring.portal[*].id)
   rotation_period            = var.cmek_rotation_period
   destroy_scheduled_duration = "2592000s"
 
@@ -23,7 +25,8 @@ locals {
 }
 
 resource "google_kms_crypto_key_iam_member" "cloud_run" {
-  crypto_key_id = google_kms_crypto_key.portal.id
+  count         = var.cmek_enabled ? 1 : 0
+  crypto_key_id = one(google_kms_crypto_key.portal[*].id)
   role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
   member        = local.cloud_run_service_agent
 }
@@ -36,7 +39,8 @@ data "google_logging_project_cmek_settings" "portal" {
 }
 
 resource "google_kms_crypto_key_iam_member" "logging" {
-  crypto_key_id = google_kms_crypto_key.portal.id
+  count         = var.cmek_enabled ? 1 : 0
+  crypto_key_id = one(google_kms_crypto_key.portal[*].id)
   role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
   # The data source returns a bare EMAIL; an IAM member needs its principal type. Without the
   # prefix the apply fails with "invalid value ... for member".
