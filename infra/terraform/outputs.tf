@@ -24,7 +24,7 @@ output "rollback_image_digests" {
 }
 
 output "cmek_key" {
-  value       = google_kms_crypto_key.portal.id
+  value       = one(google_kms_crypto_key.portal[*].id)
   description = "Regional CMEK bound to Cloud Run revisions and the audit bucket."
 }
 

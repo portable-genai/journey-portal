@@ -27,7 +27,7 @@ resource "google_cloud_run_v2_service" "portal" {
 
   template {
     service_account                  = google_service_account.portal.email
-    encryption_key                   = google_kms_crypto_key.portal.id
+    encryption_key                   = one(google_kms_crypto_key.portal[*].id)
     timeout                          = var.runtime.timeout
     max_instance_request_concurrency = var.runtime.concurrency
     scaling {
@@ -184,7 +184,7 @@ resource "google_cloud_run_v2_service" "shell" {
   deletion_protection = var.cloud_run_deletion_protection
   template {
     service_account                  = google_service_account.shell[each.key].email
-    encryption_key                   = google_kms_crypto_key.portal.id
+    encryption_key                   = one(google_kms_crypto_key.portal[*].id)
     timeout                          = var.runtime.timeout
     max_instance_request_concurrency = var.runtime.concurrency
     scaling {
@@ -236,7 +236,7 @@ resource "google_cloud_run_v2_service" "embedded_ui" {
   deletion_protection = var.cloud_run_deletion_protection
   template {
     service_account                  = google_service_account.embedded_ui[each.key].email
-    encryption_key                   = google_kms_crypto_key.portal.id
+    encryption_key                   = one(google_kms_crypto_key.portal[*].id)
     timeout                          = var.runtime.timeout
     max_instance_request_concurrency = var.runtime.concurrency
     scaling {
@@ -305,7 +305,7 @@ resource "google_cloud_run_v2_service" "embedded_api" {
   deletion_protection = var.cloud_run_deletion_protection
   template {
     service_account                  = google_service_account.embedded_api[each.key].email
-    encryption_key                   = google_kms_crypto_key.portal.id
+    encryption_key                   = one(google_kms_crypto_key.portal[*].id)
     timeout                          = var.runtime.timeout
     max_instance_request_concurrency = var.runtime.concurrency
     scaling {
