@@ -45,6 +45,22 @@ def _cmd_serve(_: argparse.Namespace) -> int:
 
 
 def main() -> None:
+    # Configured first, and inside `main` rather than at module scope, because this CLI's
+    # installed entry point IS this function (`[project.scripts]` names `cli.main:main`), so
+    # this line runs in the shipped process. Idempotent in the kit, so a process that is both
+    # this CLI and the API app configures once rather than logging every line twice. A rejected
+    # profile stays the command's error to report: `validate` turns it into a clean exit 2, and
+    # raising here would replace that sentence with a traceback.
+    from hex_service_kit.logging import configure_logging
+
+    from ..config import resolve_profile
+
+    try:
+        _profile = resolve_profile().profile
+    except Exception:  # noqa: BLE001 - never pre-empt `validate`'s own clean exit
+        _profile = "local"
+    configure_logging(_profile, service="journey-portal")
+
     parser = argparse.ArgumentParser(prog="journey-portal", description="Journey Portal Shell CLI.")
     sub = parser.add_subparsers(dest="command", required=True)
 

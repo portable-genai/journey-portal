@@ -24,6 +24,7 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
 from hex_service_kit.identity import Principal, RequestContext
+from hex_service_kit.logging import configure_logging
 from hex_service_kit.netdefaults import resolve_bind_host
 from hex_service_kit.web import add_loopback_exposure_guard
 from starlette.concurrency import run_in_threadpool
@@ -258,6 +259,20 @@ get_principal = make_get_principal(lambda: _container().identity, persona_cookie
 async def _lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
     yield
     await _container().upstream.aclose()
+
+
+#: Service name on every log line. The repository slug: stable, greppable, and the same
+#: string the tracer already reports as `service.name`.
+_SERVICE_NAME = "journey-portal"
+
+# Configured at MODULE scope, and before the app object is built, for the reason the exposure
+# guard is bound there too: the Dockerfile CMD and `make run-api` serve the app OBJECT, so
+# anything living only inside a function never runs in a shipped process. This is the tier the
+# absence cost most: the portal is the front door, and the 5xx entries the deployment actually
+# produced were the platform's own request log rather than anything this service said about
+# them. The profile comes from `resolve_profile`, the one reader of PORTAL_PROFILE the drift
+# guard permits.
+configure_logging(resolve_profile().profile, service=_SERVICE_NAME)
 
 
 app = FastAPI(
