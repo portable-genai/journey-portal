@@ -13,14 +13,20 @@ log-based metric. `logging.googleapis.com/trace` is what puts a log line inside 
 came from. And a traceback split across N entries has no single entry carrying the exception,
 which is what Error Reporting groups on.
 
-The assertions are about the SHIPPED shape rather than about the kit, which has its own tests.
+**The import assertions run in a SUBPROCESS, and that is the point rather than a workaround.**
+What ships is a fresh interpreter importing the served module under a profile, which is
+exactly what a subprocess is. Doing it in-process was tried first and was wrong twice over: it
+left a differently-configured module in `sys.modules` for every later test in the session, and
+importing under `gcp` installed that profile's middleware, so unrelated suites started seeing
+an HSTS header they assert is absent under `local`. Both were caught by CI rather than
+reasoned about.
 """
 
 from __future__ import annotations
 
-import importlib
 import json
 import logging
+import subprocess
 import sys
 from typing import Any
 
@@ -31,50 +37,61 @@ _PROFILE_ENV = "PORTAL_PROFILE"
 _SERVED_MODULE = "journey_portal.api.app"
 _SERVICE = "journey-portal"
 
-
-@pytest.fixture(autouse=True)
-def _clean_logging() -> Any:
-    """Each test owns the root logger, and hands it back."""
-    reset_logging_for_tests()
-    root = logging.getLogger()
-    handlers = root.handlers[:]
-    level = root.level
-    yield
-    reset_logging_for_tests()
-    root.handlers[:] = handlers
-    root.setLevel(level)
+#: Import the served module the way a shipped process does, and report what it configured.
+_PROBE = (
+    "import importlib, json, logging, sys;"
+    "importlib.import_module({mod!r});"
+    "h = logging.getLogger().handlers;"
+    "print(json.dumps({{"
+    "'handlers': len(h),"
+    "'formatter': type(h[0].formatter).__name__ if h else None"
+    "}}))"
+)
 
 
-def _reimport(monkeypatch: pytest.MonkeyPatch, profile: str) -> None:
-    """Import the API module the way a shipped process does: at module scope."""
-    monkeypatch.setenv(_PROFILE_ENV, profile)
-    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "demo-project")
-    sys.modules.pop(_SERVED_MODULE, None)
-    importlib.import_module(_SERVED_MODULE)
+def _probe(profile: str) -> dict[str, Any]:
+    """Run a fresh interpreter that imports the served module under `profile`."""
+    import os
+
+    env = dict(os.environ)
+    env[_PROFILE_ENV] = profile
+    env["GOOGLE_CLOUD_PROJECT"] = "demo-project"
+    out = subprocess.run(
+        [sys.executable, "-c", _PROBE.format(mod=_SERVED_MODULE)],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    assert out.returncode == 0, f"importing {_SERVED_MODULE} failed:\n{out.stderr}"
+    return json.loads(out.stdout.strip().splitlines()[-1])
 
 
-def test_importing_the_served_module_configures_logging(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The Dockerfile CMD serves the app OBJECT, so import must be enough.
+def test_importing_the_served_module_configures_logging() -> None:
+    """The Dockerfile CMD serves the app OBJECT, so import alone must be enough.
 
     Proved red before it was trusted: with the module-scope `configure_logging` call removed,
-    the root logger carries whatever the test runner left on it and this fails.
+    the fresh interpreter reports zero handlers.
     """
-    _reimport(monkeypatch, "gcp")
-    root = logging.getLogger()
-    assert len(root.handlers) == 1, "the kit installs exactly one handler"
-    assert type(root.handlers[0].formatter).__name__ == "CloudLoggingFormatter"
+    result = _probe("gcp")
+    assert result["handlers"] == 1, "the kit installs exactly one handler"
+    assert result["formatter"] == "CloudLoggingFormatter"
 
 
-def test_a_cloud_profile_error_is_one_json_object_the_platform_can_read(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The field names are load-bearing, so they are named rather than counted."""
-    _reimport(monkeypatch, "gcp")
-    formatter = logging.getLogger().handlers[0].formatter
-    assert formatter is not None
+def test_the_offline_profile_stays_readable_at_a_terminal() -> None:
+    """`local` is a person at a terminal running a demo, so it is text and not JSON."""
+    assert _probe("local")["formatter"] == "Formatter"
 
+
+def test_a_cloud_profile_error_is_one_json_object_the_platform_can_read() -> None:
+    """The field names are load-bearing, so they are named rather than counted.
+
+    Built directly rather than through an import, because what is being asserted is the shape
+    this service's errors take once the formatter above is installed.
+    """
+    from hex_service_kit.logging import CloudLoggingFormatter
+
+    formatter = CloudLoggingFormatter(service=_SERVICE, project="demo-project")
     try:
         raise ValueError("downstream dependency refused the write")
     except ValueError:
@@ -98,49 +115,54 @@ def test_a_cloud_profile_error_is_one_json_object_the_platform_can_read(
     assert "ValueError: downstream dependency refused the write" in payload["message"]
 
 
-def test_the_offline_profile_stays_readable_at_a_terminal(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """`local` is a person at a terminal running a demo, so it is text and not JSON."""
-    _reimport(monkeypatch, "local")
-    formatter = logging.getLogger().handlers[0].formatter
-    assert type(formatter).__name__ == "Formatter"
+@pytest.fixture
+def _clean_logging() -> Any:
+    """The CLI assertions configure the root logger in-process, so they hand it back."""
+    reset_logging_for_tests()
+    root = logging.getLogger()
+    handlers = root.handlers[:]
+    level = root.level
+    yield
+    reset_logging_for_tests()
+    root.handlers[:] = handlers
+    root.setLevel(level)
 
 
 def test_the_cli_entry_point_configures_logging_too(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, _clean_logging: Any
 ) -> None:
     """`[project.scripts]` names `cli.main:main`, so the call belongs inside that function.
 
     This CLI is argparse rather than Typer, so there is no callback to register: the entry
-    point IS `main`, and a call at module scope would run on import in every test too. The
-    assertion is that invoking the entry point configures logging, which is what ships.
-
-    `--help` is the argument on purpose. Logging is configured at the top of `main`, before
-    the parser is built, so the cheapest invocation that reaches that line proves it. A real
-    subcommand would build the container and fail on deployment configuration this test has
-    no business supplying, which would assert something else entirely.
+    point IS `main`. `--help` is the argument on purpose, because logging is configured at the
+    top of `main` before the parser is built, so the cheapest invocation that reaches that
+    line proves it. A real subcommand would build the container and fail on deployment
+    configuration this test has no business supplying.
     """
+    import contextlib
+    import importlib
+
     cli_main = importlib.import_module("journey_portal.cli.main")
 
     monkeypatch.setenv(_PROFILE_ENV, "gcp")
     monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "demo-project")
     monkeypatch.setattr(sys, "argv", ["journey-portal", "--help"])
-    try:
+    with contextlib.suppress(SystemExit):
         cli_main.main()
-    except SystemExit:
-        pass
     assert type(logging.getLogger().handlers[0].formatter).__name__ == "CloudLoggingFormatter"
 
 
-def test_the_cli_never_pre_empts_a_profile_error(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_cli_never_pre_empts_a_profile_error(
+    monkeypatch: pytest.MonkeyPatch, _clean_logging: Any
+) -> None:
     """A rejected profile stays `validate`'s error to report, not the logging call's."""
+    import contextlib
+    import importlib
+
     cli_main = importlib.import_module("journey_portal.cli.main")
 
     monkeypatch.setenv(_PROFILE_ENV, "NotAProfile")
     monkeypatch.setattr(sys, "argv", ["journey-portal", "--help"])
-    try:
+    with contextlib.suppress(SystemExit):
         cli_main.main()
-    except SystemExit:
-        pass
     assert logging.getLogger().handlers, "logging is still configured on a bad profile"
