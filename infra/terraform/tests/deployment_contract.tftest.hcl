@@ -23,6 +23,12 @@ mock_provider "google" {
   }
 }
 
+# The two service identities (IAP in main.tf, Artifact Registry in artifact_registry.tf) are
+# asked for on the google-beta surface. Mocking only `google` left that provider real, so every
+# run below reached for application default credentials and passed only where the machine
+# happened to have some: in CI, with none, the first run failed and the other 37 were skipped.
+mock_provider "google-beta" {}
+
 variables {
   project_id                       = "hrz9-test-00001"
   name_prefix                      = "hrz9-test"
