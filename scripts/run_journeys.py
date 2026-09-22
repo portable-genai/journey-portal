@@ -143,6 +143,22 @@ _LIVE_APP_PROFILES: dict[str, tuple[str, str | None]] = {
 _LOCAL_MODEL_APPS: frozenset[str] = frozenset(
     app_id for app_id, (_, url_env) in _LIVE_APP_PROFILES.items() if url_env is not None
 )
+#: A live app that asks a SIBLING over the network names it here, with the variable its own
+#: adapter reads the sibling's address from. Under ``--live`` the sibling's backend is started
+#: with it even when the selected journey does not list it, and the variable is pointed at that
+#: backend's loopback API, so a journey cannot launch an app whose dependency is not running.
+#:
+#: cdd-sow-research is why this exists. Since cdd-sow-research#87 (2026-09-13) every networked
+#: profile of it, ``live`` included, answers the dossier's compliance check by asking
+#: compliance-advisory's ``/ask``; the URL is required with no default and the port is bound at
+#: boot, so a live flagship with no address REFUSES TO START. The rm journey lists no
+#: compliance-advisory and nothing named the URL, so ``--journey rm --live`` -- the laptop leg of
+#: the paired demonstration -- could not bring the flagship up at all. Loopback runs no IAP: the
+#: adapter sends no token there, and compliance-advisory's live profile resolves its seeded
+#: persona, exactly as the adapter's own docstring says the launcher arranges.
+_LIVE_SIBLINGS: dict[str, tuple[tuple[str, str], ...]] = {
+    "cdd-sow-research": (("compliance-advisory", "RSK_COMPLIANCE_URL"),),
+}
 # credit-memo-drafting's EDGAR traffic must be declared with a contact (SEC fair-access policy).
 _EDGAR_CONTACT_ENV = "SEC_EDGAR_CONTACT"
 _PRESENTER_STATE_DIR = _REPO_ROOT / "scripts" / "out" / "presenter-state"
@@ -253,6 +269,26 @@ def _selected_app_ids(catalog: JourneyCatalog, journeys: tuple[str, ...]) -> tup
     return tuple(dict.fromkeys(app_ids))
 
 
+def _live_siblings(
+    catalog: JourneyCatalog, plan: dict[str, tuple[int, int]]
+) -> dict[str, tuple[int, tuple[str, ...]]]:
+    """The siblings the planned live apps ask over the network that the plan does not launch.
+
+    Maps each to its API port and the planned apps that need it. A sibling the journeys already
+    list is launched by them, whole, and is not repeated here.
+    """
+    siblings: dict[str, tuple[int, tuple[str, ...]]] = {}
+    for app_id in plan:
+        for sibling, _ in _LIVE_SIBLINGS.get(app_id, ()):
+            if sibling in plan:
+                continue
+            port, dependants = siblings.get(
+                sibling, (_port_of(catalog.app(sibling).api_upstream), ())
+            )
+            siblings[sibling] = (port, (*dependants, app_id))
+    return siblings
+
+
 def _reset_presenter_state() -> tuple[Path, ...]:
     """Remove only launcher-owned synthetic review databases and their SQLite sidecars."""
     state_dir = _PRESENTER_STATE_DIR.resolve()
@@ -302,10 +338,20 @@ class _ReadinessCheck:
 
 
 class Launcher:
-    def __init__(self, *, with_shells: bool, built: bool = False, live: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        with_shells: bool,
+        built: bool = False,
+        live: bool = False,
+        api_ports: dict[str, int] | None = None,
+    ) -> None:
         self.with_shells = with_shells
         self.built = built
         self.live = live
+        # The loopback API port of every app this launch starts, siblings included: what a live
+        # app's _LIVE_SIBLINGS variable is pointed at.
+        self.api_ports = dict(api_ports or {})
         self.procs: list[tuple[str, subprocess.Popen[bytes]]] = []
         self._readiness: list[_ReadinessCheck] = []
         self._startup_failures: dict[str, str] = {}
@@ -386,6 +432,29 @@ class Launcher:
             environment[_LIVE_SANCTIONS_ENV] = exported
         elif snapshot.is_file():
             environment[_LIVE_SANCTIONS_ENV] = str(snapshot)
+        return environment
+
+    def _live_sibling_environment(self, app_id: str) -> dict[str, str]:
+        """Point each ``_LIVE_SIBLINGS`` variable of a live app at its sibling's loopback API.
+
+        An operator export wins, as it does for the other live overrides. A sibling this launch
+        has no port for is a ValueError naming the variable and the sibling: the app would
+        otherwise refuse at boot, one process and one log file away from the reason.
+        """
+        environment: dict[str, str] = {}
+        for sibling, url_env in _LIVE_SIBLINGS.get(app_id, ()):
+            exported = _optional_setting(url_env)
+            if exported:
+                environment[url_env] = exported
+                continue
+            port = self.api_ports.get(sibling)
+            if port is None:
+                raise ValueError(
+                    f"{app_id} runs live and asks {sibling} over {url_env}, but this launch "
+                    f"starts no {sibling} backend to point it at; export {url_env} or launch "
+                    f"{sibling} with it"
+                )
+            environment[url_env] = f"http://127.0.0.1:{port}"
         return environment
 
     @staticmethod
@@ -634,7 +703,13 @@ class Launcher:
         self._unavailable(label, f"could not stop stale listener on port {port}")
         return False
 
-    def launch_app(self, app_id: str, api_port: int, ui_port: int) -> None:
+    def launch_app(self, app_id: str, api_port: int, ui_port: int | None) -> None:
+        """Start an app's backend and, unless ``ui_port`` is None, its console.
+
+        A ``None`` console port is a sibling started only so a live app can ask it something:
+        nothing embeds it, so building and serving its console would be minutes of work for a
+        page no journey shows.
+        """
         repo = _WORKSPACE / _APP_REPOS[app_id]
         if not repo.is_dir():
             self._unavailable(app_id, f"repo {repo.name} not found in the workspace")
@@ -648,6 +723,7 @@ class Launcher:
             return
         if (
             self.built
+            and ui_port is not None
             and (ui_dir / "package.json").is_file()
             and not self._clear_stale_listener(f"{app_id}-ui", ui_port, ui_dir)
         ):
@@ -673,6 +749,11 @@ class Launcher:
             )
             if self.live:
                 backend_env.update(self._live_doc1_environment())
+                try:
+                    backend_env.update(self._live_sibling_environment(app_id))
+                except ValueError as exc:
+                    self._unavailable(f"{app_id}-backend", str(exc))
+                    return
         elif app_id in _LIVE_APP_PROFILES and self.live:
             backend_env.update(self._live_app_environment(app_id))
         elif app_id == "human-review-console":
@@ -697,6 +778,8 @@ class Launcher:
             env=backend_env,
             readiness_url=f"http://127.0.0.1:{api_port}/healthz",
         )
+        if ui_port is None:
+            return
         if (ui_dir / "package.json").is_file():
             ui_env = _ui_environment(app_id)
             if self.built and not self._build_ui(app_id, ui_dir, ui_env):
@@ -894,9 +977,21 @@ class Launcher:
             time.sleep(1)
 
 
-def _print_live_plan(plan: dict[str, tuple[int, int]]) -> None:
+def _print_live_plan(
+    plan: dict[str, tuple[int, int]],
+    siblings: dict[str, tuple[int, tuple[str, ...]]] | None = None,
+) -> None:
     """Report the ``--live`` overrides, including the warning a dry run must also show."""
+    siblings = siblings or {}
     doc1_env = Launcher._live_doc1_environment()
+    api_ports = {app_id: ports[0] for app_id, ports in plan.items()}
+    api_ports.update({app_id: port for app_id, (port, _) in siblings.items()})
+    for app_id in plan:
+        for sibling, url_env in _LIVE_SIBLINGS.get(app_id, ()):
+            exported = _optional_setting(url_env)
+            address = exported or f"http://127.0.0.1:{api_ports[sibling]}"
+            origin = "operator export" if exported else f"{sibling} backend, live"
+            print(f"  {app_id} asks      {url_env}={address} ({origin})")
     portal_timeout = _defaulted_setting(_PORTAL_UPSTREAM_TIMEOUT_ENV, _LIVE_PORTAL_UPSTREAM_TIMEOUT)
     if any(app_id in _LOCAL_MODEL_APPS for app_id in plan):
         port, health_url = Launcher._model_server_endpoint()
@@ -1019,11 +1114,20 @@ def main() -> int:
         for app_id in selected_app_ids
     }
 
+    # Only a LIVE app asks a sibling over the network: the offline profiles answer in-process.
+    siblings = _live_siblings(catalog, plan) if args.live else {}
+
     print("Journey portal launch plan:")
     print(f"  portal BFF        :8110   ({len(selected_journeys)} journeys, {len(plan)} apps)")
     for app_id, (api_port, ui_port) in plan.items():
         repo_name = _APP_REPOS.get(app_id, "?")
         print(f"  {app_id:6} backend :{api_port}   ui :{ui_port}   repo {repo_name}")
+    for app_id, (api_port, dependants) in siblings.items():
+        repo_name = _APP_REPOS.get(app_id, "?")
+        print(
+            f"  {app_id:6} backend :{api_port}   no ui   repo {repo_name}"
+            f"   (asked by {', '.join(dependants)}; no journey selected shows it)"
+        )
     if not args.no_shells:
         for journey in selected_journeys:
             if journey == "ops":
@@ -1035,7 +1139,7 @@ def main() -> int:
     if args.fresh_state:
         print(f"  presenter state   reset requested ({_PRESENTER_STATE_DIR})")
     if args.live:
-        _print_live_plan(plan)
+        _print_live_plan(plan, siblings)
     if args.dry_run:
         return 0
 
@@ -1049,7 +1153,11 @@ def main() -> int:
         else:
             print("\nsynthetic presenter state already fresh")
 
-    launcher = Launcher(with_shells=not args.no_shells, built=args.built, live=args.live)
+    api_ports = {app_id: ports[0] for app_id, ports in plan.items()}
+    api_ports.update({app_id: port for app_id, (port, _) in siblings.items()})
+    launcher = Launcher(
+        with_shells=not args.no_shells, built=args.built, live=args.live, api_ports=api_ports
+    )
     launcher.install_termination_handler()
     try:
         print("\nstarting processes:")
@@ -1066,8 +1174,12 @@ def main() -> int:
         # that was only correct while compliance-advisory needed one: the refresh is about the real
         # regulator corpus, not about generation, and folding it under the server would
         # have silently stopped it the moment compliance-advisory went Gemini-only.
-        if args.live and "compliance-advisory" in plan:
+        if args.live and ("compliance-advisory" in plan or "compliance-advisory" in siblings):
             launcher.refresh_live_corpus()
+        # Siblings first: the apps that ask them bind the address at boot, and a sibling that is
+        # still starting when its first question arrives is a slower answer rather than a refusal.
+        for app_id, (api_port, _) in siblings.items():
+            launcher.launch_app(app_id, api_port, None)
         for app_id, (api_port, ui_port) in plan.items():
             launcher.launch_app(app_id, api_port, ui_port)
         launcher.launch_portal()
