@@ -149,7 +149,10 @@ def test_live_flag_adds_only_doc1_live_overrides(
     monkeypatch.setenv("JOURNEY_DEMO_S2S_TOKEN", "synthetic-test-token")
     monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "fictional-demo-project")
     monkeypatch.delenv("CDD_MAX_BODY_BYTES", raising=False)
-    launcher = launcher_module.Launcher(with_shells=False, live=True)
+    monkeypatch.delenv("RSK_COMPLIANCE_URL", raising=False)
+    launcher = launcher_module.Launcher(
+        with_shells=False, live=True, api_ports={"compliance-advisory": 8080}
+    )
     launcher._spawn = Mock()
 
     launcher.launch_app("cdd-sow-research", api_port=8090, ui_port=3001)
@@ -165,7 +168,109 @@ def test_live_flag_adds_only_doc1_live_overrides(
         "CDD_PROFILE": "live",
         "CDD_MAX_BODY_BYTES": "33554432",
         "GOOGLE_CLOUD_PROJECT": "fictional-demo-project",
+        # The live flagship binds its compliance port at boot and refuses to start without
+        # this: it is the sibling's loopback API, which runs no IAP.
+        "RSK_COMPLIANCE_URL": "http://127.0.0.1:8080",
     }
+
+
+def test_the_live_rm_journey_starts_compliance_advisory_for_the_flagship(
+    launcher_module: ModuleType,
+) -> None:
+    """rm lists no compliance-advisory, and a live flagship cannot start without one."""
+    catalog = JourneyCatalog.from_mapping(load_journeys_mapping(Settings.load().journeys_path))
+    rm_plan = {app_id: (0, 0) for app_id in launcher_module._selected_app_ids(catalog, ("rm",))}
+    both_plan = {
+        app_id: (0, 0) for app_id in launcher_module._selected_app_ids(catalog, ("rm", "ops"))
+    }
+
+    assert launcher_module._live_siblings(catalog, rm_plan) == {
+        "compliance-advisory": (
+            launcher_module._port_of(catalog.app("compliance-advisory").api_upstream),
+            ("cdd-sow-research",),
+        )
+    }
+    # A journey that already shows compliance-advisory launches it whole; it is not repeated.
+    assert launcher_module._live_siblings(catalog, both_plan) == {}
+
+
+def test_a_sibling_is_started_as_a_backend_with_no_console(
+    launcher_module: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "workspace"
+    api = workspace / "compliance-advisory" / "src" / "compliance_advisory" / "api"
+    api.mkdir(parents=True)
+    (api / "app.py").touch()
+    (workspace / "compliance-advisory" / "ui").mkdir()
+    (workspace / "compliance-advisory" / "ui" / "package.json").write_text("{}")
+    monkeypatch.setattr(launcher_module, "_WORKSPACE", workspace)
+    monkeypatch.setattr(
+        launcher_module, "_APP_REPOS", {"compliance-advisory": "compliance-advisory"}
+    )
+    launcher = launcher_module.Launcher(with_shells=False, built=True, live=True)
+    launcher._spawn = Mock()
+    launcher._clear_stale_listener = Mock(return_value=True)
+    launcher._build_ui = Mock(return_value=True)
+
+    launcher.launch_app("compliance-advisory", api_port=8080, ui_port=None)
+
+    assert [call.args[0] for call in launcher._spawn.call_args_list] == [
+        "compliance-advisory-backend"
+    ]
+    assert launcher._spawn.call_args.kwargs["env"]["COMPLIANCE_PROFILE"] == "live"
+    launcher._build_ui.assert_not_called()
+    # Only the backend's port is checked for a stale listener; there is no console port.
+    assert [call.args[0] for call in launcher._clear_stale_listener.call_args_list] == [
+        "compliance-advisory-backend"
+    ]
+
+
+def test_a_live_flagship_with_no_compliance_backend_is_refused_by_name(
+    launcher_module: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Refused before it spawns, naming the variable, instead of dying at boot in its own log."""
+    workspace = tmp_path / "workspace"
+    (workspace / "cdd-sow-research" / "src" / "cdd_sow_research" / "api").mkdir(parents=True)
+    (workspace / "cdd-sow-research" / "src" / "cdd_sow_research" / "api" / "app.py").touch()
+    monkeypatch.setattr(launcher_module, "_WORKSPACE", workspace)
+    monkeypatch.setattr(launcher_module, "_APP_REPOS", {"cdd-sow-research": "cdd-sow-research"})
+    monkeypatch.setenv("JOURNEY_DEMO_S2S_TOKEN", "synthetic-test-token")
+    monkeypatch.delenv("RSK_COMPLIANCE_URL", raising=False)
+    launcher = launcher_module.Launcher(with_shells=False, live=True)
+    launcher._spawn = Mock()
+
+    launcher.launch_app("cdd-sow-research", api_port=8090, ui_port=3001)
+
+    launcher._spawn.assert_not_called()
+    reason = launcher._startup_failures["cdd-sow-research-backend"]
+    assert "RSK_COMPLIANCE_URL" in reason
+    assert "compliance-advisory" in reason
+
+
+def test_an_exported_compliance_address_wins_over_the_sibling(
+    launcher_module: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("RSK_COMPLIANCE_URL", "http://127.0.0.1:9180")
+    launcher = launcher_module.Launcher(
+        with_shells=False, live=True, api_ports={"compliance-advisory": 8080}
+    )
+
+    assert launcher._live_sibling_environment("cdd-sow-research") == {
+        "RSK_COMPLIANCE_URL": "http://127.0.0.1:9180"
+    }
+
+
+def test_an_emptied_compliance_address_is_refused_rather_than_replaced(
+    launcher_module: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Three states: an emptied variable is an expressed intent, never a cue to default."""
+    monkeypatch.setenv("RSK_COMPLIANCE_URL", "")
+    launcher = launcher_module.Launcher(
+        with_shells=False, live=True, api_ports={"compliance-advisory": 8080}
+    )
+
+    with pytest.raises(ValueError, match="RSK_COMPLIANCE_URL is set but empty"):
+        launcher._live_sibling_environment("cdd-sow-research")
 
 
 def test_doc1_hosted_launcher_selects_iap_without_demo_acknowledgement(
@@ -340,6 +445,38 @@ def test_dry_run_with_live_reports_the_plan_without_starting_anything(
     assert "JOURNEY_MODEL_SERVER_CMD is unset" in output
     prepare_state.assert_not_called()
     popen.assert_not_called()
+
+
+def test_dry_run_of_the_live_rm_journey_names_the_compliance_sibling(
+    launcher_module: ModuleType, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    popen = Mock()
+    monkeypatch.setattr(launcher_module, "_prepare_presenter_state", Mock())
+    monkeypatch.setattr(launcher_module.subprocess, "Popen", popen)
+    monkeypatch.setattr(launcher_module.Launcher, "_listener_pids", staticmethod(lambda port: ()))
+    monkeypatch.delenv("RSK_COMPLIANCE_URL", raising=False)
+    monkeypatch.setattr(sys, "argv", ["run_journeys.py", "--dry-run", "--live", "--journey", "rm"])
+
+    assert launcher_module.main() == 0
+
+    output = capsys.readouterr().out
+    assert "compliance-advisory backend :8080   no ui" in output
+    assert "asked by cdd-sow-research" in output
+    assert "cdd-sow-research asks      RSK_COMPLIANCE_URL=http://127.0.0.1:8080" in output
+    popen.assert_not_called()
+
+
+def test_the_offline_rm_journey_starts_no_sibling(
+    launcher_module: ModuleType, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The local profile answers compliance in-process, so nothing extra is launched for it."""
+    monkeypatch.setattr(launcher_module, "_prepare_presenter_state", Mock())
+    monkeypatch.setattr(launcher_module.subprocess, "Popen", Mock())
+    monkeypatch.setattr(sys, "argv", ["run_journeys.py", "--dry-run", "--journey", "rm"])
+
+    assert launcher_module.main() == 0
+
+    assert "compliance-advisory" not in capsys.readouterr().out
 
 
 def test_fresh_state_removes_only_launcher_owned_review_databases(
