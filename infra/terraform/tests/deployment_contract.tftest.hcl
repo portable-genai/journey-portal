@@ -30,7 +30,10 @@ mock_provider "google" {
 mock_provider "google-beta" {}
 
 variables {
-  project_id                       = "hrz9-test-00001"
+  project_id = "hrz9-test-00001"
+  # The lock has NO default, so every plan states it; this is the posture the reference
+  # deployment runs. The run at the end states the other one.
+  worm_locked                      = false
   name_prefix                      = "hrz9-test"
   region                           = "asia-southeast1"
   allowed_regions                  = ["asia-southeast1"]
@@ -1262,4 +1265,19 @@ run "reject_mutable_shell_image" {
     ]
   }
   expect_failures = [var.shells]
+}
+
+# A stated lock must reach the bucket. The file states the declined posture above, so without
+# this run a lock that stopped reaching the bucket would leave every other run green.
+run "a_stated_lock_locks_the_audit_bucket" {
+  command = plan
+
+  variables {
+    worm_locked = true
+  }
+
+  assert {
+    condition     = google_logging_project_bucket_config.audit.locked
+    error_message = "worm_locked = true must lock the audit bucket."
+  }
 }

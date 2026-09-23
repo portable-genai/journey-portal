@@ -3,7 +3,7 @@ resource "google_logging_project_bucket_config" "audit" {
   location       = var.region
   bucket_id      = "${var.name_prefix}-audit"
   retention_days = var.audit_retention_days
-  locked         = var.lock_audit_bucket
+  locked         = var.worm_locked
   description    = "Journey portal load-balancer, IAP, and Cloud Run audit evidence."
   dynamic "cmek_settings" {
     for_each = var.cmek_enabled ? [1] : []

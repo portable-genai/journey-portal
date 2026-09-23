@@ -104,7 +104,7 @@ Use encrypted, access-controlled remote state. IAP OAuth secrets are sensitive b
 stores them in state. Prefer a provider-supported managed OAuth client when the institution
 supports one.
 
-`apply_org_policies` and `lock_audit_bucket` default false. Project Org Policy changes need
+`apply_org_policies` defaults false, and `worm_locked` has no default, so the deployment states it. Project Org Policy changes need
 separate authority, and locking the 180-day retention is irreversible. `vpc_sc_enforced=true` is
 currently rejected because the BFF still uses unrestricted Cloud NAT for IAP key retrieval. Keep
 the perimeter in dry-run until an approved restricted egress design replaces NAT. Read

@@ -460,10 +460,9 @@ variable "posture_alerts_enabled" {
   EOT
 }
 
-variable "lock_audit_bucket" {
+variable "worm_locked" {
   type        = bool
-  default     = false
-  description = "Irreversibly lock audit retention only after recovery and legal approval."
+  description = "Irreversibly lock audit retention only after recovery and legal approval. NO default: the deployment states it, and a plan refuses until it does."
 }
 
 variable "notification_channels" {

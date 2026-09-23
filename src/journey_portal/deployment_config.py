@@ -889,7 +889,7 @@ def load_deployment_config(
         "vpc_sc_enforced": _boolean(values, "DEPLOY_VPC_SC_ENFORCED"),
         "cmek_rotation_period": values["DEPLOY_CMEK_ROTATION_PERIOD"],
         "audit_retention_days": retention_days,
-        "lock_audit_bucket": _boolean(values, "DEPLOY_LOCK_AUDIT_BUCKET"),
+        "worm_locked": _boolean(values, "DEPLOY_LOCK_AUDIT_BUCKET"),
         # Decided before the first apply and never flipped after it: a keyed log bucket cannot
         # drop its key, and the key's prevent_destroy refuses the plan that would try.
         "cmek_enabled": _boolean(values, "DEPLOY_CMEK_ENABLED"),
