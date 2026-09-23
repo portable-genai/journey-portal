@@ -166,7 +166,7 @@ def test_loads_complete_named_config_and_keeps_secret_out_of_tfvars(tmp_path: Pa
     config = _load(tmp_path, _valid_values())
 
     assert config.terraform_inputs["audit_retention_days"] == 180
-    assert config.terraform_inputs["lock_audit_bucket"] is False
+    assert config.terraform_inputs["worm_locked"] is False
     assert config.terraform_inputs["cloud_run_deletion_protection"] is True
     assert config.terraform_inputs["vpc_sc_enforced"] is False
     assert config.terraform_inputs["portal_audit_hmac_secret_version"] == "7"

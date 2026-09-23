@@ -12,7 +12,7 @@ Before the first plan:
 3. Replace tag-based image inputs with the exact deployed digest.
 4. Add IAP, DNS, shell (`DEPLOY_SHELLS_JSON`, one `{journey, image, domain}` entry per persona
    host, in the order the existing managed certificate lists the domains) and embedded-app inputs,
-   keeping `apply_org_policies = false` and `lock_audit_bucket = false`.
+   keeping `apply_org_policies = false` and `worm_locked = false`.
 5. Run `terraform plan -out=migration.tfplan`. Refuse any unexpected BFF or service-account
    replacement.
 6. Apply the additive edge and service resources. Enable organization policies only in a later,
