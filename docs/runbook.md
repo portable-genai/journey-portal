@@ -67,6 +67,14 @@ must contain at least 32 random bytes. Rotate it only through a reviewed release
 prior key identifier with its evidence window. Cloud Logging delivery is synchronous and a failed
 write returns 503 before the request reaches an embedded application.
 
+`PORTAL_ACCESS_AUDIT` switches the access audit, read in three states: unset is on,
+`true`/`false` (or `on`/`off`) wins, and an emptied or unrecognised value refuses at boot.
+Terraform states it as `access_audit_enabled`. On, the portal proves the sink before it reports
+ready: `/healthz` and `/v1/healthz` append one content-free `startup-probe` event (and, under the
+local profile, verify the ledger) and answer 503 until that succeeds, retrying on each probe. Off,
+nothing is recorded, the integrity view says the audit is off, and the portal logs one warning at
+startup.
+
 Managed profiles also require `PORTAL_TENANT_EMBED_POLICIES_JSON`. Terraform produces it from
 `tenant_embed_policies` and passes the same canonical document to the BFF and every shell.
 Each policy binds one stable tenant id to exact routed hosts, frame ancestors and CORS origins.
@@ -142,7 +150,8 @@ No source-controlled fixture is live apply evidence.
 
 ## Health and alerting
 
-- `/healthz` checks BFF profile and region. Every shell probes `/healthz`: the static server both
+- `/healthz` checks BFF profile and region, and answers 503 until the access audit has accepted
+  its startup probe (see above), so a portal that cannot audit never reports ready. Every shell probes `/healthz`: the static server both
   shell images ship answers it, so the probe path no longer depends on which shell it is. The RM
   shell probed `/` until 2026-09-12, which is why its first revision after that change is expected.
 - Embedded UI probes its configured TCP port; embedded APIs probe `/healthz`.

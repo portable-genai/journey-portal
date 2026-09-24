@@ -74,6 +74,12 @@ resource "google_cloud_run_v2_service" "portal" {
         name  = "PORTAL_APPS"
         value = join(",", sort(keys(var.embedded_apps)))
       }
+      # The fail-closed access audit, stated rather than inherited: a cheap runtime control, on
+      # in the reference. Off is a deployment choice the portal logs at startup.
+      env {
+        name  = "PORTAL_ACCESS_AUDIT"
+        value = tostring(var.access_audit_enabled)
+      }
       # SET-BUT-EMPTY is a distinct input to this app, and a rejected one: it refuses to start
       # with "PORTAL_IAP_AUDIENCE is set but empty; unset it when the capability is
       # intentionally absent". That is a deliberate design — "nobody chose" must not silently

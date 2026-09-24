@@ -29,6 +29,7 @@ from hex_service_kit.netdefaults import resolve_bind_host
 from hex_service_kit.web import add_loopback_exposure_guard
 from starlette.concurrency import run_in_threadpool
 
+from ..adapters.controls import prove_access_audit
 from ..config import (
     Container,
     ProfileNotConfigured,
@@ -365,8 +366,34 @@ def _proxied_response(resp: UpstreamResponse) -> Response:
 # --------------------------------------------------------------------------- #
 # Portal-native endpoints (consumed by the RM / Ops shells)
 # --------------------------------------------------------------------------- #
+def _require_proved_audit() -> None:
+    """Answer 503 until the access audit has shown it works, or is switched off.
+
+    The portal forwards nothing it could not audit, so it must not report ready before the sink
+    has accepted an event. The proof is retried on each probe until it succeeds once, so a sink
+    that comes up late is picked up by the next probe rather than latching the portal unready.
+    """
+    if getattr(app.state, "access_audit_proved", False):
+        return
+    container = _container()
+    if not container.settings.access_audit_enabled:
+        app.state.access_audit_proved = True
+        return
+    try:
+        prove_access_audit(container.access_audit, verify_locally=_EXPOSURE == "local")
+    except AuditUnavailable as exc:
+        _LOGGER.warning("access audit not yet proved: %s: %s", type(exc).__name__, exc)
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="the access audit has not been proved, and the portal forwards nothing "
+            "it cannot audit",
+        ) from exc
+    app.state.access_audit_proved = True
+
+
 @app.get("/healthz", response_model=HealthResponse, tags=["ops"])
 def healthz() -> HealthResponse:
+    _require_proved_audit()
     settings = _container().settings
     return HealthResponse(
         status="ok",
@@ -387,7 +414,7 @@ def versioned_healthz() -> HealthResponse:
     not a path the platform reserves, so this one is answered here, by the application, and its
     body is produced from the loaded settings rather than from a literal.
     """
-
+    _require_proved_audit()
     settings = _container().settings
     return HealthResponse(
         status="ok",
