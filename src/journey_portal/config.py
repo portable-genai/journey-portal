@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import logging
 import re
 import secrets
 from collections.abc import Mapping
@@ -37,7 +38,7 @@ from .domain.catalog import JourneyCatalog
 from .domain.doc1_broker import Doc1BrokerPolicy
 from .domain.embed_policy import TenantEmbedPolicyService
 from .domain.models import TenantEmbedPolicy
-from .envread import setting_or_default
+from .envread import boolean_setting, setting_or_default
 from .ports.access_audit import AccessAuditPort
 from .ports.bff_credentials import BffSigningKeyPort
 from .ports.subject_token import SubjectTokenPort
@@ -529,11 +530,21 @@ def load_journeys_mapping(path: str | Path) -> dict[str, Any]:
     return interpolated
 
 
+#: The switch for the portal's fail-closed access audit, the one cheap runtime control the portal
+#: itself runs. Read in three states: unset is ON, a boolean wins, emptied or unrecognised
+#: refuses at boot. See the fleet's runtime-control contract.
+ACCESS_AUDIT_ENV = "PORTAL_ACCESS_AUDIT"
+
+_log = logging.getLogger(__name__)
+
+
 @dataclass(frozen=True, slots=True)
 class Settings:
     """Deployment settings, resolved from the environment."""
 
     profile: str = "local"
+    #: Whether the portal records content-free access evidence before forwarding a request.
+    access_audit_enabled: bool = True
     region: str = REGION
     #: The apps this installation actually mounts, or None for "everything in the config".
     #: See JourneyCatalog.from_mapping for why a deployment states this rather than the
@@ -669,6 +680,7 @@ class Settings:
             raise ValueError(f"{_OBSERVABILITY_AUDIENCE_ENV} is required for the platform profile")
         return cls(
             profile=profile,
+            access_audit_enabled=boolean_setting(ACCESS_AUDIT_ENV, default=True),
             region=region,
             deployed_apps=deployed_apps,
             journeys_path=_defaulted_setting(_JOURNEYS_ENV, _DEFAULT_JOURNEYS),
@@ -732,6 +744,10 @@ class Container:
 
     @cached_property
     def access_audit(self) -> AccessAuditPort:
+        if not self.settings.access_audit_enabled:
+            from .adapters.controls import DisabledAccessAudit
+
+            return DisabledAccessAudit(self.settings)
         adapter = self._bind("access_audit")
         assert isinstance(adapter, AccessAuditPort)
         return adapter
@@ -779,7 +795,10 @@ class Container:
 
 
 def build_container(settings: Settings | None = None) -> Container:
-    return Container(settings or Settings.load())
+    settings = settings or Settings.load()
+    if not settings.access_audit_enabled:
+        _log.warning("runtime controls switched off: %s", ACCESS_AUDIT_ENV)
+    return Container(settings)
 
 
 def identity_adapter_class(profile: str) -> type:

@@ -594,3 +594,9 @@ variable "cmek_enabled" {
     the right answer: the stores it bound stay bound.
   EOT
 }
+
+variable "access_audit_enabled" {
+  description = "Switch the portal's fail-closed access audit (PORTAL_ACCESS_AUDIT). A cheap runtime control: on in the reference, reversible, so it takes a default. On, the portal reports ready only after a probe event reaches the audit sink."
+  type        = bool
+  default     = true
+}
