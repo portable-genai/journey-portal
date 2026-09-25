@@ -827,6 +827,10 @@ def test_an_absent_local_model_prints_the_recipe_and_the_launch_goes_on(
     output = capsys.readouterr().out
     assert START_RECIPE in output
     assert "local-model" in output and "UNAVAILABLE" in output
+    # The reason repeats what the kit saw rather than guessing at it.
+    assert (
+        "no local model server answered (fictional)." in launcher._startup_failures["local-model"]
+    )
     launcher._spawn.assert_not_called()
     # Never started by the launcher, and never a reason to refuse the launch.
     assert ready is True

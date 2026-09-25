@@ -562,10 +562,12 @@ class Launcher:
             LocalModelClient(settings).probe()
         except LocalModelUnavailable as exc:
             print(f"  warning {exc}")
+            # The kit's first line says which it was: nothing answered, it timed out (a busy
+            # server is still a server), or it serves another model.
             self._optional_unavailable(
                 label,
-                f"{settings.model} not served at {settings.url}; the local-model apps start "
-                "and each model call fails with the start recipe above",
+                f"{str(exc).splitlines()[0]} The local-model apps start, and each model call "
+                "fails with the start recipe above until it answers.",
             )
             return
         print(f"  found {label:34} {settings.model} at {settings.url}")
