@@ -140,14 +140,15 @@ The flag switches every journey app that has a live profile to it. The apps with
 online search tool (trade finance, loan documents, complaints, compliance, the credit memo, the
 marketing apps, architecture and model quality, early warning, fraud fusion, control-room
 handover, CAPA) serve their model calls from ONE local open-weight model through the shared
-kit client; the search apps (`cdd-sow-research`, `cio-advisory`) call Gemini. Apps with real
-data sources use them rather than fictional seeds:
+kit client; the search apps (`cdd-sow-research`, `cio-advisory`, `market-intelligence`) call
+Gemini. Apps with real data sources use them rather than fictional seeds:
 
 | App | Live data | The audience brings |
 |---|---|---|
 | `cdd-sow-research` CDD | uploaded public filings, grounded research, the synced OFAC/UN watchlists | any subject name and its documents |
 | `credit-memo-drafting` Credit memo | the borrower's real SEC EDGAR record + real same-industry peers | any US-listed company, or uploaded financials for a private borrower |
 | `cio-advisory` CIO advisory | grounded research over real published market outlooks | a registered client portfolio (JSON template in the UI) |
+| `market-intelligence` Market intelligence | Gemini research grounded with Google Search, narrated by Gemini; the internal corpus is still the fictional seed | any topic, market and competitor list |
 | `trade-finance-checker` Trade finance | the presentation the audience pastes (template downloadable) | their own LC + documents; the LC is claimed for their tenant on first check |
 | `compliance-advisory` Compliance | the REAL regulator instruments (MAS, APRA, JFSA, BCBS, NIST), refreshed at launch | any compliance question; optionally their own policy document via corpus upload |
 
@@ -325,6 +326,7 @@ it is reused, is the table below.
 | Regulator PDFs (MAS, APRA, JFSA, BCBS, NIST) | `compliance_advisory.pipelines.refresh_job`, run by the launcher | `~/.compliance_advisory/local.db` + freshness ledger | 7-day TTL |
 | Gemini grounded market research | `cio-advisory`, at request time | `~/.cio_advisory/live-house-views.json` | 6 h TTL |
 | Gemini grounded adverse media / registry | `cdd-sow-research`, at request time | not cached | per assessment |
+| Gemini grounded market research and competitor moves | `market-intelligence`, at request time | not cached | per brief |
 | Documents the audience uploads | the app they upload to | that app's own governed store | until removed |
 
 Nothing above is committed to a repository. The caches exist so that a rehearsal, and the demo
@@ -560,7 +562,7 @@ What fills each box:
 |---|---|---|
 | End-user identity | seeded personas, picked in the shell | Identity-Aware Proxy assertion, re-verified per service |
 | Gen AI model | one OpenAI-compatible server hosting Gemma | Gemini on Vertex AI, region-pinned |
-| Grounded web research (`cdd-sow-research` adverse media and registry, `cio-advisory` grounding) | Gemini `google_search` on Vertex AI | the same adapter, unchanged |
+| Grounded web research (`cdd-sow-research` adverse media and registry, `cio-advisory` grounding, `market-intelligence` research) | Gemini `google_search` on Vertex AI | the same adapter, unchanged |
 | Document extraction | the file's text layer, else page transcription by the model | Document AI |
 | Knowledge and rules retrieval | SQLite FTS5 on disk | Vertex AI Search; `compliance-advisory`'s ledger on AlloyDB; `trade-finance-checker`'s rules from the shared governed rules service |
 | `cdd-sow-research` case store | local SQLite | Firestore |

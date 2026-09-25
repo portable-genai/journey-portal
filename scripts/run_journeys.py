@@ -28,11 +28,12 @@ search tool serve their model calls from ONE local open-weight model through the
 client (``hex_service_kit.localmodel``): the launcher passes them one ``LOCAL_MODEL_URL`` (and
 ``LOCAL_MODEL`` when the operator set it), probes the server first, and when nothing answers
 prints the kit's start recipe and launches anyway, so each model call fails with that recipe
-rather than the demo refusing to start. The search apps (cdd-sow-research, cio-advisory) call
-the Gemini API, which needs Google ADC plus ``GOOGLE_CLOUD_PROJECT``. A sibling a live app asks
-over the network is started with it, and a sibling that cannot start is shown unavailable in
-the readiness table instead of stopping the launch. A live dossier build takes minutes, so the
-portal BFF also gets a raised ``PORTAL_UPSTREAM_TIMEOUT``.
+rather than the demo refusing to start. The search apps (cdd-sow-research, cio-advisory,
+market-intelligence) call the Gemini API, which needs Google ADC plus
+``GOOGLE_CLOUD_PROJECT``. A sibling a live app asks over the network is started with it, and a
+sibling that cannot start is shown unavailable in the readiness table instead of stopping the
+launch. A live dossier build takes minutes, so the portal BFF also gets a raised
+``PORTAL_UPSTREAM_TIMEOUT``.
 
 This is a convenience launcher, not production wiring: in production the BFF and apps are separate
 Cloud Run services behind one HTTPS load balancer + IAP (see docs/embedding-and-identity.md).
@@ -120,9 +121,8 @@ _LIVE_SANCTIONS_SNAPSHOT = "scripts/out/sanctions/current.json"
 #   model through the kit client, which reads ``LOCAL_MODEL_URL`` / ``LOCAL_MODEL``. There is one
 #   variable for the whole laptop, never one per app. compliance-advisory and credit-memo-drafting
 #   are here too: their core is the local model and only their optional search uses Gemini.
-# * the search apps call Gemini, because an online search tool is their core.
-#
-# market-intelligence is a search app with no ``live`` profile yet, so it stays on ``local``.
+# * the search apps call Gemini, because an online search tool is their core. Each is given the
+#   operator's ``GOOGLE_CLOUD_PROJECT`` and nothing else; credentials are the operator's ADC.
 _LOCAL_MODEL_LIVE_APPS: frozenset[str] = frozenset(
     {
         "trade-finance-checker",
@@ -143,7 +143,9 @@ _LOCAL_MODEL_LIVE_APPS: frozenset[str] = frozenset(
         "issue-remediation-capa",
     }
 )
-_GEMINI_LIVE_APPS: frozenset[str] = frozenset({"cdd-sow-research", "cio-advisory"})
+_GEMINI_LIVE_APPS: frozenset[str] = frozenset(
+    {"cdd-sow-research", "cio-advisory", "market-intelligence"}
+)
 _LIVE_APPS: frozenset[str] = _LOCAL_MODEL_LIVE_APPS | _GEMINI_LIVE_APPS
 #: A live app that asks a SIBLING over the network names it here, with the variable its own
 #: adapter reads the sibling's address from. Under ``--live`` the sibling's backend is started

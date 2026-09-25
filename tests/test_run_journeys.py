@@ -878,6 +878,47 @@ def test_the_gemini_apps_get_no_local_model_endpoint(
     }
 
 
+def test_market_intelligence_joins_the_gemini_group_under_live(
+    launcher_module: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """It has a ``live`` profile now, so ``--live`` forces it there like the other search apps."""
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "fictional-demo-project")
+    monkeypatch.setenv("LOCAL_MODEL_URL", "http://127.0.0.1:9001/chat/completions")
+
+    assert "market-intelligence" in launcher_module._GEMINI_LIVE_APPS
+    assert "market-intelligence" not in launcher_module._LOCAL_MODEL_LIVE_APPS
+    environment = launcher_module.Launcher._live_app_environment("market-intelligence")
+
+    # The same Gemini settings cio-advisory gets, and never the local-model endpoint.
+    assert environment == {
+        "MKT_INTEL_PROFILE": "live",
+        "GOOGLE_CLOUD_PROJECT": "fictional-demo-project",
+    }
+
+
+def test_market_intelligence_launches_live_under_the_flag(
+    launcher_module: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The spawned backend gets ``live``, not the portal's ``local`` default."""
+    workspace = tmp_path / "workspace"
+    api = workspace / "market-intelligence" / "src" / "market_intelligence" / "api"
+    api.mkdir(parents=True)
+    (api / "app.py").touch()
+    monkeypatch.setattr(launcher_module, "_WORKSPACE", workspace)
+    monkeypatch.setattr(
+        launcher_module, "_APP_REPOS", {"market-intelligence": "market-intelligence"}
+    )
+    monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+    monkeypatch.setenv("MKT_INTEL_PROFILE", "local")  # a stale export must not win
+    launcher = launcher_module.Launcher(with_shells=False, live=True)
+    launcher._spawn = Mock()
+
+    launcher.launch_app("market-intelligence", api_port=8130, ui_port=None)
+
+    launcher._spawn.assert_called_once()
+    assert launcher._spawn.call_args.kwargs["env"]["MKT_INTEL_PROFILE"] == "live"
+
+
 def test_an_emptied_local_model_url_refuses_that_app_by_name(
     launcher_module: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
