@@ -17,14 +17,14 @@
 # copy and fails if an app id or a managed variable name reappears in another .tf file.
 locals {
   embedded_app_managed_env = {
-    cdd-sow-research           = { profile = "CDD_PROFILE", iap_audience = "CDD_IAP_AUDIENCE" }
-    credit-memo-drafting       = { profile = "CREDIT_MEMO_PROFILE", iap_audience = "CREDIT_MEMO_IAP_AUDIENCE" }
-    cio-advisory               = { profile = "CIO_PROFILE", iap_audience = "CIO_IAP_AUDIENCE" }
-    trade-finance-checker      = { profile = "TRADE_FINANCE_PROFILE", iap_audience = "TRADE_FINANCE_IAP_AUDIENCE" }
-    loan-document-intelligence = { profile = "LOAN_DOC_PROFILE", iap_audience = "LOAN_DOC_IAP_AUDIENCE" }
-    compliance-advisory        = { profile = "COMPLIANCE_PROFILE", iap_audience = "COMPLIANCE_IAP_AUDIENCE" }
-    human-review-console       = { profile = "REVIEW_PROFILE", iap_audience = "REVIEW_IAP_AUDIENCE" }
-    marketing-compliance-gate  = { profile = "MKT_GOV_PROFILE", iap_audience = "MKT_GOV_IAP_AUDIENCE" }
+    cdd-sow-research           = { profile = "CDD_PROFILE", iap_audience = "CDD_IAP_AUDIENCE", review_routing = "CDD_REVIEW_ROUTING" }
+    credit-memo-drafting       = { profile = "CREDIT_MEMO_PROFILE", iap_audience = "CREDIT_MEMO_IAP_AUDIENCE", review_routing = "CREDIT_MEMO_REVIEW_ROUTING" }
+    cio-advisory               = { profile = "CIO_PROFILE", iap_audience = "CIO_IAP_AUDIENCE", review_routing = "CIO_REVIEW_ROUTING" }
+    trade-finance-checker      = { profile = "TRADE_FINANCE_PROFILE", iap_audience = "TRADE_FINANCE_IAP_AUDIENCE", review_routing = "TRADE_FINANCE_REVIEW_ROUTING" }
+    loan-document-intelligence = { profile = "LOAN_DOC_PROFILE", iap_audience = "LOAN_DOC_IAP_AUDIENCE", review_routing = "LOAN_DOC_REVIEW_ROUTING" }
+    compliance-advisory        = { profile = "COMPLIANCE_PROFILE", iap_audience = "COMPLIANCE_IAP_AUDIENCE", review_routing = "COMPLIANCE_REVIEW_ROUTING" }
+    human-review-console       = { profile = "REVIEW_PROFILE", iap_audience = "REVIEW_IAP_AUDIENCE", review_routing = "" }
+    marketing-compliance-gate  = { profile = "MKT_GOV_PROFILE", iap_audience = "MKT_GOV_IAP_AUDIENCE", review_routing = "MKT_GOV_REVIEW_ROUTING" }
   }
 
   deployable_embedded_app_ids = sort(keys(local.embedded_app_managed_env))
@@ -38,6 +38,19 @@ locals {
     [for app in values(local.embedded_app_managed_env) : app.profile],
     [for app in values(local.embedded_app_managed_env) : app.iap_audience],
   ))
+
+  # Review routing is on by default in every producer, and a producer with routing on refuses
+  # to boot under gcp unless it names the review console's edge URL and the IAP audience that
+  # edge accepts. So each deployed producer states one or the other in its api_env, and a plan
+  # that states neither fails here instead of at the service's first start. The console itself
+  # routes nothing, which is what an empty review_routing name means.
+  embedded_apps_with_unresolved_review_routing = [
+    for id, app in var.embedded_apps : "${id} (${local.embedded_app_managed_env[id].review_routing})"
+    if contains(local.deployable_embedded_app_ids, id)
+    && local.embedded_app_managed_env[id].review_routing != ""
+    && lower(lookup(app.api_env, local.embedded_app_managed_env[id].review_routing, "true")) != "false"
+    && !(contains(keys(app.api_env), "HUMAN_REVIEW_URL") && contains(keys(app.api_env), "HUMAN_REVIEW_IAP_AUDIENCE"))
+  ]
 
   undeployable_embedded_apps = sort(tolist(setsubtract(
     toset(keys(var.embedded_apps)),
@@ -91,6 +104,10 @@ resource "terraform_data" "embedded_app_contract" {
     precondition {
       condition     = length(local.embedded_apps_without_managed_profile) == 0
       error_message = "Every deployed journey API must set its profile variable to ${join(" or ", local.managed_embedded_profiles)} in api_env: ${join(", ", local.embedded_apps_without_managed_profile)}."
+    }
+    precondition {
+      condition     = length(local.embedded_apps_with_unresolved_review_routing) == 0
+      error_message = "Each deployed producer must either name the review console (HUMAN_REVIEW_URL, the console's edge path, and HUMAN_REVIEW_IAP_AUDIENCE, the IAP OAuth client id) in api_env, or state its review routing off (the named variable = \"false\"). Unresolved: ${join(", ", local.embedded_apps_with_unresolved_review_routing)}."
     }
     precondition {
       condition     = length(local.embedded_app_env_collisions) == 0

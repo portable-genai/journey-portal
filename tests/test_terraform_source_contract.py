@@ -149,11 +149,12 @@ def test_terraform_requires_managed_profiles_and_alert_delivery() -> None:
 
 _MANAGED_ENV_ENTRY = re.compile(
     r'\s*([a-z0-9-]+)\s*=\s*\{\s*profile\s*=\s*"([A-Z0-9_]+)"\s*,'
-    r'\s*iap_audience\s*=\s*"([A-Z0-9_]+)"\s*\}\s*'
+    r'\s*iap_audience\s*=\s*"([A-Z0-9_]+)"\s*,'
+    r'\s*review_routing\s*=\s*"([A-Z0-9_]*)"\s*\}\s*'
 )
 
 
-def _terraform_managed_env() -> dict[str, tuple[str, str]]:
+def _terraform_managed_env() -> dict[str, tuple[str, str, str]]:
     """Parse ``local.embedded_app_managed_env``, refusing any line it cannot read.
 
     Every non-blank line of the block must be an entry in the one reviewed shape, so an entry
@@ -163,15 +164,15 @@ def _terraform_managed_env() -> dict[str, tuple[str, str]]:
     opening = "  embedded_app_managed_env = {\n"
     assert source.count(opening) == 1
     body = source.split(opening, 1)[1].split("\n  }\n", 1)[0]
-    entries: dict[str, tuple[str, str]] = {}
+    entries: dict[str, tuple[str, str, str]] = {}
     for line in body.splitlines():
         if not line.strip():
             continue
         match = _MANAGED_ENV_ENTRY.fullmatch(line)
         assert match, f"unreadable embedded_app_managed_env line: {line!r}"
-        app_id, profile, audience = match.groups()
+        app_id, profile, audience, review_routing = match.groups()
         assert app_id not in entries, f"{app_id} is mapped twice"
-        entries[app_id] = (profile, audience)
+        entries[app_id] = (profile, audience, review_routing)
     assert entries
     return entries
 
@@ -204,7 +205,7 @@ def test_the_deployable_set_and_reserved_names_derive_from_the_one_map() -> None
     # No second copy may grow back. Outside embedded_apps.tf no .tf file names a managed variable,
     # or any catalog app id other than cdd-sow-research, whose /agent mount rule is the one
     # id-specific line the variable validation keeps.
-    managed_names = {name for pair in _terraform_managed_env().values() for name in pair}
+    managed_names = {name for names in _terraform_managed_env().values() for name in names if name}
     catalog_ids = set(load_journeys_mapping(Path("config/journeys.yaml"))["apps"])
     assert catalog_ids >= set(_terraform_managed_env())
     for tf_file in sorted(TERRAFORM.glob("*.tf")):
@@ -305,10 +306,13 @@ def test_managed_variable_names_match_what_each_app_reads() -> None:
     sys.modules[spec.name] = launcher
     spec.loader.exec_module(launcher)
 
-    for app_id, (profile, audience) in _terraform_managed_env().items():
+    for app_id, (profile, audience, review_routing) in _terraform_managed_env().items():
         assert launcher._APP_PROFILE_ENVS[app_id] == profile
         assert profile.endswith("_PROFILE")
         assert audience == profile.removesuffix("_PROFILE") + "_IAP_AUDIENCE"
+        # A producer's routing switch follows the same prefix; the console routes nothing.
+        expected = "" if app_id == "human-review-console" else "_REVIEW_ROUTING"
+        assert review_routing == (profile.removesuffix("_PROFILE") + expected if expected else "")
 
 
 def test_kms_rotation_matches_cloud_kms_bounds() -> None:

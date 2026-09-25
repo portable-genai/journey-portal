@@ -99,7 +99,7 @@ variables {
       ui_build_base_path = "/agent"
       ui_env             = { UI_ONLY = "ui" }
       ui_secret_env      = { UI_SECRET = "cdd-sow-research-ui-secret" }
-      api_env            = { API_ONLY = "api", CDD_PROFILE = "gcp" }
+      api_env            = { API_ONLY = "api", CDD_PROFILE = "gcp", CDD_REVIEW_ROUTING = "false" }
       api_secret_env = {
         API_SECRET = "cdd-sow-research-api-secret"
       }
@@ -108,31 +108,31 @@ variables {
       ui_image           = "registry.example.test/credit-memo-drafting-ui@sha256:2222222222222222222222222222222222222222222222222222222222222222"
       api_image          = "registry.example.test/credit-memo-drafting-api@sha256:2222222222222222222222222222222222222222222222222222222222222222"
       ui_build_base_path = "/apps/credit-memo-drafting"
-      api_env            = { CREDIT_MEMO_PROFILE = "gcp" }
+      api_env            = { CREDIT_MEMO_PROFILE = "gcp", CREDIT_MEMO_REVIEW_ROUTING = "false" }
     }
     cio-advisory = {
       ui_image           = "registry.example.test/cio-advisory-ui@sha256:3333333333333333333333333333333333333333333333333333333333333333"
       api_image          = "registry.example.test/cio-advisory-api@sha256:3333333333333333333333333333333333333333333333333333333333333333"
       ui_build_base_path = "/apps/cio-advisory"
-      api_env            = { CIO_PROFILE = "gcp" }
+      api_env            = { CIO_PROFILE = "gcp", CIO_REVIEW_ROUTING = "false" }
     }
     trade-finance-checker = {
       ui_image           = "registry.example.test/trade-finance-checker-ui@sha256:4444444444444444444444444444444444444444444444444444444444444444"
       api_image          = "registry.example.test/trade-finance-checker-api@sha256:4444444444444444444444444444444444444444444444444444444444444444"
       ui_build_base_path = "/apps/trade-finance-checker"
-      api_env            = { TRADE_FINANCE_PROFILE = "gcp" }
+      api_env            = { TRADE_FINANCE_PROFILE = "gcp", TRADE_FINANCE_REVIEW_ROUTING = "false" }
     }
     loan-document-intelligence = {
       ui_image           = "registry.example.test/loan-document-intelligence-ui@sha256:7777777777777777777777777777777777777777777777777777777777777777"
       api_image          = "registry.example.test/loan-document-intelligence-api@sha256:7777777777777777777777777777777777777777777777777777777777777777"
       ui_build_base_path = "/apps/loan-document-intelligence"
-      api_env            = { LOAN_DOC_PROFILE = "gcp" }
+      api_env            = { LOAN_DOC_PROFILE = "gcp", LOAN_DOC_REVIEW_ROUTING = "false" }
     }
     compliance-advisory = {
       ui_image           = "registry.example.test/compliance-advisory-ui@sha256:5555555555555555555555555555555555555555555555555555555555555555"
       api_image          = "registry.example.test/compliance-advisory-api@sha256:5555555555555555555555555555555555555555555555555555555555555555"
       ui_build_base_path = "/apps/compliance-advisory"
-      api_env            = { COMPLIANCE_PROFILE = "gcp" }
+      api_env            = { COMPLIANCE_PROFILE = "gcp", COMPLIANCE_REVIEW_ROUTING = "false" }
     }
     human-review-console = {
       ui_image           = "registry.example.test/human-review-console-ui@sha256:6666666666666666666666666666666666666666666666666666666666666666"
@@ -390,7 +390,7 @@ run "reject_api_secret_collision_with_managed_environment" {
         ui_image           = "registry.example.test/cdd-sow-research-ui@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
         api_image          = "registry.example.test/cdd-sow-research-api@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         ui_build_base_path = "/agent"
-        api_env            = { CDD_PROFILE = "gcp" }
+        api_env            = { CDD_PROFILE = "gcp", CDD_REVIEW_ROUTING = "false" }
         api_secret_env     = { CDD_IAP_AUDIENCE = "cdd-sow-research-audience-secret" }
       }
     }
@@ -429,7 +429,46 @@ run "reject_api_env_using_another_apps_profile" {
         ui_image           = "registry.example.test/cdd-sow-research-ui@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
         api_image          = "registry.example.test/cdd-sow-research-api@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         ui_build_base_path = "/agent"
-        api_env            = { CDD_PROFILE = "gcp", CIO_PROFILE = "gcp" }
+        api_env            = { CDD_PROFILE = "gcp", CIO_PROFILE = "gcp", CDD_REVIEW_ROUTING = "false" }
+      }
+    }
+  }
+  expect_failures = [terraform_data.embedded_app_contract]
+}
+
+# A producer with review routing on refuses to boot under gcp unless it names the console, so
+# a plan that neither names it nor states routing off fails here instead of at first start.
+run "reject_producer_that_neither_names_the_console_nor_states_routing_off" {
+  command = plan
+  variables {
+    # One app, so one shell: the journey that app belongs to, on its own host.
+    shells = [
+      {
+        journey = "rm"
+        image   = "registry.example.test/rm@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        domain  = "rm.hrz9.example.test"
+      },
+    ]
+    tenant_embed_policies = {
+      hrz9-test-primary = {
+        tenant          = "hrz9-test"
+        hosts           = ["rm.hrz9.example.test"]
+        frame_ancestors = ["'self'"]
+        cors_origins    = []
+      }
+    }
+    rollback_images = {
+      bff                    = "registry.example.test/bff@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      rm                     = "registry.example.test/rm@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      "cdd-sow-research-ui"  = "registry.example.test/cdd-sow-research-ui@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      "cdd-sow-research-api" = "registry.example.test/cdd-sow-research-api@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    }
+    embedded_apps = {
+      cdd-sow-research = {
+        ui_image           = "registry.example.test/cdd-sow-research-ui@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        api_image          = "registry.example.test/cdd-sow-research-api@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        ui_build_base_path = "/agent"
+        api_env            = { CDD_PROFILE = "gcp" }
       }
     }
   }
@@ -467,7 +506,7 @@ run "reject_ui_env_using_cloud_run_managed_name" {
         api_image          = "registry.example.test/cdd-sow-research-api@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         ui_build_base_path = "/agent"
         ui_env             = { PORT = "3000" }
-        api_env            = { CDD_PROFILE = "gcp" }
+        api_env            = { CDD_PROFILE = "gcp", CDD_REVIEW_ROUTING = "false" }
       }
     }
   }
@@ -506,7 +545,7 @@ run "reject_plain_and_secret_source_collision" {
         ui_build_base_path = "/agent"
         ui_env             = { UI_SETTING = "plain" }
         ui_secret_env      = { UI_SETTING = "cdd-sow-research-ui-secret" }
-        api_env            = { CDD_PROFILE = "gcp" }
+        api_env            = { CDD_PROFILE = "gcp", CDD_REVIEW_ROUTING = "false" }
       }
     }
   }
@@ -546,7 +585,7 @@ run "accept_marketing_compliance_gate_on_its_managed_profile" {
         ui_image           = "registry.example.test/marketing-compliance-gate-ui@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
         api_image          = "registry.example.test/marketing-compliance-gate-api@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         ui_build_base_path = "/apps/marketing-compliance-gate"
-        api_env            = { MKT_GOV_PROFILE = "gcp" }
+        api_env            = { MKT_GOV_PROFILE = "gcp", MKT_GOV_REVIEW_ROUTING = "false" }
       }
     }
   }
@@ -683,7 +722,7 @@ run "reject_marketing_compliance_gate_overriding_its_injected_audience" {
         ui_image           = "registry.example.test/marketing-compliance-gate-ui@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
         api_image          = "registry.example.test/marketing-compliance-gate-api@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         ui_build_base_path = "/apps/marketing-compliance-gate"
-        api_env            = { MKT_GOV_PROFILE = "gcp", MKT_GOV_IAP_AUDIENCE = "/guessed" }
+        api_env            = { MKT_GOV_PROFILE = "gcp", MKT_GOV_IAP_AUDIENCE = "/guessed", MKT_GOV_REVIEW_ROUTING = "false" }
       }
     }
   }
@@ -763,7 +802,7 @@ run "reject_service_name_over_cloud_run_limit" {
         ui_image           = "registry.example.test/marketing-compliance-gate-ui@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
         api_image          = "registry.example.test/marketing-compliance-gate-api@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         ui_build_base_path = "/apps/marketing-compliance-gate"
-        api_env            = { MKT_GOV_PROFILE = "gcp" }
+        api_env            = { MKT_GOV_PROFILE = "gcp", MKT_GOV_REVIEW_ROUTING = "false" }
       }
     }
   }
@@ -977,19 +1016,19 @@ run "three_shells_publish_the_marketing_journey" {
         ui_image           = "registry.example.test/cdd-sow-research-ui@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
         api_image          = "registry.example.test/cdd-sow-research-api@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         ui_build_base_path = "/agent"
-        api_env            = { CDD_PROFILE = "gcp" }
+        api_env            = { CDD_PROFILE = "gcp", CDD_REVIEW_ROUTING = "false" }
       }
       credit-memo-drafting = {
         ui_image           = "registry.example.test/credit-memo-drafting-ui@sha256:2222222222222222222222222222222222222222222222222222222222222222"
         api_image          = "registry.example.test/credit-memo-drafting-api@sha256:2222222222222222222222222222222222222222222222222222222222222222"
         ui_build_base_path = "/apps/credit-memo-drafting"
-        api_env            = { CREDIT_MEMO_PROFILE = "gcp" }
+        api_env            = { CREDIT_MEMO_PROFILE = "gcp", CREDIT_MEMO_REVIEW_ROUTING = "false" }
       }
       marketing-compliance-gate = {
         ui_image           = "registry.example.test/marketing-compliance-gate-ui@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
         api_image          = "registry.example.test/marketing-compliance-gate-api@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         ui_build_base_path = "/apps/marketing-compliance-gate"
-        api_env            = { MKT_GOV_PROFILE = "gcp" }
+        api_env            = { MKT_GOV_PROFILE = "gcp", MKT_GOV_REVIEW_ROUTING = "false" }
       }
     }
   }
@@ -1074,7 +1113,7 @@ run "reject_shell_whose_journey_has_no_deployed_app" {
         ui_image           = "registry.example.test/cdd-sow-research-ui@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
         api_image          = "registry.example.test/cdd-sow-research-api@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         ui_build_base_path = "/agent"
-        api_env            = { CDD_PROFILE = "gcp" }
+        api_env            = { CDD_PROFILE = "gcp", CDD_REVIEW_ROUTING = "false" }
       }
     }
   }
@@ -1108,7 +1147,7 @@ run "reject_shell_for_a_journey_the_catalog_does_not_define" {
         ui_image           = "registry.example.test/cdd-sow-research-ui@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
         api_image          = "registry.example.test/cdd-sow-research-api@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         ui_build_base_path = "/agent"
-        api_env            = { CDD_PROFILE = "gcp" }
+        api_env            = { CDD_PROFILE = "gcp", CDD_REVIEW_ROUTING = "false" }
       }
     }
   }

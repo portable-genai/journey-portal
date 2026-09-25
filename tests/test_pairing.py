@@ -104,6 +104,7 @@ def _dossier() -> dict[str, Any]:
         },
         "generated_at": "2026-08-29T12:08:00+00:00",
         "requires_human_review": True,
+        "review_routing": "routed",
         "rating": {
             "band": "medium",
             "score": 0.25,

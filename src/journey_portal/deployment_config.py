@@ -68,19 +68,41 @@ _PLACEHOLDER_MARKERS = (
 # The safety properties a partial deployment keeps: the set may not be empty, every id must be
 # known, every app must be complete and pinned to an immutable digest, and the rollback map must
 # cover exactly what is being deployed.
-_MANAGED_ENV_BY_APP: dict[str, tuple[str, str]] = {
-    "cdd-sow-research": ("CDD_PROFILE", "CDD_IAP_AUDIENCE"),
-    "credit-memo-drafting": ("CREDIT_MEMO_PROFILE", "CREDIT_MEMO_IAP_AUDIENCE"),
-    "cio-advisory": ("CIO_PROFILE", "CIO_IAP_AUDIENCE"),
-    "trade-finance-checker": ("TRADE_FINANCE_PROFILE", "TRADE_FINANCE_IAP_AUDIENCE"),
-    "loan-document-intelligence": ("LOAN_DOC_PROFILE", "LOAN_DOC_IAP_AUDIENCE"),
-    "compliance-advisory": ("COMPLIANCE_PROFILE", "COMPLIANCE_IAP_AUDIENCE"),
-    "human-review-console": ("REVIEW_PROFILE", "REVIEW_IAP_AUDIENCE"),
-    "marketing-compliance-gate": ("MKT_GOV_PROFILE", "MKT_GOV_IAP_AUDIENCE"),
+_MANAGED_ENV_BY_APP: dict[str, tuple[str, str, str]] = {
+    "cdd-sow-research": ("CDD_PROFILE", "CDD_IAP_AUDIENCE", "CDD_REVIEW_ROUTING"),
+    "credit-memo-drafting": (
+        "CREDIT_MEMO_PROFILE",
+        "CREDIT_MEMO_IAP_AUDIENCE",
+        "CREDIT_MEMO_REVIEW_ROUTING",
+    ),
+    "cio-advisory": ("CIO_PROFILE", "CIO_IAP_AUDIENCE", "CIO_REVIEW_ROUTING"),
+    "trade-finance-checker": (
+        "TRADE_FINANCE_PROFILE",
+        "TRADE_FINANCE_IAP_AUDIENCE",
+        "TRADE_FINANCE_REVIEW_ROUTING",
+    ),
+    "loan-document-intelligence": (
+        "LOAN_DOC_PROFILE",
+        "LOAN_DOC_IAP_AUDIENCE",
+        "LOAN_DOC_REVIEW_ROUTING",
+    ),
+    "compliance-advisory": (
+        "COMPLIANCE_PROFILE",
+        "COMPLIANCE_IAP_AUDIENCE",
+        "COMPLIANCE_REVIEW_ROUTING",
+    ),
+    "human-review-console": ("REVIEW_PROFILE", "REVIEW_IAP_AUDIENCE", ""),
+    "marketing-compliance-gate": (
+        "MKT_GOV_PROFILE",
+        "MKT_GOV_IAP_AUDIENCE",
+        "MKT_GOV_REVIEW_ROUTING",
+    ),
 }
 _KNOWN_JOURNEY_APPS = frozenset(_MANAGED_ENV_BY_APP)
 _PROFILE_ENV_BY_APP = {app_id: envs[0] for app_id, envs in _MANAGED_ENV_BY_APP.items()}
 _IAP_AUDIENCE_ENV_BY_APP = {app_id: envs[1] for app_id, envs in _MANAGED_ENV_BY_APP.items()}
+#: Each producer's review-routing switch; empty for the console, which routes nothing.
+_REVIEW_ROUTING_ENV_BY_APP = {app_id: envs[2] for app_id, envs in _MANAGED_ENV_BY_APP.items()}
 _EMBEDDED_APP_KEYS = frozenset(
     {
         "ui_image",
@@ -412,6 +434,18 @@ def _validate_embedded_apps(apps: dict[str, Any]) -> None:
             raise DeploymentConfigError(
                 f"embedded app {app_id} plain and secret environment sources collide: "
                 + ", ".join(source_collisions)
+            )
+        routing_env = _REVIEW_ROUTING_ENV_BY_APP[app_id]
+        if (
+            routing_env
+            and str(api_env.get(routing_env, "true")).strip().lower() != "false"
+            and not {"HUMAN_REVIEW_URL", "HUMAN_REVIEW_IAP_AUDIENCE"} <= set(api_env)
+        ):
+            # The producer refuses to boot under gcp with routing on and no console named, so
+            # the renderer refuses the same input first, as Terraform's precondition does.
+            raise DeploymentConfigError(
+                f"embedded app {app_id} must either name the review console in api_env "
+                f"(HUMAN_REVIEW_URL and HUMAN_REVIEW_IAP_AUDIENCE) or state {routing_env}=false"
             )
         _reject_placeholder(f"embedded app {app_id}", app)
 

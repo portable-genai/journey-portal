@@ -43,6 +43,13 @@ CAPTURE_STEP = "deterministic artifact captured"
 #: can silence it by appending a line, and nothing in review distinguishes that from a legitimate
 #: reduction. Each entry here names a property of the PROFILE, not a property of a failing run.
 EXEMPT: dict[str, str] = {
+    "review_routing": (
+        "what happened to the human-review hand-off, which is a property of the deployment's "
+        "routing posture and its console rather than of the dossier: the laptop queues to a "
+        "local outbox, a reference deployment reaches its console or states routing off. "
+        "Whether the dossier REQUIRES review is the decision, and requires_human_review is "
+        "compared. Decided 2026-09-25."
+    ),
     "rating.rationale": (
         "prose. The model narrates; it never produces the number. The band and score beside it "
         "are compared, so a rationale that disagrees with them is caught there."

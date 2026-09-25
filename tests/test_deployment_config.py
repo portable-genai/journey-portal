@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from journey_portal import deployment_config
 from journey_portal.config import load_journeys_mapping
 from journey_portal.deployment_config import (
     OPTIONAL_NONSECRET_KEYS,
@@ -15,6 +16,12 @@ from journey_portal.deployment_config import (
 )
 
 _JOURNEYS_FILE = Path("config/journeys.yaml")
+
+
+def _routing_stated_off(app_id: str) -> dict[str, str]:
+    """A fixture deploys no review console, so each producer states its routing off."""
+    name = deployment_config._REVIEW_ROUTING_ENV_BY_APP.get(app_id, "")
+    return {name: "false"} if name else {}
 
 
 def _image(name: str, character: str) -> str:
@@ -62,7 +69,7 @@ def _valid_values() -> dict[str, str]:
             "ui_build_base_path": "/agent" if app_id == "cdd-sow-research" else f"/apps/{app_id}",
             "ui_secret_env": {"UI_TOKEN": f"{app_id}-ui-token"},
             "api_secret_env": {"API_TOKEN": f"{app_id}-api-token"},
-            "api_env": {profile_envs[app_id]: "gcp"},
+            "api_env": {profile_envs[app_id]: "gcp", **_routing_stated_off(app_id)},
         }
         for app_id in (
             "cdd-sow-research",
@@ -317,7 +324,7 @@ def _single_app_values(app_id: str, api_env: dict[str, str]) -> dict[str, str]:
         "ui_image": _image(f"{app_id}-ui", "d"),
         "api_image": _image(f"{app_id}-api", "e"),
         "ui_build_base_path": f"/apps/{app_id}",
-        "api_env": api_env,
+        "api_env": {**_routing_stated_off(app_id), **api_env},
     }
     values["DEPLOY_EMBEDDED_APPS_JSON"] = json.dumps({app_id: app})
     journey = _journey_of(app_id)
@@ -421,7 +428,7 @@ def _marketing_values() -> dict[str, str]:
         "ui_image": _image("marketing-compliance-gate-ui", "d"),
         "api_image": _image("marketing-compliance-gate-api", "e"),
         "ui_build_base_path": "/apps/marketing-compliance-gate",
-        "api_env": {"MKT_GOV_PROFILE": "gcp"},
+        "api_env": {"MKT_GOV_PROFILE": "gcp", "MKT_GOV_REVIEW_ROUTING": "false"},
     }
     values["DEPLOY_EMBEDDED_APPS_JSON"] = json.dumps(apps)
     values["DEPLOY_SHELLS_JSON"] = json.dumps(
@@ -1131,3 +1138,42 @@ def test_a_half_configured_identity_domain_list_is_refused(tmp_path: Path, domai
     values["DEPLOY_TENANT_IDENTITY_DOMAINS_JSON"] = domains
     with pytest.raises(DeploymentConfigError):
         _load(tmp_path, values)
+
+
+@pytest.mark.parametrize(
+    "api_env",
+    [
+        {"CIO_PROFILE": "gcp"},
+        {"CIO_PROFILE": "gcp", "CIO_REVIEW_ROUTING": "true"},
+        {
+            "CIO_PROFILE": "gcp",
+            "HUMAN_REVIEW_URL": "https://ops.bank.internal/apps/human-review-console/api",
+        },
+    ],
+)
+def test_a_producer_that_neither_names_the_console_nor_states_routing_off_is_refused(
+    tmp_path: Path, api_env: dict[str, str]
+) -> None:
+    """The producer would refuse to boot under gcp, so the renderer refuses the input first."""
+    values = _valid_values()
+    apps = json.loads(values["DEPLOY_EMBEDDED_APPS_JSON"])
+    apps["cio-advisory"]["api_env"] = api_env
+    values["DEPLOY_EMBEDDED_APPS_JSON"] = json.dumps(apps)
+
+    with pytest.raises(DeploymentConfigError, match="CIO_REVIEW_ROUTING=false"):
+        _load(tmp_path, values)
+
+
+def test_a_producer_that_names_the_console_is_accepted(tmp_path: Path) -> None:
+    values = _valid_values()
+    apps = json.loads(values["DEPLOY_EMBEDDED_APPS_JSON"])
+    apps["cio-advisory"]["api_env"] = {
+        "CIO_PROFILE": "gcp",
+        "HUMAN_REVIEW_URL": "https://ops.bank.internal/apps/human-review-console/api",
+        "HUMAN_REVIEW_IAP_AUDIENCE": "123-prod.apps.googleusercontent.com",
+    }
+    values["DEPLOY_EMBEDDED_APPS_JSON"] = json.dumps(apps)
+
+    config = _load(tmp_path, values)
+
+    assert "HUMAN_REVIEW_URL" in config.terraform_inputs["embedded_apps"]["cio-advisory"]["api_env"]
