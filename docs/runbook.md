@@ -57,10 +57,13 @@ checkpoint binds the retained record count and head hash, so tail deletion fails
 Writes coordinate SQLite and the checkpoint with an owner-only cross-process lock. A signed
 pending state lets startup recover either side of an interrupted database/checkpoint commit
 without accepting any other state. Retain a copy of the checkpoint in the approved evidence
-location at review milestones. A missing database or checkpoint beside an existing key, or any
-failed integrity result, is an incident: stop relying on the ledger, preserve the files and
-restore only from a reviewed backup. Treat actor and tenant references as pseudonymous personal
-data.
+location at review milestones. This is the laptop ledger, and the laptop rule is that integrity
+machinery never refuses a demo reset: a set that is incomplete (a database or checkpoint missing
+beside its key), damaged (a corrupt database, a short key, a forged checkpoint) or rolled back
+behind its checkpoint is renamed aside as `<file>.set-aside-<UTC timestamp>`, never deleted, and a
+fresh ledger starts from genesis with a warning naming where the old files went. The integrity
+view still reports the divergence until the next append moves the set. Treat actor and tenant
+references as pseudonymous personal data.
 
 Managed profiles require `PORTAL_AUDIT_HMAC_KEY` from an exact Secret Manager version. The value
 must contain at least 32 random bytes. Rotate it only through a reviewed release that retains the

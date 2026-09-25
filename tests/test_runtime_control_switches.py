@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -126,6 +127,27 @@ def test_a_sink_that_recovers_is_picked_up_by_the_next_probe(
     with TestClient(app_module.app, client=LOOPBACK_PEER) as client:
         assert client.get("/v1/healthz").status_code == 503
         assert client.get("/v1/healthz").status_code == 200
+
+
+def test_a_laptop_portal_over_a_damaged_ledger_sets_it_aside_and_reports_ready() -> None:
+    """The laptop rule: integrity machinery never refuses a demo reset.
+
+    A checkpoint deleted from beside its database and key is incomplete state. Under the local
+    profile the set is moved aside and a fresh ledger proves itself, where a managed profile's
+    audit would keep answering 503 (the refusal tests above bind the same health routes).
+    """
+    from journey_portal.adapters.local.access_audit import LocalAccessAuditAdapter
+
+    settings = Settings.load()
+    assert settings.profile == "local"
+    LocalAccessAuditAdapter(settings)
+    database = Path(settings.local_audit_db)
+    Path(f"{database}.checkpoint").unlink()
+
+    with TestClient(app_module.app, client=LOOPBACK_PEER) as client:
+        assert client.get("/v1/healthz").status_code == 200
+    assert sorted(database.parent.glob("*.set-aside-*"))
+    assert app_module._container().access_audit.integrity().valid is True
 
 
 def test_with_the_audit_off_the_portal_is_ready_without_a_probe(

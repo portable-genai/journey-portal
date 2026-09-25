@@ -427,11 +427,11 @@ def test_dry_run_with_live_reports_the_plan_without_starting_anything(
     popen = Mock()
     monkeypatch.setattr(launcher_module, "_prepare_presenter_state", prepare_state)
     monkeypatch.setattr(launcher_module.subprocess, "Popen", popen)
-    # The live plan probes for an already-running model server (read-only lsof); pin it to
-    # "nothing listening" so the plan is deterministic regardless of the host's :8001 state.
-    monkeypatch.setattr(launcher_module.Launcher, "_listener_pids", staticmethod(lambda port: ()))
+    # A dry run never touches the model server: the plan names the endpoint, the launch probes it.
+    monkeypatch.setattr(launcher_module, "LocalModelClient", Mock(side_effect=AssertionError))
     monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
-    monkeypatch.delenv("JOURNEY_MODEL_SERVER_CMD", raising=False)
+    monkeypatch.delenv("LOCAL_MODEL_URL", raising=False)
+    monkeypatch.delenv("LOCAL_MODEL", raising=False)
     monkeypatch.setattr(sys, "argv", ["run_journeys.py", "--dry-run", "--live"])
 
     assert launcher_module.main() == 0
@@ -440,9 +440,8 @@ def test_dry_run_with_live_reports_the_plan_without_starting_anything(
     assert "cdd-sow-research profile      live" in output
     assert "PORTAL_UPSTREAM_TIMEOUT=600s" in output
     assert "warning GOOGLE_CLOUD_PROJECT is not set" in output
-    # With nothing on the port and no launch command, the plan warns rather than promising
-    # a model server it cannot bring up.
-    assert "JOURNEY_MODEL_SERVER_CMD is unset" in output
+    assert "LOCAL_MODEL_URL=http://127.0.0.1:8001/chat/completions" in output
+    assert "trade-finance-checker profile      live (local model)" in output
     prepare_state.assert_not_called()
     popen.assert_not_called()
 
@@ -775,50 +774,156 @@ def test_ops_shell_binds_the_ipv4_loopback_probe_address(
     )
 
 
-def test_live_model_server_is_reused_when_already_healthy(
+class _FakeLocalModelClient:
+    """Stands in for the kit client: answers, or raises the kit's own unavailability."""
+
+    answers = True
+
+    def __init__(self, settings: object) -> None:
+        self.settings = settings
+
+    def probe(self) -> tuple[str, ...]:
+        from hex_service_kit.localmodel import START_RECIPE, LocalModelUnavailable
+
+        if not self.answers:
+            raise LocalModelUnavailable(
+                f"no local model server answered (fictional).\n{START_RECIPE}"
+            )
+        return ("mlx-community/gemma-4-31b-it-8bit",)
+
+
+def test_a_serving_local_model_is_shown_ready(
     launcher_module: ModuleType, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # A healthy server already on the port is adopted, not restarted, and never spawned.
-    monkeypatch.setattr(
-        launcher_module.Launcher, "_listener_pids", staticmethod(lambda port: (999,))
-    )
-    monkeypatch.setattr(launcher_module.Launcher, "_probe", staticmethod(lambda url: "HTTP 200"))
+    monkeypatch.setattr(launcher_module, "LocalModelClient", _FakeLocalModelClient)
+    monkeypatch.delenv("LOCAL_MODEL_URL", raising=False)
+    monkeypatch.delenv("LOCAL_MODEL", raising=False)
     launcher = launcher_module.Launcher(with_shells=False, live=True)
     launcher._spawn = Mock()
 
-    launcher.launch_model_server()
+    launcher.probe_local_model()
 
     launcher._spawn.assert_not_called()
-    assert [c.label for c in launcher._readiness] == ["model-server"]
-    assert launcher._readiness[0].process is None
+    assert "local-model" in launcher._external_ready
+    assert launcher._startup_failures == {}
+    assert launcher.wait_for_readiness(timeout=0.1) is True
 
 
-def test_live_model_server_is_launched_from_the_env_command_when_absent(
-    launcher_module: ModuleType, monkeypatch: pytest.MonkeyPatch
+def test_an_absent_local_model_prints_the_recipe_and_the_launch_goes_on(
+    launcher_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.setattr(launcher_module.Launcher, "_listener_pids", staticmethod(lambda port: ()))
-    monkeypatch.setenv("JOURNEY_MODEL_SERVER_CMD", "python -m my.model.server --port 8001")
-    monkeypatch.delenv("CDD_LIVE_LLM_URL", raising=False)
+    from hex_service_kit.localmodel import START_RECIPE
+
+    fake = type("Down", (_FakeLocalModelClient,), {"answers": False})
+    monkeypatch.setattr(launcher_module, "LocalModelClient", fake)
     launcher = launcher_module.Launcher(with_shells=False, live=True)
     launcher._spawn = Mock()
 
-    launcher.launch_model_server()
+    launcher.probe_local_model()
+    ready = launcher.wait_for_readiness(timeout=0.1)
 
-    launcher._spawn.assert_called_once()
-    call = launcher._spawn.call_args
-    assert call.args[1] == ["python", "-m", "my.model.server", "--port", "8001"]
-    assert call.kwargs["readiness_url"] == "http://127.0.0.1:8001/health"
+    output = capsys.readouterr().out
+    assert START_RECIPE in output
+    assert "local-model" in output and "UNAVAILABLE" in output
+    launcher._spawn.assert_not_called()
+    # Never started by the launcher, and never a reason to refuse the launch.
+    assert ready is True
 
 
-def test_live_model_server_absent_and_uncommanded_is_a_named_failure(
+def test_every_local_model_app_is_forced_live_with_the_one_endpoint(
     launcher_module: ModuleType, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(launcher_module.Launcher, "_listener_pids", staticmethod(lambda port: ()))
-    monkeypatch.delenv("JOURNEY_MODEL_SERVER_CMD", raising=False)
+    monkeypatch.setenv("LOCAL_MODEL_URL", "http://127.0.0.1:9001/chat/completions")
+    monkeypatch.delenv("LOCAL_MODEL", raising=False)
+    monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+    monkeypatch.delenv("SEC_EDGAR_CONTACT", raising=False)
+
+    assert len(launcher_module._LOCAL_MODEL_LIVE_APPS) == 16
+    for app_id in sorted(launcher_module._LOCAL_MODEL_LIVE_APPS):
+        environment = launcher_module.Launcher._live_app_environment(app_id)
+        assert environment == {
+            launcher_module._APP_PROFILE_ENVS[app_id]: "live",
+            "LOCAL_MODEL_URL": "http://127.0.0.1:9001/chat/completions",
+        }, app_id
+
+
+def test_an_operator_named_model_travels_to_every_local_model_app(
+    launcher_module: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("LOCAL_MODEL_URL", raising=False)
+    monkeypatch.setenv("LOCAL_MODEL", "fictional/other-model")
+
+    environment = launcher_module.Launcher._live_app_environment("complaints-review")
+
+    assert environment["LOCAL_MODEL_URL"] == "http://127.0.0.1:8001/chat/completions"
+    assert environment["LOCAL_MODEL"] == "fictional/other-model"
+
+
+def test_the_gemini_apps_get_no_local_model_endpoint(
+    launcher_module: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "fictional-demo-project")
+
+    environment = launcher_module.Launcher._live_app_environment("cio-advisory")
+
+    assert environment == {
+        "CIO_PROFILE": "live",
+        "GOOGLE_CLOUD_PROJECT": "fictional-demo-project",
+    }
+
+
+def test_an_emptied_local_model_url_refuses_that_app_by_name(
+    launcher_module: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Three states: an emptied endpoint is an expressed intent, never a cue to default."""
+    workspace = tmp_path / "workspace"
+    api = workspace / "complaints-review" / "src" / "complaints_review" / "api"
+    api.mkdir(parents=True)
+    (api / "app.py").touch()
+    monkeypatch.setattr(launcher_module, "_WORKSPACE", workspace)
+    monkeypatch.setattr(launcher_module, "_APP_REPOS", {"complaints-review": "complaints-review"})
+    monkeypatch.setenv("LOCAL_MODEL_URL", "")
     launcher = launcher_module.Launcher(with_shells=False, live=True)
     launcher._spawn = Mock()
 
-    launcher.launch_model_server()
+    launcher.launch_app("complaints-review", api_port=8120, ui_port=None)
 
     launcher._spawn.assert_not_called()
-    assert "model-server" in launcher._startup_failures
+    assert "LOCAL_MODEL_URL" in launcher._startup_failures["complaints-review-backend"]
+
+
+def test_the_per_app_model_url_variables_are_gone(launcher_module: ModuleType) -> None:
+    source = Path(launcher_module.__file__).read_text()
+    for legacy in ("TRADE_FINANCE_LIVE_LLM_URL", "CDD_LIVE_LLM_URL", "JOURNEY_MODEL_SERVER_CMD"):
+        assert legacy not in source
+
+
+def test_a_sibling_that_cannot_start_is_unavailable_not_a_refusal(
+    launcher_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(launcher_module, "_WORKSPACE", tmp_path / "empty-workspace")
+    launcher = launcher_module.Launcher(with_shells=False, live=True)
+    launcher.mark_sibling("compliance-advisory")
+
+    launcher.launch_app("compliance-advisory", api_port=8080, ui_port=None)
+
+    assert launcher.wait_for_readiness(timeout=0.1) is True
+    assert "compliance-advisory                UNAVAILABLE" in capsys.readouterr().out
+
+
+def test_an_app_that_cannot_start_still_fails_the_launch(
+    launcher_module: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Only what was marked optional is spared; everything else keeps failing loudly."""
+    monkeypatch.setattr(launcher_module, "_WORKSPACE", tmp_path / "empty-workspace")
+    launcher = launcher_module.Launcher(with_shells=False, live=True)
+    launcher.mark_sibling("compliance-advisory")
+
+    launcher.launch_app("complaints-review", api_port=8120, ui_port=None)
+
+    assert launcher.wait_for_readiness(timeout=0.1) is False

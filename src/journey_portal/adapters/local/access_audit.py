@@ -1,4 +1,16 @@
-"""SQLite local access ledger with keyed pseudonyms and retained checkpoints."""
+"""SQLite local access ledger with keyed pseudonyms and retained checkpoints.
+
+This is the laptop ledger, bound only by the ``local`` profile, and it follows the fleet's
+laptop rule: a demo reset is never refused by integrity machinery. When the database, HMAC key
+and signed checkpoint are damaged, incomplete, or rolled back behind the checkpoint, the whole
+set is moved aside with :func:`hex_service_kit.audit.set_aside` (renamed in place, never
+deleted, so the old trail can still be examined) and a fresh ledger starts from genesis, chained
+like any other, with a warning naming where the old files went.
+
+The managed ledgers do not do this. There the evidence is not a demo's scratch state, so the
+``gcp`` and ``platform`` adapters keep failing closed and the portal answers 503 until its
+startup probe succeeds.
+"""
 
 from __future__ import annotations
 
@@ -10,10 +22,12 @@ import secrets
 import sqlite3
 import stat
 from collections.abc import Iterator
-from contextlib import contextmanager, suppress
+from contextlib import closing, contextmanager, suppress
 from dataclasses import dataclass
 from fcntl import LOCK_EX, LOCK_UN, flock
 from pathlib import Path
+
+from hex_service_kit.audit import set_aside
 
 from ...config import Settings
 from ...domain.audit import (
@@ -52,7 +66,7 @@ class _Checkpoint:
 
 
 class LocalAccessAuditAdapter:
-    """Append atomically and fail closed on a damaged or rolled-back local ledger."""
+    """Append atomically; set a damaged or rolled-back laptop ledger aside and start fresh."""
 
     def __init__(self, settings: Settings) -> None:
         self._path = Path(settings.local_audit_db)
@@ -67,31 +81,105 @@ class LocalAccessAuditAdapter:
             self._prepare_parent(self._key_path.parent)
             self._prepare_parent(self._checkpoint_path.parent)
             with self._locked():
-                present = (
-                    self._path.exists(),
-                    self._key_path.exists(),
-                    self._checkpoint_path.exists(),
-                )
-                if any(present) and not all(present):
-                    raise AuditIntegrityViolation(
-                        "local access audit state is incomplete; restore the database, key, "
-                        "and retained checkpoint together"
-                    )
-                if not any(present):
-                    self._create_key()
-                    self._precreate_private(self._path)
-                self._key = self._load_key()
-                self._key_id = audit_key_id(self._key)
-                with self._connect() as connection:
-                    connection.execute(_SCHEMA)
-                    if not any(present):
-                        self._write_committed_checkpoint(0, GENESIS_HASH)
-                    else:
-                        self._coherent_snapshot(connection)
-        except (AuditIntegrityViolation, AuditUnavailable):
+                try:
+                    self._open()
+                except AuditIntegrityViolation as exc:
+                    self._start_fresh(str(exc), key=None)
+        except AuditUnavailable:
             raise
         except (OSError, sqlite3.Error) as exc:
             raise AuditUnavailable("local access audit database is unavailable") from exc
+
+    def _open(self) -> None:
+        """Open the existing set, or create one; raise AuditIntegrityViolation on any damage."""
+        present = (
+            self._path.exists(),
+            self._key_path.exists(),
+            self._checkpoint_path.exists(),
+        )
+        if any(present) and not all(present):
+            raise AuditIntegrityViolation(
+                "local access audit state is incomplete: the database, key and checkpoint "
+                "are not all present"
+            )
+        if not any(present):
+            self._create_key()
+            self._precreate_private(self._path)
+        self._key = self._load_key()
+        self._key_id = audit_key_id(self._key)
+        with self._damage_is_a_violation(), closing(self._connect()) as connection:
+            connection.execute(_SCHEMA)
+            connection.commit()
+            if not any(present):
+                self._write_committed_checkpoint(0, GENESIS_HASH)
+                return
+            records, expected_count, expected_head = self._coherent_snapshot(connection)
+            if not self._service.verify(
+                records, expected_count=expected_count, expected_head_hash=expected_head
+            ).valid:
+                raise AuditIntegrityViolation(
+                    "local access audit chain failed integrity verification"
+                )
+
+    def _start_fresh(self, reason: str, *, key: bytes | None) -> None:
+        """Set the whole ledger set aside and start an empty one chained from genesis.
+
+        Called with the lock held. ``key`` is the key this process is already pseudonymising
+        with, when there is one: an event built before the damage was noticed carries
+        references under it, so the fresh ledger keeps that key rather than recording those
+        references beside a key id nothing else uses. At startup there is none, and a new key
+        is minted.
+        """
+        self._fold_wal_into_database()
+        set_aside(
+            (
+                self._path,
+                Path(f"{self._path}-wal"),
+                Path(f"{self._path}-shm"),
+                self._key_path,
+                self._checkpoint_path,
+            ),
+            reason=f"portal access ledger: {reason}",
+        )
+        if key is None:
+            self._create_key()
+        else:
+            self._write_private(self._key_path, key)
+        self._precreate_private(self._path)
+        self._key = self._load_key()
+        self._key_id = audit_key_id(self._key)
+        with closing(self._connect()) as connection:
+            connection.execute(_SCHEMA)
+            connection.commit()
+        self._write_committed_checkpoint(0, GENESIS_HASH)
+
+    def _fold_wal_into_database(self) -> None:
+        """Checkpoint the WAL into the main file, where it can be, before the set is moved.
+
+        The sidecars are renamed one by one, which breaks SQLite's association between a
+        database and its ``-wal``; rows still only in the WAL would then be invisible in the
+        set-aside copy. Best effort: a database too damaged to open is moved exactly as found.
+        """
+        if not self._path.exists():
+            return
+        with suppress(sqlite3.Error), closing(sqlite3.connect(self._path, timeout=5)) as db:
+            db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+
+    @staticmethod
+    @contextmanager
+    def _damage_is_a_violation() -> Iterator[None]:
+        """Read a corrupt database file as damage, not as a transient outage.
+
+        ``sqlite3.DatabaseError`` itself (not a subclass) is what SQLite raises for "file is
+        not a database" and "database disk image is malformed". A locked database, a full disk
+        or a constraint failure are subclasses and stay what they were.
+        """
+        try:
+            yield
+        except sqlite3.DatabaseError as exc:
+            if type(exc) is sqlite3.DatabaseError:
+                raise AuditIntegrityViolation("local access audit database is damaged") from exc
+            raise
 
     @staticmethod
     def _prepare_parent(parent: Path) -> None:
@@ -159,7 +247,7 @@ class LocalAccessAuditAdapter:
         self._key_path.chmod(0o600)
         key = self._key_path.read_bytes()
         if len(key) < 32:
-            raise AuditUnavailable("local access audit HMAC key is invalid")
+            raise AuditIntegrityViolation("local access audit HMAC key is invalid")
         return key
 
     @contextmanager
@@ -331,62 +419,73 @@ class LocalAccessAuditAdapter:
 
     def append(self, event: PortalAccessEvent) -> PortalAccessRecord:
         try:
-            with self._locked(), self._connect() as connection:
-                connection.execute("BEGIN IMMEDIATE")
-                current, expected_count, expected_head = self._coherent_snapshot(connection)
-                assessment = self._service.verify(
-                    current,
-                    expected_count=expected_count,
-                    expected_head_hash=expected_head,
-                )
-                if not assessment.valid:
-                    raise AuditIntegrityViolation(
-                        "local access audit chain failed integrity verification"
-                    )
-                previous_hash = current[-1].record_hash if current else GENESIS_HASH
-                record = self._service.build_record(
-                    sequence=len(current) + 1,
-                    event=event,
-                    previous_hash=previous_hash,
-                )
-                connection.execute(
-                    """
-                    INSERT INTO portal_access_audit (
-                        sequence, event_id, occurred_at, actor_ref, tenant_ref,
-                        pseudonym_key_id, method, action, app_id, previous_hash, record_hash
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        record.sequence,
-                        event.event_id,
-                        event.occurred_at,
-                        event.actor_ref,
-                        event.tenant_ref,
-                        event.pseudonym_key_id,
-                        event.method,
-                        event.action,
-                        event.app_id,
-                        record.previous_hash,
-                        record.record_hash,
-                    ),
-                )
-                self._write_pending_checkpoint(
-                    len(current),
-                    previous_hash,
-                    record.sequence,
-                    record.record_hash,
-                )
-                connection.commit()
-                self._write_committed_checkpoint(record.sequence, record.record_hash)
-                return record
+            with self._locked():
+                try:
+                    return self._append_locked(event)
+                except AuditIntegrityViolation as exc:
+                    # Damaged under a running portal (a reset script, a restored copy): the
+                    # laptop answer is the same as at startup, never a refusal.
+                    self._start_fresh(str(exc), key=self._key)
+                    return self._append_locked(event)
         except AuditUnavailable:
             raise
         except (OSError, sqlite3.Error) as exc:
             raise AuditUnavailable("local access audit database is unavailable") from exc
 
+    def _append_locked(self, event: PortalAccessEvent) -> PortalAccessRecord:
+        with self._damage_is_a_violation(), closing(self._connect()) as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            current, expected_count, expected_head = self._coherent_snapshot(connection)
+            assessment = self._service.verify(
+                current,
+                expected_count=expected_count,
+                expected_head_hash=expected_head,
+            )
+            if not assessment.valid:
+                connection.rollback()
+                raise AuditIntegrityViolation(
+                    "local access audit chain failed integrity verification"
+                )
+            previous_hash = current[-1].record_hash if current else GENESIS_HASH
+            record = self._service.build_record(
+                sequence=len(current) + 1,
+                event=event,
+                previous_hash=previous_hash,
+            )
+            connection.execute(
+                """
+                INSERT INTO portal_access_audit (
+                    sequence, event_id, occurred_at, actor_ref, tenant_ref,
+                    pseudonym_key_id, method, action, app_id, previous_hash, record_hash
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    record.sequence,
+                    event.event_id,
+                    event.occurred_at,
+                    event.actor_ref,
+                    event.tenant_ref,
+                    event.pseudonym_key_id,
+                    event.method,
+                    event.action,
+                    event.app_id,
+                    record.previous_hash,
+                    record.record_hash,
+                ),
+            )
+            self._write_pending_checkpoint(
+                len(current),
+                previous_hash,
+                record.sequence,
+                record.record_hash,
+            )
+            connection.commit()
+            self._write_committed_checkpoint(record.sequence, record.record_hash)
+            return record
+
     def records(self) -> tuple[PortalAccessRecord, ...]:
         try:
-            with self._locked(), self._connect() as connection:
+            with self._locked(), closing(self._connect()) as connection:
                 return self._records(connection)
         except AuditUnavailable:
             raise
@@ -395,7 +494,7 @@ class LocalAccessAuditAdapter:
 
     def integrity(self) -> PortalAuditView:
         try:
-            with self._locked(), self._connect() as connection:
+            with self._locked(), closing(self._connect()) as connection:
                 records, expected_count, expected_head = self._coherent_snapshot(connection)
                 return self._service.verify(
                     records,
