@@ -181,6 +181,8 @@ def _dossier() -> dict[str, Any]:
             "requires_human_review": True,
             "confidence": 0.7,
         },
+        # Null exactly when a compliance answer is present (cdd-sow-research#106).
+        "compliance_unavailable": None,
     }
 
 
