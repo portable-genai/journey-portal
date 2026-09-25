@@ -51,7 +51,9 @@ append-only or WORM evidence sink. Preserve the `AccessAuditPort` contract, the 
 event fields and an independently retained integrity checkpoint. Preserve the local reference's
 cross-process serialization and recoverable pending-checkpoint semantics if the selected database
 and checkpoint cannot commit in one transaction. The local SQLite adapter is the executable
-hash-chain reference; the managed adapter is the structured-log reference.
+hash-chain reference; the managed adapter is the structured-log reference. Do not copy the local
+adapter's set-aside of a damaged ledger: that is the laptop rule, and an institution's evidence
+sink refuses on divergence the way the managed adapter does.
 
 ## Seam 4: BFF signing key (`adapters/onprem/bff_credentials.py`)
 

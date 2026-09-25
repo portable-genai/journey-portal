@@ -136,8 +136,12 @@ work instead:
 python scripts/run_journeys.py --live
 ```
 
-The flag switches every journey app to its live profile, each with its own real data source
-and no fictional seeds:
+The flag switches every journey app that has a live profile to it. The apps without a core
+online search tool (trade finance, loan documents, complaints, compliance, the credit memo, the
+marketing apps, architecture and model quality, early warning, fraud fusion, control-room
+handover, CAPA) serve their model calls from ONE local open-weight model through the shared
+kit client; the search apps (`cdd-sow-research`, `cio-advisory`) call Gemini. Apps with real
+data sources use them rather than fictional seeds:
 
 | App | Live data | The audience brings |
 |---|---|---|
@@ -147,31 +151,28 @@ and no fictional seeds:
 | `trade-finance-checker` Trade finance | the presentation the audience pastes (template downloadable) | their own LC + documents; the LC is claimed for their tenant on first check |
 | `compliance-advisory` Compliance | the REAL regulator instruments (MAS, APRA, JFSA, BCBS, NIST), refreshed at launch | any compliance question; optionally their own policy document via corpus upload |
 
-For `cdd-sow-research` the flag also overrides the triage model with one served in the region this catalog
-pins (`asia-southeast1`) and raises the request-body cap to 32 MiB so real PDF uploads are not
-rejected. Identity injection, the journey config, and how apps are mounted are unchanged.
-Anything you have already exported wins over these defaults. `compliance-advisory`'s regulatory corpus is
-refreshed at startup (expired-only within its 7-day TTL, so a warm relaunch does no network
-work); `credit-memo-drafting` additionally wants `SEC_EDGAR_CONTACT` exported (an email) because the SEC's
-fair-access policy asks automated traffic to identify itself.
+For `cdd-sow-research` the flag also raises the request-body cap to 32 MiB so real PDF uploads
+are not rejected. Identity injection, the journey config, and how apps are mounted are
+unchanged. Anything you have already exported wins over these defaults, except the profile
+itself. `compliance-advisory`'s regulatory corpus is refreshed at startup (expired-only within
+its 7-day TTL, so a warm relaunch does no network work); `credit-memo-drafting` additionally
+wants `SEC_EDGAR_CONTACT` exported (an email) because the SEC's fair-access policy asks
+automated traffic to identify itself. A sibling a live app asks over the network
+(`compliance-advisory` behind the `cdd-sow-research` compliance check) is started with it; one
+that cannot start shows `UNAVAILABLE` in the readiness table and the launch goes on.
 
 Two things must exist outside the portal:
 
-- ONE local OpenAI-compatible model server hosting a Gemma build, shared by the live apps
-  still on a local model (`cdd-sow-research` is not among them: every one of its live model calls is the
-  Gemini API, org decision 2026-08-30). It is called at
-  `http://127.0.0.1:8001/chat/completions` unless `CDD_LIVE_LLM_URL` says otherwise (the
-  launcher mirrors that endpoint into each app's own URL variable). Under `--live` the launcher
-  brings this up for you, and only when such an app is in the launch plan: if a healthy server
-  is already answering on that port it is reused untouched (loading the model takes minutes and
-  it is often managed outside this repo), otherwise the launcher runs the command in
-  `JOURNEY_MODEL_SERVER_CMD`. If nothing is listening and that variable is unset, the launch
-  plan warns and the apps' model calls fail fast rather than hang. A cold model load can exceed
-  the default readiness window, so raise `--readiness-timeout` when the launcher starts the
-  server itself;
+- ONE local OpenAI-compatible model server, by default Gemma 4 31B
+  (`mlx-community/gemma-4-31b-it-8bit`) at `http://127.0.0.1:8001/chat/completions`. Every
+  local-model app is given the same `LOCAL_MODEL_URL` (and `LOCAL_MODEL` when you export one).
+  The launcher never starts or stops the server: it probes it, and when nothing answers it
+  prints the start recipe from `hex_service_kit.localmodel` and launches anyway, so the apps
+  come up and each model call fails with the same recipe until the server is running;
 - Google application default credentials and `GOOGLE_CLOUD_PROJECT`, for every `cdd-sow-research` live model
   call (generation, page transcription, and the Gemini `google_search` grounding behind its
-  adverse media and corporate registry) and `cio-advisory`'s house-view research. The launcher passes the
+  adverse media and corporate registry), `cio-advisory`'s house-view research, and the optional
+  search in `compliance-advisory` and `credit-memo-drafting`. The launcher passes the
   project through from your environment and never invents one; it prints a warning in the
   launch plan when it is unset, and `cdd-sow-research`'s live profile is entirely dead without it.
 

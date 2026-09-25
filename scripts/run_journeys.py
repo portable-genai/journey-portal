@@ -23,14 +23,16 @@ installed.
 human-review-console review queue before processes start.  Their paths live under
 ``scripts/out/presenter-state`` so this never resets either sibling repo's general local data.
 
-``--live`` runs the cdd-sow-research backend in its ``live`` profile: real uploaded documents, with
-generation, page transcription and the ``google_search`` grounded research all on the Gemini
-API (which needs Google ADC plus ``GOOGLE_CLOUD_PROJECT``; org decision 2026-08-30 — no local
-model in an outbound-grounded system).  The remaining local-model live apps still share one
-OpenAI-compatible model server, started only when one of them is in the launch plan.  A live
-dossier build takes minutes, so the portal BFF also gets a raised ``PORTAL_UPSTREAM_TIMEOUT``.
-Nothing else about the launch changes, and every other embedded app stays on its offline
-profile.
+``--live`` runs every app that has a ``live`` profile in it. The apps without a core online
+search tool serve their model calls from ONE local open-weight model through the shared kit
+client (``hex_service_kit.localmodel``): the launcher passes them one ``LOCAL_MODEL_URL`` (and
+``LOCAL_MODEL`` when the operator set it), probes the server first, and when nothing answers
+prints the kit's start recipe and launches anyway, so each model call fails with that recipe
+rather than the demo refusing to start. The search apps (cdd-sow-research, cio-advisory) call
+the Gemini API, which needs Google ADC plus ``GOOGLE_CLOUD_PROJECT``. A sibling a live app asks
+over the network is started with it, and a sibling that cannot start is shown unavailable in
+the readiness table instead of stopping the launch. A live dossier build takes minutes, so the
+portal BFF also gets a raised ``PORTAL_UPSTREAM_TIMEOUT``.
 
 This is a convenience launcher, not production wiring: in production the BFF and apps are separate
 Cloud Run services behind one HTTPS load balancer + IAP (see docs/embedding-and-identity.md).
@@ -41,7 +43,6 @@ from __future__ import annotations
 import argparse
 import contextlib
 import os
-import shlex
 import signal
 import subprocess
 import sys
@@ -53,6 +54,13 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import urlopen
 
+from hex_service_kit.localmodel import (
+    MODEL_ENV,
+    URL_ENV,
+    LocalModelClient,
+    LocalModelSettings,
+    LocalModelUnavailable,
+)
 from hex_service_kit.netdefaults import read_env_setting
 
 from journey_portal.config import Settings, load_journeys_mapping
@@ -105,44 +113,38 @@ _LIVE_PORTAL_UPSTREAM_TIMEOUT = "600"
 # silently run against the bundled FICTIONAL fixture, which a live demo must not do.
 _LIVE_SANCTIONS_ENV = "CDD_LOCAL_SANCTIONS"
 _LIVE_SANCTIONS_SNAPSHOT = "scripts/out/sanctions/current.json"
-# The local OpenAI-compatible model server the remaining local-model live apps call
-# (the _LOCAL_MODEL_APPS set below, which is down to trade-finance-checker; cdd-sow-research,
-# compliance-advisory,
-# credit-memo-drafting and the CIO advisor all left it for the Gemini API, 2026-08-30).
-# The env var keeps its historical name: it is the one endpoint mirrored into each
-# app's own URL variable, and the launcher reads it to learn which port must answer
-# and derives the health URL from it. Its launch command is machine-specific (the
-# server lives outside this workspace), so it is supplied by the operator via
-# JOURNEY_MODEL_SERVER_CMD rather than hardcoded; an already-running server on the
-# port is reused untouched.
-_MODEL_SERVER_URL_ENV = "CDD_LIVE_LLM_URL"
-_MODEL_SERVER_CMD_ENV = "JOURNEY_MODEL_SERVER_CMD"
-_DEFAULT_MODEL_SERVER_URL = "http://127.0.0.1:8001/chat/completions"
-
-# ``--live`` covers every journey app, not only cdd-sow-research: each of these runs its own live
-# profile (real data sources, no fictional seeds). The tuple is (profile env var, the
-# app's own model-server URL env var, or None). The launcher always forces the profile --
-# selecting it is what the flag means -- and mirrors the one model-server endpoint into
-# the URL variable only for the apps that still have one.
+# ``--live`` forces the ``live`` profile on these apps (selecting it is what the flag means, so a
+# stale ``<APP>_PROFILE=local`` export must not turn it into a no-op). Owner rule, 2026-09-23:
 #
-# ``None`` is the Gemini-only shape and it is now the majority (org decision, 2026-08-30:
-# a system whose use case requires outbound grounding is only implemented for customers
-# who permit leaving the data centre, so a local-model profile there is a fiction). cdd-sow-research
-# left the roster entirely on the same decision; these three stay on it because the
-# launcher still forces their profile, they just no longer want a model server.
-# ``trade-finance-checker`` is the one that keeps its local model, because on-prem is its
-# point.
-_LIVE_APP_PROFILES: dict[str, tuple[str, str | None]] = {
-    "credit-memo-drafting": ("CREDIT_MEMO_PROFILE", None),
-    "cio-advisory": ("CIO_PROFILE", None),
-    "trade-finance-checker": ("TRADE_FINANCE_PROFILE", "TRADE_FINANCE_LIVE_LLM_URL"),
-    "compliance-advisory": ("COMPLIANCE_PROFILE", None),
-}
-#: The apps that still need the shared local model server. Derived, never hand-listed, so
-#: a conversion cannot leave the launcher starting a server nothing calls.
-_LOCAL_MODEL_APPS: frozenset[str] = frozenset(
-    app_id for app_id, (_, url_env) in _LIVE_APP_PROFILES.items() if url_env is not None
+# * every app WITHOUT a core online search tool serves its model calls from ONE local open-weight
+#   model through the kit client, which reads ``LOCAL_MODEL_URL`` / ``LOCAL_MODEL``. There is one
+#   variable for the whole laptop, never one per app. compliance-advisory and credit-memo-drafting
+#   are here too: their core is the local model and only their optional search uses Gemini.
+# * the search apps call Gemini, because an online search tool is their core.
+#
+# market-intelligence is a search app with no ``live`` profile yet, so it stays on ``local``.
+_LOCAL_MODEL_LIVE_APPS: frozenset[str] = frozenset(
+    {
+        "trade-finance-checker",
+        "loan-document-intelligence",
+        "complaints-review",
+        "compliance-advisory",
+        "credit-memo-drafting",
+        "campaign-planner",
+        "creative-studio",
+        "marketing-compliance-gate",
+        "performance-marketing-optimisation",
+        "next-best-action",
+        "architecture-validator",
+        "model-quality-gate",
+        "credit-portfolio-early-warning",
+        "soc-fraud-fusion",
+        "control-room-handover",
+        "issue-remediation-capa",
+    }
 )
+_GEMINI_LIVE_APPS: frozenset[str] = frozenset({"cdd-sow-research", "cio-advisory"})
+_LIVE_APPS: frozenset[str] = _LOCAL_MODEL_LIVE_APPS | _GEMINI_LIVE_APPS
 #: A live app that asks a SIBLING over the network names it here, with the variable its own
 #: adapter reads the sibling's address from. Under ``--live`` the sibling's backend is started
 #: with it even when the selected journey does not list it, and the variable is pointed at that
@@ -355,7 +357,24 @@ class Launcher:
         self.procs: list[tuple[str, subprocess.Popen[bytes]]] = []
         self._readiness: list[_ReadinessCheck] = []
         self._startup_failures: dict[str, str] = {}
+        # Labels whose failure is reported UNAVAILABLE and does not stop the launch: the live
+        # siblings, whose dependants then fail per request instead of the whole demo refusing.
+        self._optional: set[str] = set()
+        # Services the launcher only observes (the local model server): READY, or UNAVAILABLE.
+        self._external_ready: dict[str, str] = {}
         self._stopped = False
+
+    def mark_optional(self, label: str) -> None:
+        """Report ``label``'s failure as UNAVAILABLE rather than failing the launch."""
+        self._optional.add(label)
+
+    def mark_sibling(self, app_id: str) -> None:
+        """A live sibling: whatever stops it starting is reported UNAVAILABLE."""
+        self._optional.update({app_id, f"{app_id}-backend"})
+
+    def _optional_unavailable(self, label: str, reason: str) -> None:
+        self.mark_optional(label)
+        self._unavailable(label, reason)
 
     @staticmethod
     def _local_demo_s2s_token() -> str:
@@ -458,34 +477,35 @@ class Launcher:
         return environment
 
     @staticmethod
-    def _live_app_environment(app_id: str) -> dict[str, str]:
-        """The ``--live`` overrides for a non-cdd-sow-research journey
-        app (operator exports win).
+    def _local_model_environment() -> dict[str, str]:
+        """The one local-model endpoint every local-model live app is given.
+
+        Read through the kit's own settings, so the launcher and the apps resolve the same
+        default and refuse the same emptied variable. ``LOCAL_MODEL`` travels only when the
+        operator named one; otherwise each app resolves the kit default itself.
         """
-        if app_id == "loan-document-intelligence":
-            # loan-document-intelligence has no hybrid live profile. Its managed extraction path is
-            # the
-            # production-shaped real-data path; its local path stays credential-free.
-            return {"LOAN_DOC_PROFILE": "gcp"}
-        profile_env, llm_url_env = _LIVE_APP_PROFILES[app_id]
-        environment = {profile_env: "live"}
-        if llm_url_env is not None:
-            # One model server serves the apps that still have one: mirror the resolved
-            # endpoint into the app's own URL variable unless the operator already pinned
-            # that app elsewhere.
-            model_url = _defaulted_setting(_MODEL_SERVER_URL_ENV, _DEFAULT_MODEL_SERVER_URL)
-            environment[llm_url_env] = _defaulted_setting(llm_url_env, model_url)
+        settings = LocalModelSettings.from_env()
+        environment = {URL_ENV: settings.url}
+        model = _optional_setting(MODEL_ENV)
+        if model:
+            environment[MODEL_ENV] = model
+        return environment
+
+    @staticmethod
+    def _live_app_environment(app_id: str) -> dict[str, str]:
+        """The ``--live`` overrides for a journey app other than cdd-sow-research."""
+        environment = {_APP_PROFILE_ENVS[app_id]: "live"}
+        if app_id in _LOCAL_MODEL_LIVE_APPS:
+            environment.update(Launcher._local_model_environment())
         if app_id == "credit-memo-drafting":
             contact = _optional_setting(_EDGAR_CONTACT_ENV)
             if contact:
                 environment[_EDGAR_CONTACT_ENV] = contact
-        if llm_url_env is None:
-            # Every model call in these profiles is the Gemini API, so each needs the
-            # project the same way cdd-sow-research does. cio-advisory needed it already, for its
-            # grounded house-view research; the other two need it now for generation.
-            project = _optional_setting(_GOOGLE_PROJECT_ENV)
-            if project:
-                environment[_GOOGLE_PROJECT_ENV] = project
+        # The Gemini apps need the project for every model call; compliance-advisory and
+        # credit-memo-drafting need it only for their optional search. Never invented.
+        project = _optional_setting(_GOOGLE_PROJECT_ENV)
+        if project:
+            environment[_GOOGLE_PROJECT_ENV] = project
         return environment
 
     def refresh_live_corpus(self) -> None:
@@ -528,62 +548,28 @@ class Launcher:
             for line in tail:
                 print(f"    {line}")
 
-    @staticmethod
-    def _model_server_endpoint() -> tuple[int, str]:
-        """(port, health_url) for the local model server the local-model live apps call.
+    def probe_local_model(self) -> None:
+        """Ask the local model server what it serves, before the apps that call it start.
 
-        The apps post to ``.../chat/completions``; the OpenAI-compatible MLX server answers
-        a sibling ``/health``, so the health URL is derived from the endpoint's origin.
+        The server is somebody else's process, so the launcher never starts or stops it. When
+        nothing answers (or it serves another model) the kit's start recipe is printed and the
+        launch goes on: the apps start, and each model call fails with the same recipe. The
+        readiness table shows the server either way.
         """
-        url = _defaulted_setting(_MODEL_SERVER_URL_ENV, _DEFAULT_MODEL_SERVER_URL)
-        parsed = urlparse(url)
-        port = parsed.port or (443 if parsed.scheme == "https" else 80)
-        origin = f"{parsed.scheme}://{parsed.hostname}:{port}"
-        return port, f"{origin}/health"
-
-    def launch_model_server(self) -> None:
-        """Ensure the local model server is up before the live apps need it (``--live``).
-
-        Reuse policy: a healthy listener already on the port is adopted as-is and never
-        touched, because loading a multi-GB model takes minutes and the server is commonly
-        managed outside this workspace (e.g. by launchd); the launcher must not restart a
-        server it did not start. Only when nothing is listening does it run the operator's
-        ``JOURNEY_MODEL_SERVER_CMD``; if that is unset the live plan already warned, and
-        the local-model apps' calls will fail fast rather than hang.
-        """
-        port, health_url = self._model_server_endpoint()
-        if self._listener_pids(port):
-            detail = self._probe(health_url)
-            healthy = detail.startswith("HTTP ") and 200 <= int(detail.removeprefix("HTTP ")) < 400
-            if healthy:
-                print(f"  reuse model-server           already healthy on :{port} ({detail})")
-                # Surface it in the readiness table without owning the process.
-                self._readiness.append(
-                    _ReadinessCheck(label="model-server", url=health_url, process=None)
-                )
-            else:
-                # Not ours to replace, but flag it: something holds the port yet is not ready.
-                self._unavailable(
-                    "model-server",
-                    f"a process holds :{port} but does not answer /health ({detail}); "
-                    "the local-model apps' live calls will fail until it is healthy",
-                )
-            return
-        command = _optional_setting(_MODEL_SERVER_CMD_ENV)
-        if not command:
-            self._unavailable(
-                "model-server",
-                f"nothing on :{port} and {_MODEL_SERVER_CMD_ENV} is unset; export it (or start "
-                "the model server yourself, see DEMO.md). The local-model apps need it.",
+        settings = LocalModelSettings.from_env()
+        label = "local-model"
+        try:
+            LocalModelClient(settings).probe()
+        except LocalModelUnavailable as exc:
+            print(f"  warning {exc}")
+            self._optional_unavailable(
+                label,
+                f"{settings.model} not served at {settings.url}; the local-model apps start "
+                "and each model call fails with the start recipe above",
             )
             return
-        self._spawn(
-            "model-server",
-            shlex.split(command),
-            cwd=_REPO_ROOT,
-            env={},
-            readiness_url=health_url,
-        )
+        print(f"  found {label:34} {settings.model} at {settings.url}")
+        self._external_ready[label] = f"serves {settings.model}"
 
     def _spawn(
         self, label: str, cmd: list[str], *, cwd: Path, env: dict[str, str], readiness_url: str
@@ -754,8 +740,12 @@ class Launcher:
                 except ValueError as exc:
                     self._unavailable(f"{app_id}-backend", str(exc))
                     return
-        elif app_id in _LIVE_APP_PROFILES and self.live:
-            backend_env.update(self._live_app_environment(app_id))
+        elif app_id in _LIVE_APPS and self.live:
+            try:
+                backend_env.update(self._live_app_environment(app_id))
+            except ValueError as exc:
+                self._unavailable(f"{app_id}-backend", str(exc))
+                return
         elif app_id == "human-review-console":
             backend_env.update(
                 {
@@ -906,15 +896,20 @@ class Launcher:
         for label in pending:
             failed[label] = f"timed out after {timeout:g}s ({last_error.get(label, 'no response')})"
 
+        def verdict(label: str) -> str:
+            return "UNAVAILABLE" if label in self._optional else "FAILED"
+
         print("\nreadiness:")
+        for label, detail in self._external_ready.items():
+            print(f"  {label:34} READY   {detail}")
         for check in self._readiness:
             if check.label in ready:
                 print(f"  {check.label:34} READY   {ready[check.label]}")
             else:
-                print(f"  {check.label:34} FAILED  {failed[check.label]}")
+                print(f"  {check.label:34} {verdict(check.label)}  {failed[check.label]}")
         for label, reason in self._startup_failures.items():
-            print(f"  {label:34} FAILED  {reason}")
-        return not failed
+            print(f"  {label:34} {verdict(label)}  {reason}")
+        return not any(label not in self._optional for label in failed)
 
     @staticmethod
     def _signal_process_group(proc: subprocess.Popen[bytes], signum: signal.Signals) -> None:
@@ -993,19 +988,14 @@ def _print_live_plan(
             origin = "operator export" if exported else f"{sibling} backend, live"
             print(f"  {app_id} asks      {url_env}={address} ({origin})")
     portal_timeout = _defaulted_setting(_PORTAL_UPSTREAM_TIMEOUT_ENV, _LIVE_PORTAL_UPSTREAM_TIMEOUT)
-    if any(app_id in _LOCAL_MODEL_APPS for app_id in plan):
-        port, health_url = Launcher._model_server_endpoint()
-        if Launcher._listener_pids(port):
-            print(f"  model server      reuse already-running server on :{port}")
-        elif _optional_setting(_MODEL_SERVER_CMD_ENV):
-            print(f"  model server      start via {_MODEL_SERVER_CMD_ENV} (nothing on :{port} yet)")
-        else:
-            print(
-                f"  warning nothing on :{port} and {_MODEL_SERVER_CMD_ENV} is unset: the "
-                "local-model apps' live generation will fail. Start the model server, or export "
-                f"{_MODEL_SERVER_CMD_ENV} so the launcher starts it (a cold model load needs a "
-                "larger --readiness-timeout)."
-            )
+    local_model_apps = sorted(
+        app_id for app_id in (*plan, *siblings) if app_id in _LOCAL_MODEL_LIVE_APPS
+    )
+    if local_model_apps:
+        model_env = Launcher._local_model_environment()
+        model = model_env.get(MODEL_ENV, f"{LocalModelSettings().model} (kit default)")
+        print(f"  local model       {URL_ENV}={model_env[URL_ENV]}  model {model}")
+        print("                    probed at launch; the launch goes on if nothing answers")
     print(
         f"  cdd-sow-research profile      {doc1_env['CDD_PROFILE']}"
         " (Gemini API + grounded research)"
@@ -1029,20 +1019,18 @@ def _print_live_plan(
             f"FICTIONAL fixture. Run scripts/sync_sanctions.py in {_APP_REPOS['cdd-sow-research']} "
             f"(writes {_LIVE_SANCTIONS_SNAPSHOT}) before a live run."
         )
-    # Every other journey app runs its live profile too: real data in, no fictional seeds.
     gemini_only = []
-    for app_id in sorted(_LIVE_APP_PROFILES):
-        if app_id not in plan:
+    for app_id in sorted(_LIVE_APPS - {"cdd-sow-research"}):
+        if app_id not in plan and app_id not in siblings:
             continue
-        if app_id in _LOCAL_MODEL_APPS:
-            print(f"  {app_id} profile      live (local model server)")
+        if app_id in _LOCAL_MODEL_LIVE_APPS:
+            print(f"  {app_id} profile      live (local model)")
         else:
             print(f"  {app_id} profile      live (Gemini API)")
             gemini_only.append(app_id)
     if gemini_only and not _optional_setting(_GOOGLE_PROJECT_ENV):
-        # Same failure as cdd-sow-research's, reported for the apps that just joined it. Without the
-        # project these start clean and fail at the first generation, which is the worst
-        # moment to discover it.
+        # Without the project these start clean and fail at the first generation, which is the
+        # worst moment to discover it.
         print(
             f"  warning {_GOOGLE_PROJECT_ENV} is not set: every model call in "
             f"{', '.join(gemini_only)} is the Gemini API, so their live generation will "
@@ -1082,9 +1070,10 @@ def main() -> int:
         "--live",
         action="store_true",
         help=(
-            "Run every journey app in its live profile: real data sources (uploads, SEC "
-            "EDGAR, the real regulatory corpus, grounded research), one shared local model "
-            "server, no fictional seeds; also raises the portal's upstream timeout."
+            "Run every journey app that has a live profile in it: one local model "
+            "(LOCAL_MODEL_URL) for the apps without a core search tool, Gemini for the "
+            "search apps, real data sources, no fictional seeds; also raises the portal's "
+            "upstream timeout."
         ),
     )
     parser.add_argument(
@@ -1161,21 +1150,19 @@ def main() -> int:
     launcher.install_termination_handler()
     try:
         print("\nstarting processes:")
-        # The model server (live only, and only for the apps still on a local model)
-        # starts first so a cold model load overlaps app startup. Only
-        # trade-finance-checker is among them now: on-prem is its point. cdd-sow-research,
-        # compliance-advisory,
-        # credit-memo-drafting and the CIO advisor all serve every model call from the Gemini API
-        # (org decision, 2026-08-30).
-        if args.live and any(app_id in _LOCAL_MODEL_APPS for app_id in plan):
-            launcher.launch_model_server()
-        # compliance-advisory's corpus refresh is NOT nested under the model server. It used to be,
-        # and
-        # that was only correct while compliance-advisory needed one: the refresh is about the real
-        # regulator corpus, not about generation, and folding it under the server would
-        # have silently stopped it the moment compliance-advisory went Gemini-only.
+        # The local model server is probed, never started: it is another process's, and the
+        # launch goes on without it.
+        if args.live and any(app_id in _LOCAL_MODEL_LIVE_APPS for app_id in (*plan, *siblings)):
+            launcher.probe_local_model()
+        # The corpus refresh is about the real regulator corpus, not about generation.
         if args.live and ("compliance-advisory" in plan or "compliance-advisory" in siblings):
+            if "compliance-advisory" in siblings:
+                launcher.mark_optional("compliance-advisory-corpus")
             launcher.refresh_live_corpus()
+        # A sibling that cannot start is shown unavailable, never a reason to refuse the launch:
+        # the app that asks it starts, and each question it would have asked fails on its own.
+        for app_id in siblings:
+            launcher.mark_sibling(app_id)
         # Siblings first: the apps that ask them bind the address at boot, and a sibling that is
         # still starting when its first question arrives is a slower answer rather than a refusal.
         for app_id, (api_port, _) in siblings.items():
