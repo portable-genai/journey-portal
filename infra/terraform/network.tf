@@ -14,6 +14,15 @@ resource "google_compute_subnetwork" "portal" {
   private_ip_google_access = true
 }
 
+resource "google_compute_subnetwork" "embedded" {
+  project                  = var.project_id
+  name                     = "${var.name_prefix}-embedded"
+  region                   = var.region
+  network                  = google_compute_network.portal.id
+  ip_cidr_range            = var.embedded_subnet_cidr
+  private_ip_google_access = true
+}
+
 resource "google_compute_router" "portal" {
   project = var.project_id
   name    = "${var.name_prefix}-portal"
@@ -31,6 +40,13 @@ resource "google_compute_router_nat" "portal" {
 
   subnetwork {
     name                    = google_compute_subnetwork.portal.id
+    source_ip_ranges_to_nat = ["ALL_IP_RANGES"]
+  }
+
+  # The embedded APIs route ALL egress through the VPC so the internal-only collector admits
+  # them, which means their calls to public hosts (the portal edge, SEC EDGAR) leave through here.
+  subnetwork {
+    name                    = google_compute_subnetwork.embedded.id
     source_ip_ranges_to_nat = ["ALL_IP_RANGES"]
   }
 

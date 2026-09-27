@@ -318,6 +318,16 @@ resource "google_cloud_run_v2_service" "embedded_api" {
       min_instance_count = var.runtime_min_instances
       max_instance_count = var.runtime.max_instances
     }
+    # All egress through the VPC, as the BFF does: the OpenTelemetry collector's ingress is
+    # internal-only, and a request that reaches it over the public internet is refused however
+    # valid its ID token. Public destinations leave through the portal's Cloud NAT.
+    vpc_access {
+      egress = "ALL_TRAFFIC"
+      network_interfaces {
+        network    = google_compute_network.portal.id
+        subnetwork = google_compute_subnetwork.embedded.id
+      }
+    }
     containers {
       image = each.value.api_image
       resources {
@@ -339,6 +349,18 @@ resource "google_cloud_run_v2_service" "embedded_api" {
       env {
         name  = "GCP_REGION"
         value = var.region
+      }
+      # Where spans go, and the audience of the ID token that sends them. Terraform-owned for
+      # the same reason as the IAP audience below: under the gcp profile an API's tracer refuses
+      # to build without the endpoint, so an app left out of a hand-kept api_env entry would
+      # fail its first traced request rather than export around the collector's redaction.
+      env {
+        name  = "OTEL_EXPORTER_OTLP_ENDPOINT"
+        value = var.otel_collector_url
+      }
+      env {
+        name  = "OTEL_EXPORTER_OTLP_AUDIENCE"
+        value = var.otel_collector_url
       }
       dynamic "env" {
         for_each = each.value.api_env

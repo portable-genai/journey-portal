@@ -130,6 +130,29 @@ def test_platform_profile_routes_portal_access_evidence_to_hrz5() -> None:
     assert 'variable "observability_audience"' in variables
 
 
+def test_every_embedded_api_exports_through_the_collector() -> None:
+    """Decision D1: a gcp tracer refuses to build without the endpoint, so Terraform injects it.
+
+    Reachability is half of it: the collector's ingress is internal-only, so the APIs route all
+    egress through the VPC, and the collector names are reserved so no app map can repoint them.
+    """
+    cloud_run = _source("cloud_run.tf")
+    embedded = _source("embedded_apps.tf")
+    network = _source("network.tf")
+    variables = _source("variables.tf")
+
+    assert 'variable "otel_collector_url"' in variables
+    api = cloud_run[cloud_run.index('resource "google_cloud_run_v2_service" "embedded_api"') :]
+    for name in ("OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_AUDIENCE"):
+        assert f'name  = "{name}"\n        value = var.otel_collector_url' in api
+        assert f'"{name}"' in embedded
+    assert "subnetwork = google_compute_subnetwork.embedded.id" in api
+    assert 'resource "google_compute_subnetwork" "embedded"' in network
+    nat_name = "name                    = google_compute_subnetwork.embedded.id"
+    embedded_nat = network[network.index(nat_name) :].split("}", 1)[0].rstrip()
+    assert embedded_nat.endswith('source_ip_ranges_to_nat = ["ALL_IP_RANGES"]')
+
+
 def test_terraform_requires_managed_profiles_and_alert_delivery() -> None:
     variables = _source("variables.tf")
     main = _source("main.tf")

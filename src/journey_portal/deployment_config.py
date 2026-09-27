@@ -125,10 +125,17 @@ def _ui_build_base_path(app_id: str) -> str:
 
 
 _CLOUD_RUN_MANAGED_ENV_NAMES = frozenset({"PORT", "K_SERVICE", "K_REVISION", "K_CONFIGURATION"})
+#: Injected into every embedded API by infra/terraform/cloud_run.tf from DEPLOY_OTEL_COLLECTOR_URL,
+#: so no app's own map may set them: one app naming a different collector would export around the
+#: one this deployment's callers are granted on.
+_COLLECTOR_ENV_NAMES = frozenset({"OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_AUDIENCE"})
 _ALL_PROFILE_ENV_NAMES = frozenset(_PROFILE_ENV_BY_APP.values())
 _ALL_IAP_AUDIENCE_ENV_NAMES = frozenset(_IAP_AUDIENCE_ENV_BY_APP.values())
 _ALL_MANAGED_ENV_NAMES = (
-    _CLOUD_RUN_MANAGED_ENV_NAMES | _ALL_PROFILE_ENV_NAMES | _ALL_IAP_AUDIENCE_ENV_NAMES
+    _CLOUD_RUN_MANAGED_ENV_NAMES
+    | _COLLECTOR_ENV_NAMES
+    | _ALL_PROFILE_ENV_NAMES
+    | _ALL_IAP_AUDIENCE_ENV_NAMES
 )
 _DURATION_RE = re.compile(r"^[0-9]+(?:\.[0-9]{1,9})?s$")
 # Mirrors the nat_log_filter validation in infra/terraform/variables.tf. Both halves refuse,
@@ -170,6 +177,10 @@ REQUIRED_NONSECRET_KEYS = frozenset(
         "DEPLOY_TENANT_IDENTITY_DOMAINS_JSON",
         "DEPLOY_OBSERVABILITY_URL",
         "DEPLOY_OBSERVABILITY_AUDIENCE",
+        # The agent-observability collector every embedded API exports spans to. Required: under
+        # the gcp profile an API's tracer refuses to build without it (decision D1), so a
+        # deployment that did not name it would ship APIs that fail their first traced request.
+        "DEPLOY_OTEL_COLLECTOR_URL",
         "DEPLOY_DNS_MANAGED_ZONE",
         "DEPLOY_TLS_MODE",
         "DEPLOY_IAP_OAUTH_CLIENT_ID",
@@ -318,6 +329,32 @@ def _json_value(values: dict[str, str], name: str, expected: type[Any]) -> Any:
     if not isinstance(result, expected):
         raise DeploymentConfigError(f"{name} must contain a JSON {expected.__name__}")
     return result
+
+
+def _exact_https_origin(values: dict[str, str], name: str) -> str:
+    """The named value as a lowercase HTTPS origin with no path, port, credentials or query.
+
+    Mirrors the origin validation on the matching Terraform variables, so a value Terraform would
+    refuse is refused here first, before any plan runs.
+    """
+    origin = values[name].rstrip("/")
+    parsed = urlparse(origin)
+    if not (
+        origin == origin.lower()
+        and parsed.scheme == "https"
+        and bool(parsed.hostname)
+        and bool(_DOMAIN_RE.fullmatch(parsed.hostname or ""))
+        and ".." not in (parsed.hostname or "")
+        and parsed.port is None
+        and parsed.username is None
+        and parsed.password is None
+        and parsed.path == ""
+        and not parsed.params
+        and not parsed.query
+        and not parsed.fragment
+    ):
+        raise DeploymentConfigError(f"{name} must be an exact lowercase HTTPS origin")
+    return origin
 
 
 def _boolean(values: dict[str, str], name: str) -> bool:
@@ -692,44 +729,9 @@ def load_deployment_config(
             raise DeploymentConfigError(f"DEPLOY_TENANT_IDENTITY_DOMAINS_JSON repeats {domain!r}")
         seen_domains.add(domain.strip().lower())
     identity_domains = sorted(seen_domains)
-    observability_url = values["DEPLOY_OBSERVABILITY_URL"].rstrip("/")
-    observability_parsed = urlparse(observability_url)
-    if not (
-        observability_url == observability_url.lower()
-        and observability_parsed.scheme == "https"
-        and bool(observability_parsed.hostname)
-        and bool(_DOMAIN_RE.fullmatch(observability_parsed.hostname or ""))
-        and ".." not in (observability_parsed.hostname or "")
-        and observability_parsed.port is None
-        and observability_parsed.username is None
-        and observability_parsed.password is None
-        and observability_parsed.path == ""
-        and not observability_parsed.params
-        and not observability_parsed.query
-        and not observability_parsed.fragment
-    ):
-        raise DeploymentConfigError(
-            "DEPLOY_OBSERVABILITY_URL must be an exact lowercase HTTPS origin"
-        )
-    observability_audience = values["DEPLOY_OBSERVABILITY_AUDIENCE"].rstrip("/")
-    audience_parsed = urlparse(observability_audience)
-    if not (
-        observability_audience == observability_audience.lower()
-        and audience_parsed.scheme == "https"
-        and bool(audience_parsed.hostname)
-        and bool(_DOMAIN_RE.fullmatch(audience_parsed.hostname or ""))
-        and ".." not in (audience_parsed.hostname or "")
-        and audience_parsed.port is None
-        and audience_parsed.username is None
-        and audience_parsed.password is None
-        and audience_parsed.path == ""
-        and not audience_parsed.params
-        and not audience_parsed.query
-        and not audience_parsed.fragment
-    ):
-        raise DeploymentConfigError(
-            "DEPLOY_OBSERVABILITY_AUDIENCE must be an exact lowercase HTTPS origin"
-        )
+    observability_url = _exact_https_origin(values, "DEPLOY_OBSERVABILITY_URL")
+    observability_audience = _exact_https_origin(values, "DEPLOY_OBSERVABILITY_AUDIENCE")
+    otel_collector_url = _exact_https_origin(values, "DEPLOY_OTEL_COLLECTOR_URL")
     if values["DEPLOY_TLS_MODE"] != "google-managed":
         raise DeploymentConfigError("DEPLOY_TLS_MODE must be google-managed")
     audit_hmac_secret = values["DEPLOY_PORTAL_AUDIT_HMAC_SECRET"]
@@ -917,6 +919,7 @@ def load_deployment_config(
         },
         "observability_url": observability_url,
         "observability_audience": observability_audience,
+        "otel_collector_url": otel_collector_url,
         "notification_channels": channels,
         "apply_org_policies": _boolean(values, "DEPLOY_APPLY_ORG_POLICIES"),
         "vpc_sc_access_policy_id": ("" if access_policy_id == "none" else access_policy_id),

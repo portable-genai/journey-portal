@@ -122,6 +122,7 @@ def _valid_values() -> dict[str, str]:
         "DEPLOY_TENANT_IDENTITY_DOMAINS_JSON": '["bank.internal"]',
         "DEPLOY_OBSERVABILITY_URL": "https://observability.bank.internal",
         "DEPLOY_OBSERVABILITY_AUDIENCE": "https://observability-audience.bank.internal",
+        "DEPLOY_OTEL_COLLECTOR_URL": "https://otel-collector.bank.internal",
         "DEPLOY_DNS_MANAGED_ZONE": "bank-journeys",
         "DEPLOY_TLS_MODE": "google-managed",
         "DEPLOY_IAP_OAUTH_CLIENT_ID": "123-prod.apps.googleusercontent.com",
@@ -184,6 +185,7 @@ def test_loads_complete_named_config_and_keeps_secret_out_of_tfvars(tmp_path: Pa
     assert config.terraform_inputs["observability_audience"] == (
         "https://observability-audience.bank.internal"
     )
+    assert config.terraform_inputs["otel_collector_url"] == "https://otel-collector.bank.internal"
     assert "iap_oauth2_client_secret" not in config.terraform_inputs
 
 
@@ -218,6 +220,16 @@ def test_loads_complete_named_config_and_keeps_secret_out_of_tfvars(tmp_path: Pa
             "DEPLOY_OBSERVABILITY_AUDIENCE",
             "https://observability.bank.internal/path",
             "lowercase HTTPS origin",
+        ),
+        (
+            "DEPLOY_OTEL_COLLECTOR_URL",
+            "http://otel-collector.bank.internal",
+            "DEPLOY_OTEL_COLLECTOR_URL must be an exact lowercase HTTPS origin",
+        ),
+        (
+            "DEPLOY_OTEL_COLLECTOR_URL",
+            "https://otel-collector.bank.internal/v1/traces",
+            "DEPLOY_OTEL_COLLECTOR_URL must be an exact lowercase HTTPS origin",
         ),
         ("DEPLOY_VPC_SC_ACCESS_POLICY_ID", "policy-id", "numeric"),
     ],
@@ -706,6 +718,8 @@ def test_rejects_secret_payload_in_embedded_nonsecret_env(tmp_path: Path) -> Non
     [
         ("api_env", "CIO_PROFILE"),
         ("api_env", "K_SERVICE"),
+        ("api_env", "OTEL_EXPORTER_OTLP_ENDPOINT"),
+        ("api_env", "OTEL_EXPORTER_OTLP_AUDIENCE"),
         ("api_secret_env", "CDD_PROFILE"),
         ("api_secret_env", "CDD_IAP_AUDIENCE"),
         ("ui_env", "PORT"),

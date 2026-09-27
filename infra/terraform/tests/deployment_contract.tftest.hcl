@@ -43,6 +43,7 @@ variables {
   portal_audit_hmac_secret_version = "1"
   observability_url                = "https://observability.hrz9.example.test"
   observability_audience           = "https://observability-audience.hrz9.example.test"
+  otel_collector_url               = "https://otel-collector.hrz9.example.test"
   iap_jwt_audience                 = "/projects/000000000000/global/backendServices/1"
   iap_members                      = ["group:journey-users@example.test"]
   notification_channels            = ["projects/hrz9-test-00001/notificationChannels/1"]
@@ -183,10 +184,32 @@ run "complete_edge_and_private_services" {
   assert {
     condition = (
       google_compute_router_nat.portal.source_subnetwork_ip_ranges_to_nat == "LIST_OF_SUBNETWORKS" &&
-      one(google_compute_router_nat.portal.subnetwork).source_ip_ranges_to_nat == toset(["ALL_IP_RANGES"]) &&
       google_compute_router_nat.portal.log_config[0].enable
     )
-    error_message = "The dedicated subnet needs logged Cloud NAT for IAP public-key retrieval."
+    error_message = "The egress subnets need logged Cloud NAT: the BFF's for IAP public-key retrieval, the embedded APIs' for every public host they call."
+  }
+  # Which subnets the NAT lists is not assertable here: both names are subnet ids, unknown at
+  # plan, so the set's size is too. tests/test_terraform_source_contract.py holds the embedded
+  # subnet's NAT block instead.
+
+  # The collector's ingress is internal-only, so an API that reaches it over the internet is
+  # refused however valid its token. Egress through the VPC is what makes the endpoint below
+  # reachable at all.
+  assert {
+    condition = (
+      google_cloud_run_v2_service.embedded_api["cdd-sow-research"].template[0].vpc_access[0].egress == "ALL_TRAFFIC" &&
+      google_compute_subnetwork.embedded.ip_cidr_range == "10.42.1.0/24" &&
+      google_compute_subnetwork.embedded.private_ip_google_access
+    )
+    error_message = "Embedded APIs must route all egress through their own VPC subnet to reach the internal-only collector."
+  }
+
+  assert {
+    condition = (
+      { for env in google_cloud_run_v2_service.embedded_api["cdd-sow-research"].template[0].containers[0].env : env.name => env.value }["OTEL_EXPORTER_OTLP_ENDPOINT"] == "https://otel-collector.hrz9.example.test" &&
+      { for env in google_cloud_run_v2_service.embedded_api["cdd-sow-research"].template[0].containers[0].env : env.name => env.value }["OTEL_EXPORTER_OTLP_AUDIENCE"] == "https://otel-collector.hrz9.example.test"
+    )
+    error_message = "Every embedded API must be told the collector endpoint and the token audience, or its gcp tracer refuses to build."
   }
 
   assert {
@@ -430,6 +453,45 @@ run "reject_api_env_using_another_apps_profile" {
         api_image          = "registry.example.test/cdd-sow-research-api@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         ui_build_base_path = "/agent"
         api_env            = { CDD_PROFILE = "gcp", CIO_PROFILE = "gcp", CDD_REVIEW_ROUTING = "false" }
+      }
+    }
+  }
+  expect_failures = [terraform_data.embedded_app_contract]
+}
+
+# The collector endpoint is Terraform's to inject, so one app cannot point its spans at another
+# collector, around the one this deployment's callers are granted on.
+run "reject_api_env_overriding_the_collector_endpoint" {
+  command = plan
+  variables {
+    # One app, so one shell: the journey that app belongs to, on its own host.
+    shells = [
+      {
+        journey = "rm"
+        image   = "registry.example.test/rm@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        domain  = "rm.hrz9.example.test"
+      },
+    ]
+    tenant_embed_policies = {
+      hrz9-test-primary = {
+        tenant          = "hrz9-test"
+        hosts           = ["rm.hrz9.example.test"]
+        frame_ancestors = ["'self'"]
+        cors_origins    = []
+      }
+    }
+    rollback_images = {
+      bff                    = "registry.example.test/bff@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      rm                     = "registry.example.test/rm@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      "cdd-sow-research-ui"  = "registry.example.test/cdd-sow-research-ui@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      "cdd-sow-research-api" = "registry.example.test/cdd-sow-research-api@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    }
+    embedded_apps = {
+      cdd-sow-research = {
+        ui_image           = "registry.example.test/cdd-sow-research-ui@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        api_image          = "registry.example.test/cdd-sow-research-api@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        ui_build_base_path = "/agent"
+        api_env            = { CDD_PROFILE = "gcp", OTEL_EXPORTER_OTLP_ENDPOINT = "https://elsewhere.example.test", CDD_REVIEW_ROUTING = "false" }
       }
     }
   }
@@ -921,6 +983,22 @@ run "reject_non_https_observability_url" {
     observability_url = "http://observability.hrz9.example.test"
   }
   expect_failures = [var.observability_url]
+}
+
+run "reject_otel_collector_url_path" {
+  command = plan
+  variables {
+    otel_collector_url = "https://otel-collector.hrz9.example.test/v1/traces"
+  }
+  expect_failures = [var.otel_collector_url]
+}
+
+run "reject_small_embedded_subnet" {
+  command = plan
+  variables {
+    embedded_subnet_cidr = "10.42.1.0/26"
+  }
+  expect_failures = [var.embedded_subnet_cidr]
 }
 
 run "reject_observability_audience_path" {
