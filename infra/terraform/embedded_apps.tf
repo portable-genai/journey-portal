@@ -30,11 +30,13 @@ locals {
   deployable_embedded_app_ids = sort(keys(local.embedded_app_managed_env))
   managed_embedded_profiles   = ["gcp", "platform"]
 
-  # Names no deployment may supply on any surface: the ones Cloud Run sets itself, and every
-  # profile and audience in the map above. An API may still set its OWN profile, because that
-  # is the one managed choice the deployment makes.
+  # Names no deployment may supply on any surface: the ones Cloud Run sets itself, the collector
+  # endpoint and audience cloud_run.tf injects into every API, and every profile and audience in
+  # the map above. An API may still set its OWN profile, because that is the one managed choice
+  # the deployment makes.
   terraform_owned_embedded_env_names = toset(concat(
     ["PORT", "K_SERVICE", "K_REVISION", "K_CONFIGURATION"],
+    ["OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_AUDIENCE"],
     [for app in values(local.embedded_app_managed_env) : app.profile],
     [for app in values(local.embedded_app_managed_env) : app.iap_audience],
   ))
@@ -111,7 +113,7 @@ resource "terraform_data" "embedded_app_contract" {
     }
     precondition {
       condition     = length(local.embedded_app_env_collisions) == 0
-      error_message = "Embedded app environment maps must not set Cloud Run-managed names, another app's profile, or a Terraform-injected IAP audience: ${join(", ", local.embedded_app_env_collisions)}."
+      error_message = "Embedded app environment maps must not set Cloud Run-managed names, another app's profile, a Terraform-injected IAP audience, or the collector endpoint and audience Terraform injects: ${join(", ", local.embedded_app_env_collisions)}."
     }
     precondition {
       condition     = length(local.embedded_service_names_over_limit) == 0

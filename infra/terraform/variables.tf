@@ -160,6 +160,26 @@ variable "observability_audience" {
   }
 }
 
+variable "otel_collector_url" {
+  type        = string
+  description = <<-EOT
+    Exact HTTPS origin of the agent-observability OpenTelemetry collector: that stack's
+    `otlp_endpoint` output. Terraform injects it into every embedded API as
+    OTEL_EXPORTER_OTLP_ENDPOINT, and the same origin as OTEL_EXPORTER_OTLP_AUDIENCE, the audience
+    of the ID token the collector's run.invoker binding checks.
+
+    Required, because under the gcp profile an embedded API's tracer refuses to build without
+    it (hex-service-kit v0.0.11, decision D1 of the guardrail/registry/observability plan): the
+    collector is where GenAI content attributes are deleted, so there is no direct Cloud Trace
+    path to fall back to. Each API's runtime account must also be listed in the collector's
+    `otel_caller_service_accounts`, or every export is refused.
+  EOT
+  validation {
+    condition     = can(regex("^https://[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?$", var.otel_collector_url)) && !strcontains(var.otel_collector_url, "..")
+    error_message = "otel_collector_url must be an exact lowercase DNS HTTPS origin without a path or explicit port."
+  }
+}
+
 variable "cloud_run_deletion_protection" {
   type        = bool
   description = <<-EOT
@@ -285,6 +305,25 @@ variable "portal_subnet_cidr" {
   validation {
     condition     = can(cidrnetmask(var.portal_subnet_cidr)) && try(tonumber(split("/", var.portal_subnet_cidr)[1]) <= 26, false)
     error_message = "portal_subnet_cidr must be a valid IPv4 CIDR with a /26 or larger address range."
+  }
+}
+
+variable "embedded_subnet_cidr" {
+  type        = string
+  default     = "10.42.1.0/24"
+  description = <<-EOT
+    Dedicated Direct VPC egress subnet for the embedded app APIs, in the portal's network and
+    beside portal_subnet_cidr, which it must not overlap.
+
+    The APIs route all egress through it because the collector they export spans to has
+    internal-only ingress: a request that leaves an API over the public internet is refused
+    before IAM is consulted. It is a separate subnet rather than a share of the BFF's /26
+    because Direct VPC egress holds addresses per instance, and several APIs scaling beside the
+    BFF would exhaust a range sized for the BFF alone.
+  EOT
+  validation {
+    condition     = can(cidrnetmask(var.embedded_subnet_cidr)) && try(tonumber(split("/", var.embedded_subnet_cidr)[1]) <= 24, false)
+    error_message = "embedded_subnet_cidr must be a valid IPv4 CIDR with a /24 or larger address range."
   }
 }
 
