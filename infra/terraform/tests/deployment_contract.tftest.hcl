@@ -142,6 +142,10 @@ variables {
       api_env            = { REVIEW_PROFILE = "gcp" }
     }
   }
+  # Slice 7 turned these reversible controls off by default on 2026-10-02. The runs in this
+  # file were written under the old default, so the file states it; a run that sets one
+  # explicitly still overrides it.
+  cloud_run_deletion_protection = true
 }
 
 run "complete_edge_and_private_services" {

@@ -189,8 +189,11 @@ variable "cloud_run_deletion_protection" {
     "cannot destroy service without setting deletion_protection=false" — a half-applied stack
     blocked by a value nobody could set. A reference or evaluation stack that must stay
     replaceable sets this false deliberately.
+
+    Off by default since 2026-10-02 (slice 7 of the posture rule: a control that is not
+    irreversible defaults off in code); terraform.tfvars.example states the production form.
   EOT
-  default     = true
+  default     = false
 }
 
 variable "embedded_apps" {
