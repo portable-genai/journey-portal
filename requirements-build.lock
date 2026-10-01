@@ -10,5 +10,5 @@ pluggy==1.6.0
     # via hatchling
 tomlkit==0.15.1
     # via hatchling
-trove-classifiers==2026.6.1.19
+trove-classifiers==2026.9.21.13
     # via hatchling
